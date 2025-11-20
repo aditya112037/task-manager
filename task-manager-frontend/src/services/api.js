@@ -1,20 +1,13 @@
-// src/services/api.js
 import axios from "axios";
 
-// Load backend URL from Vercel
 const API = process.env.REACT_APP_API_URL;
 
-if (!API) {
-  console.error("❌ ERROR: REACT_APP_API_URL is NOT set in environment variables!");
-}
-
-// Create axios instance
 const api = axios.create({
   baseURL: API,
   withCredentials: true,
 });
 
-// Attach token to every request
+// Attach token automatically
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem("token");
@@ -26,23 +19,19 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// ----------------------
 // AUTH API
-// ----------------------
 export const authAPI = {
-  register: (data) => api.post("/auth/register", data),
-  login: (data) => api.post("/auth/login", data),
-  getProfile: () => api.get("/auth/profile"),
+  register: (data) => api.post("/api/auth/register", data),
+  login: (data) => api.post("/api/auth/login", data),
+  getProfile: () => api.get("/api/auth/profile"),
 };
 
-// ----------------------
 // TASKS API
-// ----------------------
 export const tasksAPI = {
-  getTasks: () => api.get("/tasks"),
-  createTask: (data) => api.post("/tasks", data),
-  updateTask: (id, data) => api.put(`/tasks/${id}`, data),
-  deleteTask: (id) => api.delete(`/tasks/${id}`),
+  getTasks: () => api.get("/api/tasks"),
+  createTask: (data) => api.post("/api/tasks", data),
+  updateTask: (id, data) => api.put(`/api/tasks/${id}`, data),
+  deleteTask: (id) => api.delete(`/api/tasks/${id}`),
 };
 
 export default api;
