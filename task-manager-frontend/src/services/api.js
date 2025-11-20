@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Load backend URL from Vercel environment variable
-const API = process.env.REACT_APP_API_URL;
+const API = process.env.REACT_APP;
 
 // Create axios instance
 const api = axios.create({
