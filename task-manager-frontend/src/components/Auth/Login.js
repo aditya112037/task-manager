@@ -9,7 +9,6 @@ import {
   Typography,
   CircularProgress,
   Divider,
-  Stack,
 } from "@mui/material";
 import { useAuth } from "../../context/AuthContext";
 
@@ -21,6 +20,7 @@ const Login = () => {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const API_URL = process.env.REACT_APP_API_URL;
   const { login } = useAuth();
   const navigate = useNavigate();
 
@@ -47,8 +47,7 @@ const Login = () => {
   };
 
   const handleGoogleLogin = () => {
-    window.location.href =
-      "https://task-manager-8vth.onrender.com/api/auth/google";
+    window.location.href = `${API_URL}/auth/google`;
   };
 
   return (
@@ -121,7 +120,7 @@ const Login = () => {
 
           <Divider sx={{ my: 2 }}>or</Divider>
 
-          {/* Normal Email Login */}
+          {/* Email & Password Login */}
           <form onSubmit={handleSubmit}>
             <TextField
               label="Email"
@@ -157,7 +156,11 @@ const Login = () => {
               }}
               disabled={loading}
             >
-              {loading ? <CircularProgress size={24} color="inherit" /> : "Login"}
+              {loading ? (
+                <CircularProgress size={24} color="inherit" />
+              ) : (
+                "Login"
+              )}
             </Button>
           </form>
 
