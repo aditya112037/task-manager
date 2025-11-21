@@ -58,16 +58,22 @@ export const AuthProvider = ({ children }) => {
   // ==========================================
   // REGISTER
   // ==========================================
-  const register = async (name, email, password) => {
-    const response = await authAPI.register({ name, email, password });
+const register = async (name, email, password) => {
+  const response = await authAPI.register({ name, email, password });
+  const { token, ...userData } = response.data;
 
-    const { token, ...userData } = response.data;
+  // Save token FIRST
+  localStorage.setItem("token", token);
 
-    localStorage.setItem("token", token);
+  // Force re-render BEFORE redirect
+  await new Promise(resolve => {
     setUser(userData);
+    setTimeout(resolve, 50);
+  });
 
-    return response.data;
-  };
+  return response.data;
+};
+
 
   // ==========================================
   // LOGOUT
