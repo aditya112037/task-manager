@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/user');
 const { protect } = require('../middleware/auth');
+
 const router = express.Router();
 
 // Generate JWT
@@ -15,15 +16,16 @@ const generateToken = (id) => {
 ============================= */
 
 // @route   GET /api/auth/google
-router.get('/google',
-  require('../googleAuth').startGoogleAuth
+router.get(
+  '/google',
+  require('./googleAuth').startGoogleAuth   // <-- FIXED PATH
 );
 
 // @route   GET /api/auth/google/callback
-router.get('/google/callback',
-  require('../googleAuth').handleGoogleCallback
+router.get(
+  '/google/callback',
+  require('./googleAuth').handleGoogleCallback   // <-- FIXED PATH
 );
-
 
 /* =============================
      EMAIL + PASSWORD ROUTES
@@ -52,11 +54,7 @@ router.post('/register', [
       return res.status(400).json({ message: 'User already exists' });
     }
 
-    const user = await User.create({
-      name,
-      email,
-      password
-    });
+    const user = await User.create({ name, email, password });
 
     res.status(201).json({
       _id: user._id,
@@ -89,7 +87,7 @@ router.post('/login', [
   try {
     const user = await User.findOne({ email });
 
-    // If user exists but has NO password → Google user
+    // If Google user (registered without password)
     if (user && !user.password) {
       return res.status(400).json({
         message: 'This account was created using Google Sign-In. Please log in using Google.'
