@@ -8,6 +8,8 @@ import {
   Button,
   Typography,
   CircularProgress,
+  Divider,
+  Stack,
 } from "@mui/material";
 import { useAuth } from "../../context/AuthContext";
 
@@ -44,6 +46,11 @@ const Login = () => {
     }
   };
 
+  const handleGoogleLogin = () => {
+    window.location.href =
+      "https://task-manager-8vth.onrender.com/api/auth/google";
+  };
+
   return (
     <Box
       sx={{
@@ -75,6 +82,7 @@ const Login = () => {
             Login to Task Manager
           </Typography>
 
+          {/* Error Message */}
           {error && (
             <Typography
               color="error"
@@ -89,6 +97,31 @@ const Login = () => {
             </Typography>
           )}
 
+          {/* Google Login Button */}
+          <Button
+            onClick={handleGoogleLogin}
+            fullWidth
+            variant="outlined"
+            sx={{
+              py: 1.3,
+              borderRadius: "10px",
+              textTransform: "none",
+              fontWeight: 600,
+              mb: 2,
+              gap: 1,
+            }}
+          >
+            <img
+              src="https://developers.google.com/identity/images/g-logo.png"
+              alt="google"
+              style={{ width: 20 }}
+            />
+            Continue with Google
+          </Button>
+
+          <Divider sx={{ my: 2 }}>or</Divider>
+
+          {/* Normal Email Login */}
           <form onSubmit={handleSubmit}>
             <TextField
               label="Email"
