@@ -14,8 +14,8 @@ const app = express();
 // CORS WHITELIST
 // ----------------------
 const allowedOrigins = [
-  "http://localhost:3000",                         
-  "https://task-manager-psi-lake.vercel.app"       
+  "http://localhost:3000",
+  "https://task-manager-psi-lake.vercel.app"
 ];
 
 app.use(
@@ -30,20 +30,35 @@ app.use(
   })
 );
 
+// ----------------------
 // Middleware
+// ----------------------
 app.use(express.json());
 app.use(passport.initialize());
 
-// API Routes
-app.use("/api/auth", require("./routes/auth"));  // Handles Google + email login
+// ----------------------
+// ROUTES
+// ----------------------
+
+// 1️⃣ Load Google OAuth routes FIRST
+app.use("/api/auth", require("./routes/googleAuth"));
+
+// 2️⃣ Then load Email/Password Auth
+app.use("/api/auth", require("./routes/auth"));
+
+// 3️⃣ Then load tasks
 app.use("/api/tasks", require("./routes/tasks"));
 
+// ----------------------
 // Base route
+// ----------------------
 app.get("/", (req, res) => {
   res.json({ status: "OK", message: "Task Manager API Running" });
 });
 
+// ----------------------
 // Start server
+// ----------------------
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () =>
   console.log(`🚀 Server running on port ${PORT}`)
