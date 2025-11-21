@@ -14,21 +14,16 @@ const app = express();
 // CORS WHITELIST
 // ----------------------
 const allowedOrigins = [
-  "http://localhost:3000",                         // Local frontend
-  "https://task-manager-psi-lake.vercel.app"       // Production frontend
+  "http://localhost:3000",                         
+  "https://task-manager-psi-lake.vercel.app"       
 ];
 
 app.use(
   cors({
     origin: function (origin, callback) {
-      // Allow mobile apps / Postman / curl (no origin)
       if (!origin) return callback(null, true);
-
-      if (allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      } else {
-        return callback(new Error("CORS Not Allowed"));
-      }
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      return callback(new Error("CORS Not Allowed"));
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE"],
@@ -37,13 +32,11 @@ app.use(
 
 // Middleware
 app.use(express.json());
-
-// API Routes
-app.use("/api/auth", require("./routes/auth"));
-app.use("/api/tasks", require("./routes/tasks"));
 app.use(passport.initialize());
 
-app.use("/api/auth", require("./routes/googleAuth"));
+// API Routes
+app.use("/api/auth", require("./routes/auth"));  // Handles Google + email login
+app.use("/api/tasks", require("./routes/tasks"));
 
 // Base route
 app.get("/", (req, res) => {
