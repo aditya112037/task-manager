@@ -1,102 +1,180 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
+import React, { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import {
+  Box,
+  Card,
+  CardContent,
+  TextField,
+  Button,
+  Typography,
+  CircularProgress,
+} from "@mui/material";
+import { useAuth } from "../../context/AuthContext";
 
 const Register = () => {
   const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    password: '',
-    confirmPassword: ''
+    name: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
   });
-  const [error, setError] = useState('');
+
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  
+
   const { register } = useAuth();
   const navigate = useNavigate();
 
   const handleChange = (e) => {
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [e.target.name]: e.target.value,
     });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (formData.password !== formData.confirmPassword) {
-      return setError('Passwords do not match');
+      return setError("Passwords do not match");
     }
 
     try {
-      setError('');
+      setError("");
       setLoading(true);
       await register(formData.name, formData.email, formData.password);
-      navigate('/');
+      navigate("/");
     } catch (error) {
-      setError(error.response?.data?.message || 'Failed to register');
+      setError(error.response?.data?.message || "Failed to register");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="auth-container">
-      <div className="auth-form">
-        <h2>Create Account</h2>
-        {error && <div className="alert alert-error">{error}</div>}
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label>Name</label>
-            <input
-              type="text"
+    <Box
+      sx={{
+        minHeight: "100vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        background: "#f2f4f7",
+        p: 2,
+      }}
+    >
+      <Card
+        sx={{
+          width: "100%",
+          maxWidth: 400,
+          borderRadius: 3,
+          p: 1,
+          boxShadow: "0px 6px 18px rgba(0, 0, 0, 0.08)",
+        }}
+      >
+        <CardContent>
+          <Typography
+            variant="h5"
+            fontWeight={700}
+            textAlign="center"
+            mb={2}
+            color="primary"
+          >
+            Create Account
+          </Typography>
+
+          {error && (
+            <Typography
+              color="error"
+              sx={{
+                mb: 2,
+                textAlign: "center",
+                fontSize: "0.9rem",
+                fontWeight: 500,
+              }}
+            >
+              {error}
+            </Typography>
+          )}
+
+          <form onSubmit={handleSubmit}>
+            <TextField
+              label="Full Name"
               name="name"
-              value={formData.name}
-              onChange={handleChange}
+              fullWidth
+              margin="normal"
               required
+              onChange={handleChange}
             />
-          </div>
-          <div className="form-group">
-            <label>Email</label>
-            <input
-              type="email"
+
+            <TextField
+              label="Email"
               name="email"
-              value={formData.email}
-              onChange={handleChange}
+              type="email"
+              fullWidth
+              margin="normal"
               required
+              onChange={handleChange}
             />
-          </div>
-          <div className="form-group">
-            <label>Password</label>
-            <input
-              type="password"
+
+            <TextField
+              label="Password"
               name="password"
-              value={formData.password}
-              onChange={handleChange}
-              required
-              minLength="6"
-            />
-          </div>
-          <div className="form-group">
-            <label>Confirm Password</label>
-            <input
               type="password"
-              name="confirmPassword"
-              value={formData.confirmPassword}
-              onChange={handleChange}
+              fullWidth
+              margin="normal"
               required
+              onChange={handleChange}
             />
-          </div>
-          <button type="submit" disabled={loading} className="btn btn-primary">
-            {loading ? 'Creating Account...' : 'Register'}
-          </button>
-        </form>
-        <p>
-          Already have an account? <Link to="/login">Login here</Link>
-        </p>
-      </div>
-    </div>
+
+            <TextField
+              label="Confirm Password"
+              name="confirmPassword"
+              type="password"
+              fullWidth
+              margin="normal"
+              required
+              onChange={handleChange}
+            />
+
+            <Button
+              type="submit"
+              fullWidth
+              variant="contained"
+              size="large"
+              disabled={loading}
+              sx={{
+                mt: 2,
+                py: 1.4,
+                fontSize: "1rem",
+                borderRadius: "10px",
+                textTransform: "none",
+              }}
+            >
+              {loading ? (
+                <CircularProgress size={24} color="inherit" />
+              ) : (
+                "Register"
+              )}
+            </Button>
+          </form>
+
+          <Typography
+            variant="body2"
+            textAlign="center"
+            mt={2}
+            sx={{ color: "#555" }}
+          >
+            Already have an account?{" "}
+            <Link
+              to="/login"
+              style={{ textDecoration: "none", color: "#1976d2" }}
+            >
+              Login here
+            </Link>
+          </Typography>
+        </CardContent>
+      </Card>
+    </Box>
   );
 };
 

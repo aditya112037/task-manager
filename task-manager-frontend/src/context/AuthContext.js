@@ -1,61 +1,79 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
-import { authAPI } from '../services/api';
+import React, { createContext, useState, useContext, useEffect } from "react";
+import { authAPI } from "../services/api";
 
 const AuthContext = createContext();
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context)
+    throw new Error("useAuth must be used within an AuthProvider");
   return context;
 };
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // for initial load
 
+  // ==========================================
+  // FETCH USER PROFILE ONCE (IF TOKEN EXISTS)
+  // ==========================================
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      authAPI.getProfile()
-        .then(response => {
-          setUser(response.data);
-        })
-        .catch(error => {
-          console.error('Error getting profile:', error);
-          localStorage.removeItem('token');
-        })
-        .finally(() => {
-          setLoading(false);
-        });
-    } else {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
       setLoading(false);
+      return;
     }
+
+    const fetchProfile = async () => {
+      try {
+        const response = await authAPI.getProfile();
+        setUser(response.data);
+      } catch (err) {
+        // Token invalid → wipe it
+        localStorage.removeItem("token");
+        setUser(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProfile();
   }, []);
 
+  // ==========================================
+  // LOGIN
+  // ==========================================
   const login = async (email, password) => {
     const response = await authAPI.login({ email, password });
+
     const { token, ...userData } = response.data;
-    
-    localStorage.setItem('token', token);
+
+    localStorage.setItem("token", token);
     setUser(userData);
-    
+
     return response.data;
   };
 
+  // ==========================================
+  // REGISTER
+  // ==========================================
   const register = async (name, email, password) => {
     const response = await authAPI.register({ name, email, password });
+
     const { token, ...userData } = response.data;
-    
-    localStorage.setItem('token', token);
+
+    localStorage.setItem("token", token);
     setUser(userData);
-    
+
     return response.data;
   };
 
+  // ==========================================
+  // LOGOUT
+  // ==========================================
   const logout = () => {
-    localStorage.removeItem('token');
+    localStorage.removeItem("token");
     setUser(null);
   };
 
@@ -64,12 +82,13 @@ export const AuthProvider = ({ children }) => {
     login,
     register,
     logout,
-    loading
+    loading, // used to hide UI until auth state is known
   };
 
   return (
     <AuthContext.Provider value={value}>
-      {children}
+      {/* Prevent UI flicker while checking token */}
+      {!loading && children}
     </AuthContext.Provider>
   );
 };

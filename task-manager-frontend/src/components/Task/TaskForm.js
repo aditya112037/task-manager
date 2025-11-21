@@ -1,22 +1,34 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Button,
+  MenuItem,
+  Box,
+} from "@mui/material";
 
 const TaskForm = ({ task, onSubmit, onCancel }) => {
   const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    priority: 'medium',
-    status: 'todo',
-    dueDate: ''
+    title: "",
+    description: "",
+    priority: "medium",
+    status: "todo",
+    dueDate: "",
   });
 
   useEffect(() => {
     if (task) {
       setFormData({
-        title: task.title || '',
-        description: task.description || '',
-        priority: task.priority || 'medium',
-        status: task.status || 'todo',
-        dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : ''
+        title: task.title || "",
+        description: task.description || "",
+        priority: task.priority || "medium",
+        status: task.status || "todo",
+        dueDate: task.dueDate
+          ? new Date(task.dueDate).toISOString().split("T")[0]
+          : "",
       });
     }
   }, [task]);
@@ -24,90 +36,110 @@ const TaskForm = ({ task, onSubmit, onCancel }) => {
   const handleChange = (e) => {
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [e.target.name]: e.target.value,
     });
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const handleSubmit = () => {
     onSubmit(formData);
   };
 
   return (
-    <div className="task-form-overlay">
-      <div className="task-form">
-        <h3>{task ? 'Edit Task' : 'Create New Task'}</h3>
-        <form onSubmit={handleSubmit}>
-          <div className="form-group">
-            <label>Title *</label>
-            <input
-              type="text"
-              name="title"
-              value={formData.title}
+    <Dialog
+      open={true}
+      onClose={onCancel}
+      fullWidth
+      maxWidth="sm"
+      sx={{ "& .MuiDialog-paper": { borderRadius: 3, p: 1 } }}
+    >
+      <DialogTitle sx={{ fontWeight: 700, fontSize: "1.3rem" }}>
+        {task ? "Edit Task" : "Create New Task"}
+      </DialogTitle>
+
+      <DialogContent dividers>
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+          {/* Title */}
+          <TextField
+            label="Title *"
+            name="title"
+            required
+            fullWidth
+            value={formData.title}
+            onChange={handleChange}
+          />
+
+          {/* Description */}
+          <TextField
+            label="Description"
+            name="description"
+            multiline
+            rows={3}
+            fullWidth
+            value={formData.description}
+            onChange={handleChange}
+          />
+
+          {/* Priority + Status */}
+          <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+            <TextField
+              select
+              label="Priority"
+              name="priority"
+              fullWidth
+              value={formData.priority}
               onChange={handleChange}
-              required
-            />
-          </div>
+            >
+              <MenuItem value="low">Low</MenuItem>
+              <MenuItem value="medium">Medium</MenuItem>
+              <MenuItem value="high">High</MenuItem>
+            </TextField>
 
-          <div className="form-group">
-            <label>Description</label>
-            <textarea
-              name="description"
-              value={formData.description}
+            <TextField
+              select
+              label="Status"
+              name="status"
+              fullWidth
+              value={formData.status}
               onChange={handleChange}
-              rows="3"
-            />
-          </div>
+            >
+              <MenuItem value="todo">To Do</MenuItem>
+              <MenuItem value="in-progress">In Progress</MenuItem>
+              <MenuItem value="completed">Completed</MenuItem>
+            </TextField>
+          </Box>
 
-          <div className="form-row">
-            <div className="form-group">
-              <label>Priority</label>
-              <select
-                name="priority"
-                value={formData.priority}
-                onChange={handleChange}
-              >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-              </select>
-            </div>
+          {/* Due Date */}
+          <TextField
+            label="Due Date"
+            type="date"
+            name="dueDate"
+            fullWidth
+            InputLabelProps={{ shrink: true }}
+            value={formData.dueDate}
+            onChange={handleChange}
+          />
+        </Box>
+      </DialogContent>
 
-            <div className="form-group">
-              <label>Status</label>
-              <select
-                name="status"
-                value={formData.status}
-                onChange={handleChange}
-              >
-                <option value="todo">To Do</option>
-                <option value="in-progress">In Progress</option>
-                <option value="completed">Completed</option>
-              </select>
-            </div>
-          </div>
+      <DialogActions sx={{ p: 2 }}>
+        <Button
+          onClick={onCancel}
+          color="inherit"
+          variant="outlined"
+          sx={{ textTransform: "none", borderRadius: 2 }}
+        >
+          Cancel
+        </Button>
 
-          <div className="form-group">
-            <label>Due Date</label>
-            <input
-              type="date"
-              name="dueDate"
-              value={formData.dueDate}
-              onChange={handleChange}
-            />
-          </div>
-
-          <div className="form-actions">
-            <button type="button" onClick={onCancel} className="btn btn-outline">
-              Cancel
-            </button>
-            <button type="submit" className="btn btn-primary">
-              {task ? 'Update Task' : 'Create Task'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <Button
+          onClick={handleSubmit}
+          variant="contained"
+          sx={{ textTransform: "none", borderRadius: 2 }}
+        >
+          {task ? "Update Task" : "Create Task"}
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 };
 

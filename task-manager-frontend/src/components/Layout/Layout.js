@@ -1,16 +1,29 @@
-import React from 'react';
-import Header from './Header';
+import React from "react";
+import Header from "./Header";
+import { Box, Container } from "@mui/material";
 
 const Layout = ({ children }) => {
   return (
-    <div className="layout">
+    <Box
+      sx={{
+        minHeight: "100vh",
+        backgroundColor: "#f5f7fa",
+      }}
+    >
+      {/* Top Navigation */}
       <Header />
-      <main className="main-content">
-        <div className="container">
-          {children}
-        </div>
-      </main>
-    </div>
+
+      {/* Main Content */}
+      <Container
+        maxWidth="md"
+        sx={{
+          mt: 4,
+          mb: 4,
+        }}
+      >
+        {children}
+      </Container>
+    </Box>
   );
 };
 

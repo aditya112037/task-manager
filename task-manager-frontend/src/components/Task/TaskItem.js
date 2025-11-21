@@ -1,22 +1,29 @@
-import React from 'react';
+import React from "react";
+import {
+  Card,
+  CardContent,
+  Typography,
+  Chip,
+  IconButton,
+  Box,
+  Stack,
+  Tooltip,
+} from "@mui/material";
+
+import EditIcon from "@mui/icons-material/Edit";
+import DeleteIcon from "@mui/icons-material/Delete";
 
 const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
-  const getPriorityColor = (priority) => {
-    switch (priority) {
-      case 'high': return 'priority-high';
-      case 'medium': return 'priority-medium';
-      case 'low': return 'priority-low';
-      default: return '';
-    }
+  const priorityColors = {
+    high: "error",
+    medium: "warning",
+    low: "success",
   };
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'completed': return 'status-completed';
-      case 'in-progress': return 'status-in-progress';
-      case 'todo': return 'status-todo';
-      default: return '';
-    }
+  const statusColors = {
+    "todo": "default",
+    "in-progress": "info",
+    "completed": "success",
   };
 
   const handleStatusChange = (newStatus) => {
@@ -24,60 +31,109 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
   };
 
   const formatDate = (dateString) => {
-    if (!dateString) return 'No due date';
+    if (!dateString) return "No due date";
     return new Date(dateString).toLocaleDateString();
   };
 
   return (
-    <div className={`task-item ${getPriorityColor(task.priority)}`}>
-      <div className="task-header">
-        <h4 className="task-title">{task.title}</h4>
-        <div className="task-actions">
-          <button onClick={() => onEdit(task)} className="btn-icon">
-            ✏️
-          </button>
-          <button onClick={() => onDelete(task._id)} className="btn-icon">
-            🗑️
-          </button>
-        </div>
-      </div>
+    <Card
+      sx={{
+        mb: 2,
+        borderRadius: 3,
+        boxShadow: "0 3px 10px rgba(0,0,0,0.08)",
+        transition: "0.2s",
+        "&:hover": { boxShadow: "0 5px 16px rgba(0,0,0,0.12)" },
+      }}
+    >
+      <CardContent>
+        {/* HEADER */}
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "space-between",
+            mb: 1,
+          }}
+        >
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            {task.title}
+          </Typography>
 
-      {task.description && (
-        <p className="task-description">{task.description}</p>
-      )}
+          <Box>
+            <Tooltip title="Edit">
+              <IconButton color="primary" onClick={() => onEdit(task)}>
+                <EditIcon />
+              </IconButton>
+            </Tooltip>
 
-      <div className="task-meta">
-        <span className={`task-status ${getStatusColor(task.status)}`}>
-          {task.status.replace('-', ' ')}
-        </span>
-        <span className="task-due-date">
-          📅 {formatDate(task.dueDate)}
-        </span>
-      </div>
+            <Tooltip title="Delete">
+              <IconButton color="error" onClick={() => onDelete(task._id)}>
+                <DeleteIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        </Box>
 
-      <div className="task-footer">
-        <div className="status-buttons">
-          <button
-            onClick={() => handleStatusChange('todo')}
-            className={`btn-status ${task.status === 'todo' ? 'active' : ''}`}
+        {/* DESCRIPTION */}
+        {task.description && (
+          <Typography
+            variant="body2"
+            sx={{ mb: 2, color: "text.secondary" }}
           >
-            To Do
-          </button>
-          <button
-            onClick={() => handleStatusChange('in-progress')}
-            className={`btn-status ${task.status === 'in-progress' ? 'active' : ''}`}
-          >
-            In Progress
-          </button>
-          <button
-            onClick={() => handleStatusChange('completed')}
-            className={`btn-status ${task.status === 'completed' ? 'active' : ''}`}
-          >
-            Completed
-          </button>
-        </div>
-      </div>
-    </div>
+            {task.description}
+          </Typography>
+        )}
+
+        {/* METADATA */}
+        <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+          <Chip
+            label={task.priority}
+            color={priorityColors[task.priority]}
+            size="small"
+            sx={{ textTransform: "capitalize" }}
+          />
+
+          <Chip
+            label={task.status.replace("-", " ")}
+            color={statusColors[task.status]}
+            size="small"
+            sx={{ textTransform: "capitalize" }}
+          />
+
+          <Chip
+            label={`📅 ${formatDate(task.dueDate)}`}
+            variant="outlined"
+            size="small"
+          />
+        </Stack>
+
+        {/* STATUS BUTTONS */}
+        <Stack direction="row" spacing={1}>
+          <Chip
+            label="To Do"
+            clickable
+            color={task.status === "todo" ? "primary" : "default"}
+            variant={task.status === "todo" ? "filled" : "outlined"}
+            onClick={() => handleStatusChange("todo")}
+          />
+
+          <Chip
+            label="In Progress"
+            clickable
+            color={task.status === "in-progress" ? "info" : "default"}
+            variant={task.status === "in-progress" ? "filled" : "outlined"}
+            onClick={() => handleStatusChange("in-progress")}
+          />
+
+          <Chip
+            label="Completed"
+            clickable
+            color={task.status === "completed" ? "success" : "default"}
+            variant={task.status === "completed" ? "filled" : "outlined"}
+            onClick={() => handleStatusChange("completed")}
+          />
+        </Stack>
+      </CardContent>
+    </Card>
   );
 };
 
