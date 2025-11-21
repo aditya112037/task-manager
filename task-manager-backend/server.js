@@ -3,6 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const connectDB = require("./config/db");
+const passport = require("./config/google");
 
 dotenv.config();
 connectDB();
@@ -40,6 +41,9 @@ app.use(express.json());
 // API Routes
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/tasks", require("./routes/tasks"));
+app.use(passport.initialize());
+
+app.use("/api/auth", require("./routes/googleAuth"));
 
 // Base route
 app.get("/", (req, res) => {
