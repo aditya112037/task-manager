@@ -85,6 +85,7 @@ const register = async (name, email, password) => {
 
   const value = {
     user,
+    setUser,
     login,
     register,
     logout,
