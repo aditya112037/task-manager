@@ -1,8 +1,11 @@
 import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { authAPI } from "../services/api";
+import { useAuth } from "../context/AuthContext";
 
-const OAuthSuccess = () => {
+export default function OAuthSuccess() {
   const navigate = useNavigate();
+  const { setUser } = useAuth();
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -10,24 +13,18 @@ const OAuthSuccess = () => {
 
     if (token) {
       localStorage.setItem("token", token);
-      navigate("/", { replace: true });
-    } else {
-      navigate("/login", { replace: true });
+
+      // 🔥 Immediately fetch user (fixes staying on login page)
+      authAPI.getProfile()
+        .then(res => {
+          setUser(res.data);
+          navigate("/");
+        })
+        .catch(() => {
+          navigate("/login");
+        });
     }
-  }, [navigate]);
+  }, []);
 
-  return (
-    <div style={{
-      height: "100vh",
-      display: "flex",
-      justifyContent: "center",
-      alignItems: "center",
-      fontSize: "20px",
-      fontWeight: "bold"
-    }}>
-      Logging you in...
-    </div>
-  );
-};
-
-export default OAuthSuccess;
+  return <div>Logging you in...</div>;
+}
