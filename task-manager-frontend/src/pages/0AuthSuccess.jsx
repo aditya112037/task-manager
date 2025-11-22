@@ -11,20 +11,30 @@ export default function OAuthSuccess() {
     const params = new URLSearchParams(window.location.search);
     const token = params.get("token");
 
-    if (token) {
-      localStorage.setItem("token", token);
-
-      // 🔥 Immediately fetch user (fixes staying on login page)
-      authAPI.getProfile()
-        .then(res => {
-          setUser(res.data);
-          navigate("/");
-        })
-        .catch(() => {
-          navigate("/login");
-        });
+    if (!token) {
+      navigate("/login");
+      return;
     }
+
+    // Save JWT from backend
+    localStorage.setItem("token", token);
+
+    // 🎯 Fetch user immediately after receiving token
+    authAPI
+      .getProfile()
+      .then((res) => {
+        setUser(res.data);        // update global auth state
+        navigate("/");            // go to dashboard
+      })
+      .catch(() => {
+        localStorage.removeItem("token");
+        navigate("/login");
+      });
   }, []);
 
-  return <div>Logging you in...</div>;
+  return (
+    <div style={{ textAlign: "center", paddingTop: "50px", fontSize: "20px" }}>
+      Logging you in with Google...
+    </div>
+  );
 }
