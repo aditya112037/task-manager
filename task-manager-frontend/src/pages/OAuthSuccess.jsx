@@ -7,35 +7,30 @@ export default function OAuthSuccess() {
   const navigate = useNavigate();
   const { setUser } = useAuth();
 
-useEffect(() => {
-  const token = localStorage.getItem("token");
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get("token");
 
-  // ❗ If we're on the OAuth landing page, DO NOT run the auto-profile load
-  if (window.location.pathname === "/oauth-success") {
-    setLoading(false);
-    return;
-  }
-
-  if (!token) {
-    setLoading(false);
-    return;
-  }
-
-  const fetchProfile = async () => {
-    try {
-      const response = await authAPI.getProfile();
-      setUser(response.data);
-    } catch (err) {
-      localStorage.removeItem("token");
-      setUser(null);
-    } finally {
-      setLoading(false);
+    if (!token) {
+      navigate("/login");
+      return;
     }
-  };
 
-  fetchProfile();
-}, []);
+    // Save JWT from backend
+    localStorage.setItem("token", token);
 
+    // 🎯 Fetch user immediately after receiving token
+    authAPI
+      .getProfile()
+      .then((res) => {
+        setUser(res.data);        // update global auth state
+        navigate("/");            // go to dashboard
+      })
+      .catch(() => {
+        localStorage.removeItem("token");
+        navigate("/login");
+      });
+  }, []);
 
   return (
     <div style={{ textAlign: "center", paddingTop: "50px", fontSize: "20px" }}>
