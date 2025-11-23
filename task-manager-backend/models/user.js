@@ -17,17 +17,28 @@ const userSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // Password is required only if NOT registering via Google
     password: {
       type: String,
       minlength: 6,
       required: function () {
-        return !this.googleId; 
-      }, 
+        return !this.googleId;
+      },
     },
 
+    // For Google OAuth users
     googleId: {
       type: String,
       default: null,
+    },
+
+    // For "Forgot Password" feature
+    resetPasswordToken: {
+      type: String,
+    },
+
+    resetPasswordExpire: {
+      type: Date,
     },
   },
   {
@@ -35,7 +46,7 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// 🔐 Hash password ONLY if user is NOT Google user
+// 🔐 Hash password if modified AND user is not using Google OAuth
 userSchema.pre('save', async function (next) {
   if (!this.isModified('password') || this.googleId) {
     return next();
@@ -46,11 +57,9 @@ userSchema.pre('save', async function (next) {
   next();
 });
 
-// 🔍 Compare password method (email login only)
+// 🔍 Compare plaintext password → hashed password
 userSchema.methods.matchPassword = async function (enteredPassword) {
-  // Google users have no password → block normal login
-  if (this.googleId) return false;
-
+  if (this.googleId) return false; // Google user → no password
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
