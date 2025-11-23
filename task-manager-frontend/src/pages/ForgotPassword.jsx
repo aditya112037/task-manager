@@ -12,7 +12,7 @@ export default function ForgotPassword() {
     setMessage("");
 
     try {
-      await axios.post(`${process.env.REACT_APP_API_URL}/auth/forgot-password`, { email });
+      await axios.post(`${process.env.REACT_APP_API_URL}/api/auth/forgot-password`, { email });
       setMessage("Password reset link sent to your email.");
     } catch (err) {
       setMessage(err.response?.data?.message || "Error sending email");
