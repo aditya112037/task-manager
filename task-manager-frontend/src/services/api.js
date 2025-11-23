@@ -2,6 +2,8 @@ import axios from "axios";
 
 const API = process.env.REACT_APP_API_URL;
 
+
+
 const api = axios.create({
   baseURL: API,
   withCredentials: true,
@@ -24,6 +26,9 @@ export const authAPI = {
   register: (data) => api.post("/api/auth/register", data),
   login: (data) => api.post("/api/auth/login", data),
   getProfile: () => api.get("/api/auth/profile"),
+  forgotPassword: (data) => api.post("/auth/forgot-password", data),
+  resetPassword: (token, data) => api.post(`/auth/reset-password/${token}`, data),
+
 };
 
 // TASKS API
