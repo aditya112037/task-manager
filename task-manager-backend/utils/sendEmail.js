@@ -1,20 +1,21 @@
-const Brevo = require("@getbrevo/brevo");
+const nodemailer = require("nodemailer");
+
+const transporter = nodemailer.createTransport({
+  host: process.env.BREVO_SMTP_HOST,
+  port: process.env.BREVO_SMTP_PORT,
+  auth: {
+    user: process.env.BREVO_SMTP_LOGIN,
+    pass: process.env.BREVO_SMTP_PASSWORD,
+  },
+});
 
 async function sendEmail({ to, subject, text }) {
-  const apiInstance = new Brevo.TransactionalEmailsApi();
-  apiInstance.setApiKey(
-    Brevo.TransactionalEmailsApiApiKeys.apiKey,
-    process.env.BREVO_API_KEY
-  );
-
-  const emailData = {
-    sender: { name: "Task Manager", email: process.env.EMAIL_FROM },
-    to: [{ email: to }],
+  await transporter.sendMail({
+    from: process.env.EMAIL_FROM,
+    to,
     subject,
-    textContent: text,
-  };
-
-  await apiInstance.sendTransacEmail(emailData);
+    text,
+  });
 }
 
 module.exports = sendEmail;
