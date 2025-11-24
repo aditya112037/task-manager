@@ -48,7 +48,6 @@ app.use("/api/auth", require("./routes/auth"));
 
 // 3️⃣ Then load tasks
 app.use("/api/tasks", require("./routes/tasks"));
-app.use("/api/auth", require("./routes/password"));
 
 
 // ----------------------

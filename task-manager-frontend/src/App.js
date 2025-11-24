@@ -6,8 +6,7 @@ import Login from './components/Auth/Login';
 import Register from './components/Auth/Register';
 import TaskList from './components/Task/TaskList';
 import OAuthSuccess from './pages/OAuthSuccess';
-import ForgotPassword from "./pages/ForgotPassword";
-import ResetPassword from "./pages/ResetPassword";
+
 import './App.css';
 
 const ProtectedRoute = ({ children }) => {
@@ -47,17 +46,8 @@ function App() {
               </PublicRoute>
             } />
             <Route path="/oauth-success" element={<OAuthSuccess />} />
-            <Route path="/forgot-password" element={
-            <PublicRoute>
-              <ForgotPassword />
-            </PublicRoute>
-          } />
-
-          <Route path="/reset-password" element={
-            <PublicRoute>
-              <ResetPassword />
-            </PublicRoute>
-          } />
+       
+          
 
             <Route path="/" element={
               <ProtectedRoute>

@@ -178,9 +178,6 @@ const handleGoogleLogin = () => {
             >
               Register here
             </Link>
-            <Link to="/forgot-password" style={{ float:"right", marginTop:"10px" }}>
-  Forgot Password?
-</Link>
           </Typography>
         </CardContent>
       </Card>
