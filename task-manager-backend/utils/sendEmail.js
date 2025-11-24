@@ -1,14 +1,20 @@
-const { Resend } = require("resend");
-
-const resend = new Resend(process.env.RESEND_API_KEY);
+const Brevo = require("@getbrevo/brevo");
 
 async function sendEmail({ to, subject, text }) {
-  await resend.emails.send({
-    from: "Task Manager <onboarding@resend.dev>",
-    to,
+  const apiInstance = new Brevo.TransactionalEmailsApi();
+  apiInstance.setApiKey(
+    Brevo.TransactionalEmailsApiApiKeys.apiKey,
+    process.env.BREVO_API_KEY
+  );
+
+  const emailData = {
+    sender: { name: "Task Manager", email: process.env.EMAIL_FROM },
+    to: [{ email: to }],
     subject,
-    text,
-  });
+    textContent: text,
+  };
+
+  await apiInstance.sendTransacEmail(emailData);
 }
 
 module.exports = sendEmail;
