@@ -6,6 +6,7 @@ import {
   Grid,
   CircularProgress,
   Fab,
+  Paper
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import { tasksAPI } from "../../services/api";
@@ -80,28 +81,26 @@ const TaskList = () => {
   }
 
   return (
-    <Box sx={{ pt: 2 }}>
+    <Box sx={{ pt: 3, pb: 8 }}>
+
       {/* HEADER */}
-      <Box
+      <Paper
+        elevation={0}
         sx={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
           mb: 3,
+          p: 2,
+          borderRadius: 3,
+          background: "linear-gradient(135deg, #1976d2, #2196f3)",
+          color: "white",
         }}
       >
         <Typography variant="h5" fontWeight={700}>
           My Tasks
         </Typography>
-
-        <Button
-          variant="contained"
-          sx={{ borderRadius: 2, textTransform: "none" }}
-          onClick={() => setShowForm(true)}
-        >
-          Add New Task
-        </Button>
-      </Box>
+        <Typography variant="body2" sx={{ opacity: 0.9 }}>
+          Stay organized & manage your workflow.
+        </Typography>
+      </Paper>
 
       {/* CREATE FORM */}
       {showForm && (
@@ -122,11 +121,11 @@ const TaskList = () => {
         />
       )}
 
-      {/* TASK GRID */}
+      {/* TASK LIST */}
       {tasks.length > 0 ? (
         <Grid container spacing={2}>
           {tasks.map((task) => (
-            <Grid item xs={12} sm={6} md={6} key={task._id}>
+            <Grid item xs={12} sm={6} key={task._id}>
               <TaskItem
                 task={task}
                 onEdit={setEditingTask}
@@ -137,20 +136,25 @@ const TaskList = () => {
           ))}
         </Grid>
       ) : (
-        <Box sx={{ textAlign: "center", mt: 10 }}>
+        <Box sx={{ textAlign: "center", mt: 12 }}>
           <Typography variant="h6" color="text.secondary">
             No tasks yet.
           </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Create your first task!
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+            Tap the + button to create your first task!
           </Typography>
         </Box>
       )}
 
-      {/* Floating Add Button (mobile friendly) */}
+      {/* Floating Add Button */}
       <Fab
         color="primary"
-        sx={{ position: "fixed", bottom: 24, right: 24 }}
+        sx={{
+          position: "fixed",
+          bottom: 24,
+          right: 24,
+          boxShadow: "0px 6px 20px rgba(0,0,0,0.25)",
+        }}
         onClick={() => setShowForm(true)}
       >
         <AddIcon />
