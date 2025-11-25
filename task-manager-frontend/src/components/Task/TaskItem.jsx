@@ -8,11 +8,13 @@ import {
   Box,
   Stack,
   Tooltip,
+  Button
 } from "@mui/material";
-import { Button } from '@mui/material';
 
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+import EventIcon from "@mui/icons-material/Event";
+import GoogleIcon from "@mui/icons-material/Google";
 
 const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
   const priorityColors = {
@@ -36,14 +38,22 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
     return new Date(dateString).toLocaleDateString();
   };
 
+  const googleCalendarURL =
+    `https://calendar.google.com/calendar/render?action=TEMPLATE` +
+    `&text=${encodeURIComponent(task.title)}` +
+    `&details=${encodeURIComponent(task.description || "")}` +
+    `&dates=${new Date(task.dueDate).toISOString().replace(/[-:]/g, "").split(".")[0] + "Z"}` +
+    `/${new Date(task.dueDate).toISOString().replace(/[-:]/g, "").split(".")[0] + "Z"}`;
+
   return (
     <Card
       sx={{
         mb: 2,
         borderRadius: 3,
-        boxShadow: "0 3px 10px rgba(0,0,0,0.08)",
-        transition: "0.2s",
-        "&:hover": { boxShadow: "0 5px 16px rgba(0,0,0,0.12)" },
+        padding: 1,
+        boxShadow: "0 4px 15px rgba(0,0,0,0.08)",
+        transition: "0.25s",
+        "&:hover": { boxShadow: "0 6px 20px rgba(0,0,0,0.12)" },
       }}
     >
       <CardContent>
@@ -55,7 +65,7 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
             mb: 1,
           }}
         >
-          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+          <Typography variant="h6" sx={{ fontWeight: 700 }}>
             {task.title}
           </Typography>
 
@@ -76,10 +86,7 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
 
         {/* DESCRIPTION */}
         {task.description && (
-          <Typography
-            variant="body2"
-            sx={{ mb: 2, color: "text.secondary" }}
-          >
+          <Typography variant="body2" sx={{ mb: 2, color: "text.secondary" }}>
             {task.description}
           </Typography>
         )}
@@ -106,15 +113,41 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
             size="small"
           />
         </Stack>
+
+        {/* CALENDAR BUTTONS */}
+        <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
           <Button
-    variant="outlined"
-    onClick={() => {
-      window.location.href = 
-        `${process.env.REACT_APP_API_URL}/api/ics/${task._id}`;
-    }}
-  >
-    Add to Calendar
-  </Button>
+            variant="contained"
+            color="secondary"
+            startIcon={<EventIcon />}
+            sx={{
+              textTransform: "none",
+              borderRadius: 2,
+              px: 2,
+            }}
+            onClick={() => {
+              window.location.href =
+                `${process.env.REACT_APP_API_URL}/api/ics/${task._id}`;
+            }}
+          >
+            Add to Calendar
+          </Button>
+
+          <Button
+            variant="outlined"
+            color="primary"
+            startIcon={<GoogleIcon />}
+            sx={{
+              textTransform: "none",
+              borderRadius: 2,
+              px: 2,
+            }}
+            href={googleCalendarURL}
+            target="_blank"
+          >
+            Add to Google Calendar
+          </Button>
+        </Stack>
 
         {/* STATUS BUTTONS */}
         <Stack direction="row" spacing={1}>
