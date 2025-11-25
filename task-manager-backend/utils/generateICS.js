@@ -1,26 +1,33 @@
-const generateICS = (task) => {
-  const start = new Date(task.date);
-  const end = new Date(start.getTime() + 30 * 60 * 1000); // 30 mins event
+function format(date) {
+  const d = new Date(date);
 
-  const format = (date) =>
-    date.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+  // SAFETY CHECK – prevent crash if invalid or missing
+  if (isNaN(d.getTime())) {
+    // fallback to *current datetime* so ICS remains valid
+    return new Date().toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+  }
+
+  return d.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
+}
+
+function generateICS(task) {
+  const startDate = task.dueDate || Date.now();  
+  const endDate = task.dueDate || Date.now();
 
   return `
 BEGIN:VCALENDAR
 VERSION:2.0
+PRODID:-//TaskManager//EN
 BEGIN:VEVENT
+UID:${task._id}
+DTSTAMP:${format(Date.now())}
+DTSTART:${format(startDate)}
+DTEND:${format(endDate)}
 SUMMARY:${task.title}
-DESCRIPTION:${task.description || "Task Reminder"}
-DTSTART:${format(start)}
-DTEND:${format(end)}
-BEGIN:VALARM
-TRIGGER:-PT30M
-ACTION:DISPLAY
-DESCRIPTION:Reminder
-END:VALARM
+DESCRIPTION:${task.description || ""}
 END:VEVENT
 END:VCALENDAR
   `;
-};
+}
 
 module.exports = generateICS;
