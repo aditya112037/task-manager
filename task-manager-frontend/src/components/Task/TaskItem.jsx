@@ -105,6 +105,15 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
             size="small"
           />
         </Stack>
+          <Button
+    variant="outlined"
+    onClick={() => {
+      window.location.href = 
+        `${process.env.REACT_APP_API_URL}/api/ics/${task._id}`;
+    }}
+  >
+    Add to Calendar
+  </Button>
 
         {/* STATUS BUTTONS */}
         <Stack direction="row" spacing={1}>
