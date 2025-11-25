@@ -141,7 +141,7 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
                 `${process.env.REACT_APP_API_URL}/api/ics/${task._id}`;
             }}
           >
-            Add to Calendar (.ics)
+            Add to Calendar (Apple)
           </Button>
 
           <Button
