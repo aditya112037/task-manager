@@ -38,12 +38,21 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
     return new Date(dateString).toLocaleDateString();
   };
 
+  // -------------------------------------------------------
+  //  GOOGLE CALENDAR URL (CORRECTED — with end time)
+  // -------------------------------------------------------
+  const startDate = new Date(task.dueDate);
+
+  const endDate = new Date(startDate.getTime() + 30 * 60 * 1000); // +30min
+
+  const fmt = (d) =>
+    d.toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
+
   const googleCalendarURL =
     `https://calendar.google.com/calendar/render?action=TEMPLATE` +
     `&text=${encodeURIComponent(task.title)}` +
     `&details=${encodeURIComponent(task.description || "")}` +
-    `&dates=${new Date(task.dueDate).toISOString().replace(/[-:]/g, "").split(".")[0] + "Z"}` +
-    `/${new Date(task.dueDate).toISOString().replace(/[-:]/g, "").split(".")[0] + "Z"}`;
+    `&dates=${fmt(startDate)}/${fmt(endDate)}`;
 
   return (
     <Card
@@ -53,10 +62,12 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
         padding: 1,
         boxShadow: "0 4px 15px rgba(0,0,0,0.08)",
         transition: "0.25s",
+        background: "#ffffff",
         "&:hover": { boxShadow: "0 6px 20px rgba(0,0,0,0.12)" },
       }}
     >
       <CardContent>
+        
         {/* HEADER */}
         <Box
           sx={{
@@ -130,7 +141,7 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
                 `${process.env.REACT_APP_API_URL}/api/ics/${task._id}`;
             }}
           >
-            Add to Calendar
+            Add to Calendar (.ics)
           </Button>
 
           <Button
