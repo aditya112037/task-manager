@@ -5,7 +5,7 @@ import Layout from './components/Layout/Layout';
 import Login from './components/Auth/Login';
 import Register from './components/Auth/Register';
 import TaskList from './components/Task/TaskList';
-import OAuthSuccess from './components/Auth/OAuthSuccess';
+import OAuthSuccess from './pages/OAuthSuccess';
 
 
 
