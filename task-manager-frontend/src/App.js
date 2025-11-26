@@ -6,11 +6,10 @@ import Login from './components/Auth/Login';
 import Register from './components/Auth/Register';
 import TaskList from './components/Task/TaskList';
 import OAuthSuccess from './components/Auth/OAuthSuccess';
-import Teams from "./pages/Teams";
-import JoinTeam from "./pages/JoinTeam";
-import Dashboard from "./pages/Dashboard";
+import TeamsHome from "./pages/TeamsHome";
 import TeamDetails from "./pages/TeamDetails";
-
+import CreateTeam from "./pages/CreateTeam";
+import JoinTeam from "./pages/JoinTeam";
 
 
 import './App.css';
@@ -52,7 +51,40 @@ function App() {
               </PublicRoute>
             } />
             <Route path="/oauth-success" element={<OAuthSuccess />} />
-       
+            <Route path="/join/:inviteCode" element={<JoinTeam />} />
+
+             <Route
+            path="/teams"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <TeamsHome />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/teams/create"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <CreateTeam />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/teams/:teamId"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <TeamDetails />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
 
 
             <Route path="/" element={
