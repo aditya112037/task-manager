@@ -10,7 +10,7 @@ import {
   Box
 } from "@mui/material";
 
-const TeamTaskForm = ({ task, onSubmit, onCancel }) => {
+export default function TeamTaskForm({ task, onSubmit, onCancel }) {
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -34,11 +34,10 @@ const TeamTaskForm = ({ task, onSubmit, onCancel }) => {
   }, [task]);
 
   const handleChange = (e) => {
-    setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
-  };
-
-  const handleSubmit = () => {
-    onSubmit(formData);
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
   };
 
   return (
@@ -77,9 +76,9 @@ const TeamTaskForm = ({ task, onSubmit, onCancel }) => {
           <Box sx={{ display: "flex", gap: 2 }}>
             <TextField
               select
-              label="Priority"
-              name="priority"
               fullWidth
+              name="priority"
+              label="Priority"
               value={formData.priority}
               onChange={handleChange}
             >
@@ -90,9 +89,9 @@ const TeamTaskForm = ({ task, onSubmit, onCancel }) => {
 
             <TextField
               select
-              label="Status"
-              name="status"
               fullWidth
+              name="status"
+              label="Status"
               value={formData.status}
               onChange={handleChange}
             >
@@ -103,8 +102,8 @@ const TeamTaskForm = ({ task, onSubmit, onCancel }) => {
           </Box>
 
           <TextField
-            type="date"
             label="Due Date"
+            type="date"
             name="dueDate"
             fullWidth
             InputLabelProps={{ shrink: true }}
@@ -117,6 +116,7 @@ const TeamTaskForm = ({ task, onSubmit, onCancel }) => {
       <DialogActions sx={{ p: 2 }}>
         <Button
           onClick={onCancel}
+          color="inherit"
           variant="outlined"
           sx={{ borderRadius: 2, textTransform: "none" }}
         >
@@ -124,8 +124,8 @@ const TeamTaskForm = ({ task, onSubmit, onCancel }) => {
         </Button>
 
         <Button
-          onClick={handleSubmit}
           variant="contained"
+          onClick={() => onSubmit(formData)}
           sx={{ borderRadius: 2, textTransform: "none" }}
         >
           {task ? "Update Task" : "Create Task"}
@@ -133,6 +133,4 @@ const TeamTaskForm = ({ task, onSubmit, onCancel }) => {
       </DialogActions>
     </Dialog>
   );
-};
-
-export default TeamTaskForm;
+}

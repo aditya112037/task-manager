@@ -13,10 +13,8 @@ import {
 
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import EventIcon from "@mui/icons-material/Event";
-import GoogleIcon from "@mui/icons-material/Google";
 
-const TeamTaskItem = ({ task, onEdit, onDelete }) => {
+export default function TeamTaskItem({ task, isAdmin, onEdit, onDelete }) {
   const priorityColors = {
     high: "error",
     medium: "warning",
@@ -29,9 +27,9 @@ const TeamTaskItem = ({ task, onEdit, onDelete }) => {
     "completed": "success",
   };
 
-  const formatDate = (date) => {
-    if (!date) return "No due date";
-    return new Date(date).toLocaleDateString();
+  const formatDate = (dateString) => {
+    if (!dateString) return "No due date";
+    return new Date(dateString).toLocaleDateString();
   };
 
   return (
@@ -47,24 +45,32 @@ const TeamTaskItem = ({ task, onEdit, onDelete }) => {
     >
       <CardContent>
         {/* HEADER */}
-        <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "space-between",
+            mb: 1,
+          }}
+        >
           <Typography variant="h6" sx={{ fontWeight: 700 }}>
             {task.title}
           </Typography>
 
-          <Box>
-            <Tooltip title="Edit">
-              <IconButton color="primary" onClick={() => onEdit(task)}>
-                <EditIcon />
-              </IconButton>
-            </Tooltip>
+          {isAdmin && (
+            <Box>
+              <Tooltip title="Edit">
+                <IconButton color="primary" onClick={() => onEdit(task)}>
+                  <EditIcon />
+                </IconButton>
+              </Tooltip>
 
-            <Tooltip title="Delete">
-              <IconButton color="error" onClick={() => onDelete(task._id)}>
-                <DeleteIcon />
-              </IconButton>
-            </Tooltip>
-          </Box>
+              <Tooltip title="Delete">
+                <IconButton color="error" onClick={() => onDelete(task._id)}>
+                  <DeleteIcon />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          )}
         </Box>
 
         {/* DESCRIPTION */}
@@ -74,7 +80,7 @@ const TeamTaskItem = ({ task, onEdit, onDelete }) => {
           </Typography>
         )}
 
-        {/* TAGS */}
+        {/* METADATA */}
         <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
           <Chip
             label={task.priority}
@@ -96,9 +102,31 @@ const TeamTaskItem = ({ task, onEdit, onDelete }) => {
             size="small"
           />
         </Stack>
+
+        {/* PROGRESS (non-admin can change status) */}
+        <Stack direction="row" spacing={1}>
+          <Chip
+            label="To Do"
+            clickable
+            color={task.status === "todo" ? "primary" : "default"}
+            variant={task.status === "todo" ? "filled" : "outlined"}
+          />
+
+          <Chip
+            label="In Progress"
+            clickable
+            color={task.status === "in-progress" ? "info" : "default"}
+            variant={task.status === "in-progress" ? "filled" : "outlined"}
+          />
+
+          <Chip
+            label="Completed"
+            clickable
+            color={task.status === "completed" ? "success" : "default"}
+            variant={task.status === "completed" ? "filled" : "outlined"}
+          />
+        </Stack>
       </CardContent>
     </Card>
   );
-};
-
-export default TeamTaskItem;
+}

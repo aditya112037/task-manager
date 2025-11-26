@@ -8,21 +8,20 @@ import {
   Paper,
   Divider,
   Stack,
-  Button
+  Button,
 } from "@mui/material";
 import { useParams } from "react-router-dom";
-import { teamTasksAPI } from "../services/api";
-
-// TEMP placeholder until you make component
-const TeamTaskItem = ({ task }) => (
-  <Paper sx={{ p: 2, my: 1, borderRadius: 2 }}>
-    <Typography fontWeight={600}>{task.title}</Typography>
-    <Typography variant="body2">{task.description}</Typography>
-  </Paper>
-);
+import TeamTaskItem from "../components/Teams/TeamTaskItem";
+import TeamTaskForm from "../components/Teams/TeamTaskForm";
+import { teamTasksAPI } from "../services/teamsAPI";
+import { useAuth } from "../context/AuthContext";
 
 export default function TeamDetails() {
   const { teamId } = useParams();
+  const { user } = useAuth();
+
+  // TEMP — later replace with proper role check
+  const isAdmin = true;
 
   // ---- STATE ----
   const [tab, setTab] = useState(0);
@@ -30,9 +29,6 @@ export default function TeamDetails() {
   const [loadingTasks, setLoadingTasks] = useState(true);
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
-
-  // TEMP: until roles implemented
-  const isAdmin = true;
 
   // ---- LOAD TEAM TASKS ----
   useEffect(() => {
@@ -52,7 +48,27 @@ export default function TeamDetails() {
   const deleteTeamTask = async (id) => {
     try {
       await teamTasksAPI.deleteTask(id);
-      setTeamTasks(teamTasks.filter(t => t._id !== id));
+      setTeamTasks(teamTasks.filter((t) => t._id !== id));
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleCreateTask = async (data) => {
+    try {
+      const res = await teamTasksAPI.createTask(teamId, data);
+      setTeamTasks([res.data, ...teamTasks]);
+      setShowTaskForm(false);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleUpdateTask = async (id, data) => {
+    try {
+      const res = await teamTasksAPI.updateTask(id, data);
+      setTeamTasks(teamTasks.map((t) => (t._id === id ? res.data : t)));
+      setEditingTask(null);
     } catch (err) {
       console.error(err);
     }
@@ -66,7 +82,7 @@ export default function TeamDetails() {
           p: 3,
           borderRadius: 3,
           mb: 3,
-          boxShadow: "0 4px 15px rgba(0,0,0,0.08)"
+          boxShadow: "0 4px 15px rgba(0,0,0,0.08)",
         }}
       >
         <Stack direction="row" spacing={2} alignItems="center">
@@ -88,7 +104,11 @@ export default function TeamDetails() {
 
         <Divider sx={{ my: 2 }} />
 
-        <Tabs value={tab} onChange={(e, newVal) => setTab(newVal)} sx={{ mb: 1 }}>
+        <Tabs
+          value={tab}
+          onChange={(e, v) => setTab(v)}
+          sx={{ mb: 1 }}
+        >
           <Tab label="Overview" />
           <Tab label="Members" />
           <Tab label="Tasks" />
@@ -100,7 +120,9 @@ export default function TeamDetails() {
 
       {tab === 0 && (
         <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Typography variant="h6" fontWeight={700}>Overview</Typography>
+          <Typography variant="h6" fontWeight={700}>
+            Overview
+          </Typography>
           <Typography color="text.secondary" sx={{ mt: 1 }}>
             Team stats, deadlines, activity etc.
           </Typography>
@@ -109,16 +131,20 @@ export default function TeamDetails() {
 
       {tab === 1 && (
         <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Typography variant="h6" fontWeight={700}>Members</Typography>
+          <Typography variant="h6" fontWeight={700}>
+            Members
+          </Typography>
           <Typography color="text.secondary" sx={{ mt: 1 }}>
-            List of members here.
+            Members list will appear here.
           </Typography>
         </Paper>
       )}
 
       {tab === 2 && (
         <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Typography variant="h6" fontWeight={700}>Team Tasks</Typography>
+          <Typography variant="h6" fontWeight={700}>
+            Team Tasks
+          </Typography>
 
           {isAdmin && (
             <Button
@@ -134,7 +160,12 @@ export default function TeamDetails() {
             <Typography>Loading tasks...</Typography>
           ) : (
             teamTasks.map((task) => (
-              <TeamTaskItem key={task._id} task={task} />
+              <TeamTaskItem
+                key={task._id}
+                task={task}
+                onEdit={setEditingTask}
+                onDelete={deleteTeamTask}
+              />
             ))
           )}
         </Paper>
@@ -142,13 +173,30 @@ export default function TeamDetails() {
 
       {tab === 3 && (
         <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Typography variant="h6" fontWeight={700}>Settings</Typography>
+          <Typography variant="h6" fontWeight={700}>
+            Settings
+          </Typography>
           <Typography color="text.secondary" sx={{ mt: 1 }}>
-            Manage team settings, roles, etc.
+            Rename team, change icon, manage roles, delete team.
           </Typography>
         </Paper>
+      )}
+
+      {/* FORMS */}
+      {showTaskForm && (
+        <TeamTaskForm
+          onSubmit={handleCreateTask}
+          onCancel={() => setShowTaskForm(false)}
+        />
+      )}
+
+      {editingTask && (
+        <TeamTaskForm
+          task={editingTask}
+          onSubmit={(data) => handleUpdateTask(editingTask._id, data)}
+          onCancel={() => setEditingTask(null)}
+        />
       )}
     </Box>
   );
 }
-
