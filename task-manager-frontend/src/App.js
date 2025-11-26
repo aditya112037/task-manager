@@ -6,8 +6,7 @@ import Login from './components/Auth/Login';
 import Register from './components/Auth/Register';
 import TaskList from './components/Task/TaskList';
 import OAuthSuccess from './pages/OAuthSuccess';
-import Teams from "./pages/Teams";
-import JoinTeam from "./pages/JoinTeam";
+
 
 
 import './App.css';
@@ -50,11 +49,6 @@ function App() {
             } />
             <Route path="/oauth-success" element={<OAuthSuccess />} />
        
-                <Route path="/teams" element={
-        <ProtectedRoute><Teams /></ProtectedRoute>
-      } />
-
-      <Route path="/join-team/:teamId" element={<JoinTeam />} />
 
 
             <Route path="/" element={

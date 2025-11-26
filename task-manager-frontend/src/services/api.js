@@ -31,11 +31,6 @@ export const authAPI = {
 
 };
 
-export const teamsAPI = {
-  createTeam: (data) => api.post("/teams", data),
-  getMyTeams: () => api.get("/teams/my"),
-  joinTeam: (teamId) => api.post(`/teams/${teamId}/join`),
-};
 
 
 // TASKS API
