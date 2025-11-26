@@ -13,7 +13,7 @@ import {
 import { useParams } from "react-router-dom";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import TeamTaskForm from "../components/Teams/TeamTaskForm";
-import { teamTasksAPI } from "../services/teamsAPI";
+import { teamsAPI, teamTasksAPI } from "../services/teamsAPI";
 import { useAuth } from "../context/AuthContext";
 
 export default function TeamDetails() {
