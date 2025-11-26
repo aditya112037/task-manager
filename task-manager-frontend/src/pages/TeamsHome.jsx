@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
+import { Box, Typography, Button, Grid, CircularProgress } from "@mui/material";
 import { teamsAPI } from "../services/teamsAPI";
-import { Box, Typography, Grid, Button, CircularProgress } from "@mui/material";
 import TeamCard from "../components/Teams/TeamCard";
 
 const TeamsHome = () => {
@@ -14,21 +14,31 @@ const TeamsHome = () => {
   const fetchTeams = async () => {
     try {
       const res = await teamsAPI.getMyTeams();
-      setTeams(res.data.teams);
-    } catch (err) {
-      console.error("Failed to load teams", err);
+      setTeams(res.data);
+    } catch (error) {
+      console.error("Error fetching teams:", error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
+
+  if (loading) {
+    return (
+      <Box sx={{ display: "flex", justifyContent: "center", mt: 5 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ p: 3 }}>
+      {/* HEADER */}
       <Box
         sx={{
           display: "flex",
           justifyContent: "space-between",
-          mb: 3,
           alignItems: "center",
+          mb: 3,
         }}
       >
         <Typography variant="h5" fontWeight={700}>
@@ -44,19 +54,24 @@ const TeamsHome = () => {
         </Button>
       </Box>
 
-      {loading ? (
-        <Box sx={{ textAlign: "center", mt: 10 }}>
-          <CircularProgress />
-        </Box>
-      ) : teams.length === 0 ? (
-        <Box sx={{ textAlign: "center", mt: 10 }}>
-          <Typography variant="h6" color="text.secondary">
-            You are not part of any team yet.
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Create a new team or join via invite link.
-          </Typography>
-        </Box>
+      {/* JOIN TEAM BUTTON */}
+      <Button
+        variant="outlined"
+        sx={{
+          borderRadius: 2,
+          textTransform: "none",
+          mb: 3,
+        }}
+        href="/join/code-placeholder"
+      >
+        Join Team With Invite Code
+      </Button>
+
+      {/* TEAMS GRID */}
+      {teams.length === 0 ? (
+        <Typography sx={{ mt: 4 }} color="text.secondary">
+          You are not part of any team yet.
+        </Typography>
       ) : (
         <Grid container spacing={2}>
           {teams.map((team) => (
