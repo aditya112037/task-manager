@@ -47,7 +47,12 @@ function App() {
             } />
             <Route path="/oauth-success" element={<OAuthSuccess />} />
        
-          
+                <Route path="/teams" element={
+        <ProtectedRoute><Teams /></ProtectedRoute>
+      } />
+
+      <Route path="/join-team/:teamId" element={<JoinTeam />} />
+
 
             <Route path="/" element={
               <ProtectedRoute>
