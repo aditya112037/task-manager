@@ -49,6 +49,8 @@ app.use("/api/auth", require("./routes/auth"));
 // 3️⃣ Then load tasks
 app.use("/api/tasks", require("./routes/tasks"));
 
+app.use("/api/teams", require("./routes/teams"));
+
 app.use("/api/ics", require("./routes/ics"));
 
 
