@@ -31,6 +31,16 @@ export const authAPI = {
 
 };
 
+export const teamsAPI = {
+  createTeam: (data) => axios.post("/api/teams", data),
+  getMyTeams: () => axios.get("/api/teams"),
+
+  getTeamDetails: (teamId) => axios.get(`/api/teams/${teamId}`),
+
+  // NEW:
+  getTeamInvite: (code) => axios.get(`/api/teams/join/${code}`),
+  acceptInvite: (code) => axios.post(`/api/teams/join/${code}`),
+};
 
 
 // TASKS API
