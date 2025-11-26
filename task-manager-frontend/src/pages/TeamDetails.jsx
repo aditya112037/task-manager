@@ -11,6 +11,27 @@ import {
   Button
 } from "@mui/material";
 import { useParams } from "react-router-dom";
+import { teamTasksAPI } from "../services/api"; // you need to add to API file
+
+
+const [teamTasks, setTeamTasks] = useState([]);
+const [loadingTasks, setLoadingTasks] = useState(true);
+const [showTaskForm, setShowTaskForm] = useState(false);
+const [editingTask, setEditingTask] = useState(null);
+
+useEffect(() => {
+  fetchTeamTasks();
+}, []);
+
+const fetchTeamTasks = async () => {
+  try {
+    const res = await teamTasksAPI.getTasks(teamId);
+    setTeamTasks(res.data);
+  } catch (err) {
+    console.error(err);
+  }
+  setLoadingTasks(false);
+};
 
 export default function TeamDetails() {
   const { teamId } = useParams();
@@ -100,6 +121,32 @@ export default function TeamDetails() {
           </Button>
         </Paper>
       )}
+
+      <h3>Team Tasks</h3>
+
+{isAdmin && (
+  <Button
+    variant="contained"
+    onClick={() => setShowTaskForm(true)}
+    sx={{ mb: 2 }}
+  >
+    Create Task
+  </Button>
+)}
+
+{loadingTasks ? (
+  <p>Loading...</p>
+) : (
+  teamTasks.map(task => (
+    <TeamTaskItem 
+      key={task._id}
+      task={task}
+      onEdit={setEditingTask}
+      onDelete={() => deleteTeamTask(task._id)}
+    />
+  ))
+)}
+
 
       {tab === 3 && (
         <Paper sx={{ p: 3, borderRadius: 3 }}>

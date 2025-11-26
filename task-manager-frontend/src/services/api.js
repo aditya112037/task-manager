@@ -51,4 +51,12 @@ export const tasksAPI = {
   deleteTask: (id) => api.delete(`/api/tasks/${id}`),
 };
 
+export const teamTasksAPI = {
+  getTasks: (teamId) => axios.get(`/api/team-tasks/${teamId}`),
+  createTask: (teamId, data) => axios.post(`/api/team-tasks/${teamId}`, data),
+  updateTask: (taskId, data) => axios.put(`/api/team-tasks/task/${taskId}`, data),
+  deleteTask: (taskId) => axios.delete(`/api/team-tasks/task/${taskId}`)
+};
+
+
 export default api;
