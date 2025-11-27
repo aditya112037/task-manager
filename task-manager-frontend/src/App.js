@@ -60,78 +60,71 @@ const App = () => {
         <Router>
           <Routes>
             <Route
-              path="/login"
-              element={
-                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
-                  <Login />
-                </Layout>
-              }
-            />
+  path="/login"
+  element={
+    <PublicRoute>
+      <Login />
+    </PublicRoute>
+  }
+/>
 
-            <Route
-              path="/register"
-              element={
-                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
-                  <Register />
-                </Layout>
-              }
-            />
+<Route
+  path="/register"
+  element={
+    <PublicRoute>
+      <Register />
+    </PublicRoute>
+  }
+/>
 
-            <Route path="/oauth-success" element={<OAuthSuccess />} />
+<Route path="/oauth-success" element={<OAuthSuccess />} />
 
-            <Route
-              path="/join/:inviteCode"
-              element={
-                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
-                  <JoinTeam />
-                </Layout>
-              }
-            />
+<Route path="/join/:inviteCode" element={<JoinTeam />} />
 
-            {/* Protected Routes */}
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
-                    <Dashboard />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
+{/* Protected routes WITH SIDEBAR */}
+<Route
+  path="/"
+  element={
+    <ProtectedRoute>
+      <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+        <Dashboard />
+      </Layout>
+    </ProtectedRoute>
+  }
+/>
 
-            <Route
-              path="/teams"
-              element={
-                <ProtectedRoute>
-                  <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
-                    <TeamsHome />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
+<Route
+  path="/teams"
+  element={
+    <ProtectedRoute>
+      <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+        <TeamsHome />
+      </Layout>
+    </ProtectedRoute>
+  }
+/>
 
-            <Route
-              path="/teams/create"
-              element={
-                <ProtectedRoute>
-                  <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
-                    <CreateTeam />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
+<Route
+  path="/teams/create"
+  element={
+    <ProtectedRoute>
+      <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+        <CreateTeam />
+      </Layout>
+    </ProtectedRoute>
+  }
+/>
 
-            <Route
-              path="/teams/:teamId"
-              element={
-                <ProtectedRoute>
-                  <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
-                    <TeamDetails />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
+<Route
+  path="/teams/:teamId"
+  element={
+    <ProtectedRoute>
+      <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+        <TeamDetails />
+      </Layout>
+    </ProtectedRoute>
+  }
+/>
           </Routes>
         </Router>
       </ThemeProvider>
