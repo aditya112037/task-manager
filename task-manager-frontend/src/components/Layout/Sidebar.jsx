@@ -5,55 +5,22 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
-  IconButton,
   Toolbar,
+  IconButton,
   Tooltip,
 } from "@mui/material";
-import DashboardIcon from "@mui/icons-material/Dashboard";
-import GroupIcon from "@mui/icons-material/Group";
+
 import MenuIcon from "@mui/icons-material/Menu";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import { styled, useTheme } from "@mui/material/styles";
+import DashboardIcon from "@mui/icons-material/Dashboard";
+import GroupIcon from "@mui/icons-material/Group";
+
 import { Link, useLocation } from "react-router-dom";
-
-const drawerWidth = 220;
-
-// Drawer mixins
-const openedMixin = (theme) => ({
-  width: drawerWidth,
-  transition: theme.transitions.create("width", {
-    easing: theme.transitions.easing.sharp,
-    duration: theme.transitions.duration.enteringScreen,
-  }),
-  overflowX: "hidden",
-});
-
-const closedMixin = (theme) => ({
-  width: 70,
-  transition: theme.transitions.create("width", {
-    easing: theme.transitions.easing.sharp,
-    duration: theme.transitions.duration.leavingScreen,
-  }),
-  overflowX: "hidden",
-});
-
-// Styled Drawer
-const StyledDrawer = styled(Drawer)(({ theme, open }) => ({
-  width: drawerWidth,
-  boxSizing: "border-box",
-  ...(open && {
-    ...openedMixin(theme),
-    "& .MuiDrawer-paper": openedMixin(theme),
-  }),
-  ...(!open && {
-    ...closedMixin(theme),
-    "& .MuiDrawer-paper": closedMixin(theme),
-  }),
-}));
+import { useTheme } from "@mui/material/styles";
 
 const Sidebar = ({ open, toggleSidebar }) => {
-  const theme = useTheme();
   const location = useLocation();
+  const theme = useTheme();
 
   const menuItems = [
     { label: "Dashboard", icon: <DashboardIcon />, path: "/" },
@@ -61,12 +28,28 @@ const Sidebar = ({ open, toggleSidebar }) => {
   ];
 
   return (
-    <StyledDrawer variant="permanent" open={open}>
+    <Drawer
+      variant="permanent"
+      open={open}
+      sx={{
+        width: open ? 220 : 70,
+        flexShrink: 0,
+        transition: "width 0.3s",
+        "& .MuiDrawer-paper": {
+          width: open ? 220 : 70,
+          background: theme.palette.sidebar.main,
+          color: "white",
+          border: "none",
+          transition: "width 0.3s",
+        },
+      }}
+    >
+      {/* TOGGLE BUTTON */}
       <Toolbar
         sx={{
-          background: theme.palette.sidebar.main,
           display: "flex",
           justifyContent: open ? "flex-end" : "center",
+          py: 1,
         }}
       >
         <IconButton onClick={toggleSidebar} sx={{ color: "white" }}>
@@ -74,44 +57,36 @@ const Sidebar = ({ open, toggleSidebar }) => {
         </IconButton>
       </Toolbar>
 
-      <List sx={{ background: theme.palette.sidebar.main, height: "100%" }}>
-        {menuItems.map((item) => {
-          if (location.pathname === item.path) return null;
-
-          return (
-            <Tooltip
-              key={item.path}
-              title={!open ? item.label : ""}
-              placement="right"
+      {/* MENU LINKS */}
+      <List>
+        {menuItems.map((item) => (
+          <Tooltip
+            title={open ? "" : item.label}
+            placement="right"
+            key={item.path}
+          >
+            <ListItemButton
+              component={Link}
+              to={item.path}
+              selected={location.pathname === item.path}
+              sx={{
+                color: "white",
+                "&.Mui-selected": {
+                  background: "rgba(255,255,255,0.25)",
+                },
+              }}
             >
-              <ListItemButton
-                component={Link}
-                to={item.path}
-                selected={location.pathname === item.path}
-                sx={{
-                  px: open ? 2 : 1.5,
-                  mx: open ? 1 : 0,
-                  my: 1,
-                  color: "white",
-                  borderRadius: open ? "8px" : "50%",
-                  "&.Mui-selected": {
-                    background: "rgba(255,255,255,0.25)",
-                  },
-                  "&:hover": {
-                    background: "rgba(255,255,255,0.15)",
-                  },
-                }}
-              >
-                <ListItemIcon sx={{ color: "white", minWidth: 40 }}>
-                  {item.icon}
-                </ListItemIcon>
-                {open && <ListItemText primary={item.label} />}
-              </ListItemButton>
-            </Tooltip>
-          );
-        })}
+              <ListItemIcon sx={{ color: "white" }}>
+                {item.icon}
+              </ListItemIcon>
+
+              {open && <ListItemText primary={item.label} />}
+            </ListItemButton>
+          </Tooltip>
+        ))}
       </List>
-    </StyledDrawer>
+
+    </Drawer>
   );
 };
 
