@@ -6,6 +6,7 @@ import Login from './components/Auth/Login';
 import Register from './components/Auth/Register';
 import TaskList from './components/Task/TaskList';
 import OAuthSuccess from './components/Auth/OAuthSuccess';
+import Dashboard from './pages/Dashboard';
 import TeamsHome from "./pages/TeamsHome";
 import TeamDetails from "./pages/TeamDetails";
 import CreateTeam from "./pages/CreateTeam";
@@ -90,7 +91,7 @@ function App() {
             <Route path="/" element={
               <ProtectedRoute>
                 <Layout>
-                  <TaskList />
+                  <Dashboard />
                 </Layout>
               </ProtectedRoute>
             } />
