@@ -6,39 +6,51 @@ import Header from "./Header";
 const Layout = ({ children, toggleDarkMode, darkMode }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  const sidebarWidthOpen = 220;
-  const sidebarWidthClosed = 70;
+  const sidebarWidthOpen = 240;
+  const sidebarWidthClosed = 64;
+
+  const toggleSidebar = () => {
+    setSidebarOpen(!sidebarOpen);
+  };
 
   return (
     <Box sx={{ display: "flex", height: "100vh" }}>
+      {/* Sidebar */}
+      <Sidebar open={sidebarOpen} toggleSidebar={toggleSidebar} />
 
-      <Sidebar open={sidebarOpen} toggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
-
+      {/* Main Content */}
       <Box
+        component="main"
         sx={{
           flexGrow: 1,
           backgroundColor: (theme) => theme.palette.background.default,
-          ml: sidebarOpen ? `${sidebarWidthOpen}px` : `${sidebarWidthClosed}px`,
-          transition: "margin-left 0.3s ease, background-color 0.3s ease",
+          marginLeft: `${sidebarWidthClosed}px`,
+          width: `calc(100% - ${sidebarWidthClosed}px)`,
+          transition: theme => theme.transitions.create(['width', 'margin'], {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.enteringScreen,
+          }),
+          ...(sidebarOpen && {
+            marginLeft: `${sidebarWidthOpen}px`,
+            width: `calc(100% - ${sidebarWidthOpen}px)`,
+          }),
           overflowY: "auto",
           minHeight: '100vh',
         }}
       >
+        {/* Header */}
         <Header
           toggleDarkMode={toggleDarkMode}
           darkMode={darkMode}
           sidebarOpen={sidebarOpen}
-          sidebarWidthOpen={sidebarWidthOpen}
-          sidebarWidthClosed={sidebarWidthClosed}
-          toggleSidebar={() => setSidebarOpen(!sidebarOpen)}
+          toggleSidebar={toggleSidebar}
         />
 
-        <Box sx={{ mt: 10, p: 3 }}>
+        {/* Page Content */}
+        <Box sx={{ mt: 8, p: 3 }}>
           {children}
         </Box>
-
       </Box>
-
     </Box>
   );
 };
