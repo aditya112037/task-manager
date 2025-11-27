@@ -1,7 +1,6 @@
-import React, { useState } from "react";
+import React from "react";
 import {
   Drawer,
-  Box,
   List,
   ListItemButton,
   ListItemIcon,
@@ -19,7 +18,7 @@ import { Link, useLocation } from "react-router-dom";
 
 const drawerWidth = 220;
 
-// ⭐ MINI DRAWER STYLE FIXES
+// Drawer when OPEN
 const openedMixin = (theme) => ({
   width: drawerWidth,
   transition: theme.transitions.create("width", {
@@ -29,6 +28,7 @@ const openedMixin = (theme) => ({
   overflowX: "hidden",
 });
 
+// Drawer when CLOSED
 const closedMixin = (theme) => ({
   width: 70,
   transition: theme.transitions.create("width", {
@@ -38,29 +38,24 @@ const closedMixin = (theme) => ({
   overflowX: "hidden",
 });
 
-// ⭐ Styled Drawer
-const StyledDrawer = styled(Drawer)(
-  ({ theme, open }) => ({
-    width: drawerWidth,
-    flexShrink: 0,
-    whiteSpace: "nowrap",
-    boxSizing: "border-box",
-    ...(open && {
-      ...openedMixin(theme),
-      "& .MuiDrawer-paper": openedMixin(theme),
-    }),
-    ...(!open && {
-      ...closedMixin(theme),
-      "& .MuiDrawer-paper": closedMixin(theme),
-    }),
-  })
-);
+// Styled mini drawer
+const StyledDrawer = styled(Drawer)(({ theme, open }) => ({
+  width: drawerWidth,
+  flexShrink: 0,
+  whiteSpace: "nowrap",
+  boxSizing: "border-box",
+  ...(open && {
+    ...openedMixin(theme),
+    "& .MuiDrawer-paper": openedMixin(theme),
+  }),
+  ...(!open && {
+    ...closedMixin(theme),
+    "& .MuiDrawer-paper": closedMixin(theme),
+  }),
+}));
 
-const Sidebar = () => {
-  const [open, setOpen] = useState(true);
+const Sidebar = ({ open, toggleSidebar }) => {
   const location = useLocation();
-
-  const toggleSidebar = () => setOpen(!open);
 
   const menuItems = [
     { label: "Dashboard", icon: <DashboardIcon />, path: "/" },
@@ -69,14 +64,11 @@ const Sidebar = () => {
 
   return (
     <StyledDrawer variant="permanent" open={open}>
-      {/* Toggle Button */}
+      {/* Toggle */}
       <Toolbar
         sx={{
           display: "flex",
           justifyContent: open ? "flex-end" : "center",
-          alignItems: "center",
-          padding: "8px",
-          minHeight: "64px !important",
           background: "#1976d2",
         }}
       >
@@ -87,19 +79,23 @@ const Sidebar = () => {
 
       <List sx={{ background: "#1976d2", height: "100%", color: "white" }}>
         {menuItems.map((item) => {
-          if (location.pathname === item.path) return null; // hide current page
+          if (location.pathname === item.path) return null;
 
           return (
-            <Tooltip title={!open ? item.label : ""} placement="right" key={item.path}>
+            <Tooltip
+              key={item.path}
+              title={!open ? item.label : ""}
+              placement="right"
+            >
               <ListItemButton
                 component={Link}
                 to={item.path}
                 selected={location.pathname === item.path}
                 sx={{
                   px: open ? 2 : 1.5,
-                  borderRadius: open ? "8px" : "50%",
                   mx: open ? 1 : 0,
                   my: 1,
+                  borderRadius: open ? "8px" : "50%",
                   "&.Mui-selected": {
                     background: "rgba(255,255,255,0.25)",
                   },

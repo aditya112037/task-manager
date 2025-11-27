@@ -11,11 +11,19 @@ import DarkModeIcon from "@mui/icons-material/DarkMode";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import { useAuth } from "../../context/AuthContext";
 
-const Header = ({ toggleDarkMode, darkMode }) => {
+const Header = ({ toggleDarkMode, darkMode, sidebarOpen }) => {
   const { user, logout } = useAuth();
 
   return (
-    <AppBar position="fixed" sx={{ zIndex: 1201 }}>
+    <AppBar
+      position="fixed"
+      sx={{
+        zIndex: 1201,
+        width: `calc(100% - ${sidebarOpen ? 220 : 70}px)`,
+        ml: `${sidebarOpen ? 220 : 70}px`,
+        transition: "all 0.3s ease",
+      }}
+    >
       <Toolbar
         sx={{
           display: "flex",
@@ -26,8 +34,8 @@ const Header = ({ toggleDarkMode, darkMode }) => {
           Task Manager
         </Typography>
 
-        {/* Right Side Controls */}
         <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+          {/* Dark mode toggle */}
           <IconButton onClick={toggleDarkMode} sx={{ color: "white" }}>
             {darkMode ? <LightModeIcon /> : <DarkModeIcon />}
           </IconButton>
