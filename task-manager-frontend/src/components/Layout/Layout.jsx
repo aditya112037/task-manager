@@ -5,24 +5,46 @@ import Sidebar from "./Sidebar";
 
 const Layout = ({ children }) => {
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh" }}>
+    <Box sx={{ display: "flex", height: "100vh", overflow: "hidden" }}>
       
-      {/* Sidebar */}
+      {/* LEFT SIDEBAR */}
       <Box
         sx={{
           width: 220,
-          backgroundColor: "#f5f5f5",
-          borderRight: "1px solid #ddd",
+          backgroundColor: "#f8f9fa",
+          borderRight: "1px solid #e0e0e0",
+          p: 2,
+          pt: 4,
+          position: "fixed",
+          left: 0,
+          top: 0,
+          bottom: 0,
+          overflowY: "auto",
         }}
       >
         <Sidebar />
       </Box>
 
-      {/* Main Content Area */}
-      <Box sx={{ flex: 1, display: "flex", flexDirection: "column" }}>
+      {/* MAIN CONTENT */}
+      <Box
+        sx={{
+          flex: 1,
+          ml: "220px", // leave space for sidebar
+          display: "flex",
+          flexDirection: "column",
+          height: "100vh",
+        }}
+      >
         <Header />
-        
-        <Box sx={{ mt: 8, p: 3 }}>
+
+        <Box
+          sx={{
+            flex: 1,
+            overflowY: "auto",
+            p: 3,
+            mt: 8, // space for header
+          }}
+        >
           {children}
         </Box>
       </Box>
