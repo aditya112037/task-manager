@@ -41,7 +41,6 @@ const Dashboard = () => {
     <Box
       sx={{
         p: 2,
-        pb: 5,
         backgroundColor: theme.palette.background.default,
         minHeight: "calc(100vh - 64px)",
       }}
