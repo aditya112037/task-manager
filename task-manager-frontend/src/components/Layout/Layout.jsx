@@ -6,32 +6,36 @@ import Header from "./Header";
 const Layout = ({ children, toggleDarkMode, darkMode }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  const toggleSidebar = () => setSidebarOpen((prev) => !prev);
+  const sidebarWidthOpen = 220;
+  const sidebarWidthClosed = 70;
 
   return (
     <Box sx={{ display: "flex", height: "100vh" }}>
-      
-      {/* SIDEBAR */}
-      <Sidebar open={sidebarOpen} toggleSidebar={toggleSidebar} />
 
-      {/* MAIN CONTENT */}
+      <Sidebar open={sidebarOpen} toggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
+
       <Box
         sx={{
           flexGrow: 1,
-          minHeight: "100vh",
           backgroundColor: (theme) => theme.palette.background.default,
-          ml: sidebarOpen ? "220px" : "70px",
-          transition: "all 0.3s ease",
+          ml: sidebarOpen ? `${sidebarWidthOpen}px` : `${sidebarWidthClosed}px`,
+          transition: "margin-left 0.3s ease",
           overflowY: "auto",
         }}
       >
         <Header
           toggleDarkMode={toggleDarkMode}
           darkMode={darkMode}
-          toggleSidebar={toggleSidebar}
+          sidebarOpen={sidebarOpen}
+          sidebarWidthOpen={sidebarWidthOpen}
+          sidebarWidthClosed={sidebarWidthClosed}
+          toggleSidebar={() => setSidebarOpen(!sidebarOpen)}
         />
 
-        <Box sx={{ mt: 10, p: 3 }}>{children}</Box>
+        <Box sx={{ mt: 10, p: 3 }}>
+          {children}
+        </Box>
+
       </Box>
 
     </Box>

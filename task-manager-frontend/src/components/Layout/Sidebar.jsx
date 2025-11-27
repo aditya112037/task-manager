@@ -7,7 +7,7 @@ import {
   ListItemText,
   Toolbar,
   IconButton,
-  Tooltip,
+  Tooltip
 } from "@mui/material";
 
 import MenuIcon from "@mui/icons-material/Menu";
@@ -22,29 +22,25 @@ const Sidebar = ({ open, toggleSidebar }) => {
   const location = useLocation();
   const theme = useTheme();
 
-  const menuItems = [
-    { label: "Dashboard", icon: <DashboardIcon />, path: "/" },
-    { label: "Teams", icon: <GroupIcon />, path: "/teams" },
-  ];
+  const widthOpen = 220;
+  const widthClosed = 70;
 
   return (
     <Drawer
       variant="permanent"
-      open={open}
       sx={{
-        width: open ? 220 : 70,
+        width: open ? widthOpen : widthClosed,
         flexShrink: 0,
-        transition: "width 0.3s",
         "& .MuiDrawer-paper": {
-          width: open ? 220 : 70,
+          width: open ? widthOpen : widthClosed,
           background: theme.palette.sidebar.main,
           color: "white",
           border: "none",
-          transition: "width 0.3s",
+          overflowX: "hidden",
+          transition: "width 0.3s ease",
         },
       }}
     >
-      {/* TOGGLE BUTTON */}
       <Toolbar
         sx={{
           display: "flex",
@@ -52,38 +48,35 @@ const Sidebar = ({ open, toggleSidebar }) => {
           py: 1,
         }}
       >
-        <IconButton onClick={toggleSidebar} sx={{ color: "white" }}>
+        <IconButton sx={{ color: "white" }} onClick={toggleSidebar}>
           {open ? <ChevronLeftIcon /> : <MenuIcon />}
         </IconButton>
       </Toolbar>
 
-      {/* MENU LINKS */}
       <List>
-        {menuItems.map((item) => (
-          <Tooltip
-            title={open ? "" : item.label}
-            placement="right"
-            key={item.path}
-          >
-            <ListItemButton
-              component={Link}
-              to={item.path}
-              selected={location.pathname === item.path}
-              sx={{
-                color: "white",
-                "&.Mui-selected": {
-                  background: "rgba(255,255,255,0.25)",
-                },
-              }}
-            >
-              <ListItemIcon sx={{ color: "white" }}>
-                {item.icon}
-              </ListItemIcon>
+        <ListItemButton
+          component={Link}
+          to="/"
+          selected={location.pathname === "/"}
+          sx={{ color: "white" }}
+        >
+          <ListItemIcon sx={{ color: "white" }}>
+            <DashboardIcon />
+          </ListItemIcon>
+          {open && <ListItemText primary="Dashboard" />}
+        </ListItemButton>
 
-              {open && <ListItemText primary={item.label} />}
-            </ListItemButton>
-          </Tooltip>
-        ))}
+        <ListItemButton
+          component={Link}
+          to="/teams"
+          selected={location.pathname.startsWith("/teams")}
+          sx={{ color: "white" }}
+        >
+          <ListItemIcon sx={{ color: "white" }}>
+            <GroupIcon />
+          </ListItemIcon>
+          {open && <ListItemText primary="Teams" />}
+        </ListItemButton>
       </List>
 
     </Drawer>
