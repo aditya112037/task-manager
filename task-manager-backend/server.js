@@ -40,21 +40,23 @@ app.use(passport.initialize());
 // ROUTES
 // ----------------------
 
-// 1️⃣ Load Google OAuth routes FIRST
+// 1️⃣ Google OAuth
 app.use("/api/auth", require("./routes/googleAuth"));
 
-// 2️⃣ Then load Email/Password Auth
+// 2️⃣ Email/Password Auth
 app.use("/api/auth", require("./routes/auth"));
 
-// 3️⃣ Then load tasks
+// 3️⃣ Personal Tasks
 app.use("/api/tasks", require("./routes/tasks"));
 
+// 4️⃣ Teams
 app.use("/api/teams", require("./routes/teams"));
 
+// 5️⃣ Team Tasks  ✅ REQUIRED
+app.use("/api/team-tasks", require("./routes/TeamTasks"));
+
+// 6️⃣ Calendar ICS
 app.use("/api/ics", require("./routes/ics"));
-
-
-
 
 
 // ----------------------

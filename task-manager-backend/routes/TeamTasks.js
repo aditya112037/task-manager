@@ -1,67 +1,114 @@
 const express = require("express");
 const router = express.Router();
-const Team = require("../models/team")
-const TeamTask = require("../models/teamTask")
+const Team = require("../models/team");
+const TeamTask = require("../models/teamTask");
 const { protect } = require("../middleware/auth");
 
-// GET TEAM TASKS
+/**
+ * Helper: check if user is admin of the team
+ */
+async function isTeamAdmin(teamId, userId) {
+  const team = await Team.findById(teamId);
+  if (!team) return null;
+
+  return {
+    team,
+    isAdmin: String(team.admin) === String(userId)
+  };
+}
+
+/* ---------------------------------------------
+   GET ALL TASKS FOR A TEAM (Admin + Members)
+--------------------------------------------- */
 router.get("/:teamId", protect, async (req, res) => {
-  const tasks = await TeamTask.find({ team: req.params.teamId }).sort({ createdAt: -1 });
-  res.json(tasks);
+  try {
+    const tasks = await TeamTask.find({ team: req.params.teamId })
+      .sort({ createdAt: -1 });
+
+    res.json(tasks);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
 });
 
-// CREATE TEAM TASK (Admin only)
+
+/* ---------------------------------------------
+   CREATE TEAM TASK (Admin only)
+--------------------------------------------- */
 router.post("/:teamId", protect, async (req, res) => {
-  const team = await Team.findById(req.params.teamId);
+  try {
+    const teamData = await isTeamAdmin(req.params.teamId, req.user._id);
+    if (!teamData) return res.status(404).json({ message: "Team not found" });
+    if (!teamData.isAdmin) return res.status(403).json({ message: "Only admin can create tasks." });
 
-  if (!team) return res.status(404).json({ message: "Team not found" });
+    const task = await TeamTask.create({
+      team: req.params.teamId,
+      title: req.body.title,
+      description: req.body.description,
+      priority: req.body.priority,
+      status: req.body.status,
+      dueDate: req.body.dueDate,
+      createdBy: req.user._id,
+    });
 
-  if (String(team.createdBy) !== String(req.user._id))
-    return res.status(403).json({ message: "Only the team admin can create tasks." });
+    res.status(201).json(task);
 
-  const task = await TeamTask.create({
-    team: req.params.teamId,
-    title: req.body.title,
-    description: req.body.description,
-    priority: req.body.priority,
-    dueDate: req.body.dueDate,
-    createdBy: req.user._id,
-  });
-
-  res.json(task);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
 });
 
-// UPDATE TEAM TASK (Admin only)
+
+/* ---------------------------------------------
+   UPDATE TEAM TASK (Admin only)
+--------------------------------------------- */
 router.put("/task/:taskId", protect, async (req, res) => {
-  const task = await TeamTask.findById(req.params.taskId);
-  if (!task) return res.status(404).json({ message: "Task not found" });
+  try {
+    const task = await TeamTask.findById(req.params.taskId);
+    if (!task) return res.status(404).json({ message: "Task not found" });
 
-  const team = await Team.findById(task.team);
+    const teamData = await isTeamAdmin(task.team, req.user._id);
+    if (!teamData) return res.status(404).json({ message: "Team not found" });
+    if (!teamData.isAdmin) return res.status(403).json({ message: "Only admin can update tasks." });
 
-  if (String(team.createdBy) !== String(req.user._id))
-    return res.status(403).json({ message: "Only admin can update tasks." });
+    const updated = await TeamTask.findByIdAndUpdate(
+      task._id,
+      req.body,
+      { new: true }
+    );
 
-  const updated = await TeamTask.findByIdAndUpdate(
-    task._id,
-    req.body,
-    { new: true }
-  );
+    res.json(updated);
 
-  res.json(updated);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
 });
 
-// DELETE TEAM TASK (Admin only)
+
+/* ---------------------------------------------
+   DELETE TEAM TASK (Admin only)
+--------------------------------------------- */
 router.delete("/task/:taskId", protect, async (req, res) => {
-  const task = await TeamTask.findById(req.params.taskId);
-  if (!task) return res.status(404).json({ message: "Task not found" });
+  try {
+    const task = await TeamTask.findById(req.params.taskId);
+    if (!task) return res.status(404).json({ message: "Task not found" });
 
-  const team = await Team.findById(task.team);
+    const teamData = await isTeamAdmin(task.team, req.user._id);
+    if (!teamData) return res.status(404).json({ message: "Team not found" });
+    if (!teamData.isAdmin) return res.status(403).json({ message: "Only admin can delete tasks." });
 
-  if (String(team.createdBy) !== String(req.user._id))
-    return res.status(403).json({ message: "Only admin can delete tasks." });
+    await task.deleteOne();
 
-  await task.deleteOne();
-  res.json({ message: "Task deleted" });
+    res.json({ message: "Task deleted" });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
 });
 
 module.exports = router;

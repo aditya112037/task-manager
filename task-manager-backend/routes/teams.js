@@ -3,9 +3,9 @@ const router = express.Router();
 const Team = require("../models/team");
 const { protect } = require("../middleware/auth");
 
-// -------------------------------
-// CREATE TEAM (ADMIN)
-// -------------------------------
+// ---------------------------------------------
+// CREATE TEAM (Admin)
+// ---------------------------------------------
 router.post("/", protect, async (req, res) => {
   const { name, description, color, icon } = req.body;
 
@@ -16,7 +16,12 @@ router.post("/", protect, async (req, res) => {
       color,
       icon,
       admin: req.user._id,
-      members: [req.user._id],
+      members: [
+        {
+          user: req.user._id,
+          role: "admin",
+        },
+      ],
     });
 
     res.status(201).json(team);
@@ -26,13 +31,13 @@ router.post("/", protect, async (req, res) => {
   }
 });
 
-// -------------------------------
-// GET MY TEAMS (Admin + Member)
-// -------------------------------
+// ---------------------------------------------
+// GET ALL TEAMS THE USER BELONGS TO
+// ---------------------------------------------
 router.get("/my", protect, async (req, res) => {
   try {
     const teams = await Team.find({
-      members: req.user._id,
+      "members.user": req.user._id,
     });
 
     res.json(teams);
@@ -42,26 +47,52 @@ router.get("/my", protect, async (req, res) => {
   }
 });
 
-// -------------------------------
+// ---------------------------------------------
+// GET TEAM DETAILS (Used in TeamDetails page)
+// ---------------------------------------------
+router.get("/:teamId", protect, async (req, res) => {
+  try {
+    const team = await Team.findById(req.params.teamId)
+      .populate("members.user", "name email")
+      .populate("admin", "name email");
+
+    if (!team) return res.status(404).json({ message: "Team not found" });
+
+    res.json(team);
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// ---------------------------------------------
 // GENERATE INVITE LINK
-// -------------------------------
+// ---------------------------------------------
 router.get("/:teamId/invite", protect, async (req, res) => {
   const { teamId } = req.params;
 
-  const inviteLink = `${process.env.FRONTEND_URL}/join-team/${teamId}`;
+  const inviteLink = `${process.env.FRONTEND_URL}/join/${teamId}`;
   res.json({ inviteLink });
 });
 
-// -------------------------------
+// ---------------------------------------------
 // JOIN TEAM
-// -------------------------------
+// ---------------------------------------------
 router.post("/:teamId/join", protect, async (req, res) => {
   try {
     const team = await Team.findById(req.params.teamId);
     if (!team) return res.status(404).json({ message: "Team not found" });
 
-    if (!team.members.includes(req.user._id)) {
-      team.members.push(req.user._id);
+    const alreadyMember = team.members.some(
+      (m) => m.user.toString() === req.user._id.toString()
+    );
+
+    if (!alreadyMember) {
+      team.members.push({
+        user: req.user._id,
+        role: "member",
+      });
+
       await team.save();
     }
 
@@ -72,19 +103,21 @@ router.post("/:teamId/join", protect, async (req, res) => {
   }
 });
 
-// -------------------------------
+// ---------------------------------------------
 // REMOVE MEMBER (Admin only)
-// -------------------------------
+// ---------------------------------------------
 router.delete("/:teamId/members/:userId", protect, async (req, res) => {
   try {
     const team = await Team.findById(req.params.teamId);
 
     if (!team) return res.status(404).json({ message: "Team not found" });
-    if (team.admin.toString() !== req.user._id.toString())
+
+    if (team.admin.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: "Not authorized" });
+    }
 
     team.members = team.members.filter(
-      (m) => m.toString() !== req.params.userId
+      (m) => m.user.toString() !== req.params.userId
     );
 
     await team.save();
@@ -96,16 +129,18 @@ router.delete("/:teamId/members/:userId", protect, async (req, res) => {
   }
 });
 
-// -------------------------------
+// ---------------------------------------------
 // DELETE TEAM (Admin only)
-// -------------------------------
+// ---------------------------------------------
 router.delete("/:teamId", protect, async (req, res) => {
   try {
     const team = await Team.findById(req.params.teamId);
 
     if (!team) return res.status(404).json({ message: "Team not found" });
-    if (team.admin.toString() !== req.user._id.toString())
+
+    if (team.admin.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: "Not authorized" });
+    }
 
     await team.deleteOne();
 
