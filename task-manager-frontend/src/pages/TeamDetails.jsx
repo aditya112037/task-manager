@@ -8,29 +8,26 @@ import {
   Paper,
   Divider,
   Stack,
-  Button,
+  Button
 } from "@mui/material";
 import { useParams } from "react-router-dom";
+import { teamTasksAPI, teamsAPI } from "../services/teamsAPI";
+
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import TeamTaskForm from "../components/Teams/TeamTaskForm";
-import { teamsAPI, teamTasksAPI } from "../services/teamsAPI";
-import { useAuth } from "../context/AuthContext";
 
 export default function TeamDetails() {
   const { teamId } = useParams();
-  const { user } = useAuth();
 
-  // TEMP — later replace with proper role check
-  const isAdmin = true;
-
-  // ---- STATE ----
-  const [tab, setTab] = useState(0);
+  const [tab, setTab] = useState(2); // start on "Tasks"
   const [teamTasks, setTeamTasks] = useState([]);
   const [loadingTasks, setLoadingTasks] = useState(true);
+
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
 
-  // ---- LOAD TEAM TASKS ----
+  const isAdmin = true; // TEMP until roles implemented
+
   useEffect(() => {
     fetchTeamTasks();
   }, []);
@@ -45,30 +42,10 @@ export default function TeamDetails() {
     setLoadingTasks(false);
   };
 
-  const deleteTeamTask = async (id) => {
+  const deleteTeamTask = async (taskId) => {
     try {
-      await teamTasksAPI.deleteTask(id);
-      setTeamTasks(teamTasks.filter((t) => t._id !== id));
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleCreateTask = async (data) => {
-    try {
-      const res = await teamTasksAPI.createTask(teamId, data);
-      setTeamTasks([res.data, ...teamTasks]);
-      setShowTaskForm(false);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleUpdateTask = async (id, data) => {
-    try {
-      const res = await teamTasksAPI.updateTask(id, data);
-      setTeamTasks(teamTasks.map((t) => (t._id === id ? res.data : t)));
-      setEditingTask(null);
+      await teamTasksAPI.deleteTask(taskId);
+      setTeamTasks(teamTasks.filter(t => t._id !== taskId));
     } catch (err) {
       console.error(err);
     }
@@ -77,69 +54,99 @@ export default function TeamDetails() {
   return (
     <Box sx={{ p: 2 }}>
       {/* TEAM HEADER */}
-      <Paper
-        sx={{
-          p: 3,
-          borderRadius: 3,
-          mb: 3,
-          boxShadow: "0 4px 15px rgba(0,0,0,0.08)",
-        }}
-      >
+      <Paper sx={{ p: 3, borderRadius: 3, mb: 3, boxShadow: "0 4px 15px rgba(0,0,0,0.08)" }}>
         <Stack direction="row" spacing={2} alignItems="center">
-          <Avatar
-            sx={{ width: 70, height: 70, bgcolor: "primary.main", fontSize: 28 }}
-          >
+          <Avatar sx={{ width: 70, height: 70, bgcolor: "primary.main", fontSize: 28 }}>
             T
           </Avatar>
 
           <Box>
             <Typography variant="h5" fontWeight={700}>
-              Team Name (placeholder)
+              Team Name
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Team description (placeholder)
+              Team description here...
             </Typography>
           </Box>
         </Stack>
 
         <Divider sx={{ my: 2 }} />
 
-        <Tabs
-          value={tab}
-          onChange={(e, v) => setTab(v)}
-          sx={{ mb: 1 }}
-        >
+        <Tabs value={tab} onChange={(e, newVal) => setTab(newVal)}>
           <Tab label="Overview" />
           <Tab label="Members" />
           <Tab label="Tasks" />
           <Tab label="Settings" />
         </Tabs>
       </Paper>
-
-      {/* ---- TAB CONTENT ---- */}
-
-      {tab === 0 && (
-        <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Typography variant="h6" fontWeight={700}>
-            Overview
-          </Typography>
-          <Typography color="text.secondary" sx={{ mt: 1 }}>
-            Team stats, deadlines, activity etc.
-          </Typography>
-        </Paper>
-      )}
-
       {tab === 1 && (
-        <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Typography variant="h6" fontWeight={700}>
-            Members
-          </Typography>
-          <Typography color="text.secondary" sx={{ mt: 1 }}>
-            Members list will appear here.
-          </Typography>
-        </Paper>
-      )}
+  <Paper sx={{ p: 3, borderRadius: 3 }}>
+    <Typography variant="h6" fontWeight={700}>Members</Typography>
 
+    {team.members?.map((m) => (
+      <Box
+        key={m.user._id}
+        sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          p: 2,
+          my: 1,
+          borderRadius: 2,
+          bgcolor: "#f7f7f7"
+        }}
+      >
+        <Box>
+          <Typography fontWeight={600}>{m.user.name}</Typography>
+          <Typography variant="body2" color="text.secondary">
+            {m.user.email}
+          </Typography>
+        </Box>
+
+        <Chip
+          label={m.role}
+          color={m.role === "admin" ? "primary" : "default"}
+        />
+      </Box>
+    ))}
+
+    <Divider sx={{ my: 2 }} />
+
+    <Typography fontWeight={600} sx={{ mb: 1 }}>
+      Invite Link
+    </Typography>
+
+    <Box
+      sx={{
+        p: 2,
+        bgcolor: "#eee",
+        borderRadius: 2,
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center"
+      }}
+    >
+      <Typography variant="body2">
+        {`${window.location.origin}/join/${team.inviteCode}`}
+      </Typography>
+
+      <Button
+        variant="contained"
+        sx={{ borderRadius: 2 }}
+        onClick={() => {
+          navigator.clipboard.writeText(
+            `${window.location.origin}/join/${team.inviteCode}`
+          );
+          alert("Invite link copied!");
+        }}
+      >
+        Copy
+      </Button>
+    </Box>
+  </Paper>
+)}
+
+      {/* ---- TASKS TAB ---- */}
       {tab === 2 && (
         <Paper sx={{ p: 3, borderRadius: 3 }}>
           <Typography variant="h6" fontWeight={700}>
@@ -150,7 +157,10 @@ export default function TeamDetails() {
             <Button
               variant="contained"
               sx={{ mt: 2, mb: 2, borderRadius: 2 }}
-              onClick={() => setShowTaskForm(true)}
+              onClick={() => {
+                setEditingTask(null);
+                setShowTaskForm(true);
+              }}
             >
               Create Task
             </Button>
@@ -168,34 +178,20 @@ export default function TeamDetails() {
               />
             ))
           )}
+
+          {/* FORM POPUP */}
+          {showTaskForm && (
+            <TeamTaskForm
+              teamId={teamId}
+              task={editingTask}
+              onClose={() => setShowTaskForm(false)}
+              onSuccess={() => {
+                setShowTaskForm(false);
+                fetchTeamTasks();
+              }}
+            />
+          )}
         </Paper>
-      )}
-
-      {tab === 3 && (
-        <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Typography variant="h6" fontWeight={700}>
-            Settings
-          </Typography>
-          <Typography color="text.secondary" sx={{ mt: 1 }}>
-            Rename team, change icon, manage roles, delete team.
-          </Typography>
-        </Paper>
-      )}
-
-      {/* FORMS */}
-      {showTaskForm && (
-        <TeamTaskForm
-          onSubmit={handleCreateTask}
-          onCancel={() => setShowTaskForm(false)}
-        />
-      )}
-
-      {editingTask && (
-        <TeamTaskForm
-          task={editingTask}
-          onSubmit={(data) => handleUpdateTask(editingTask._id, data)}
-          onCancel={() => setEditingTask(null)}
-        />
       )}
     </Box>
   );

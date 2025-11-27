@@ -1,4 +1,5 @@
 import axios from "axios";
+import api from "./api";
 
 const API = axios.create({
   baseURL: process.env.REACT_APP_API_URL,
