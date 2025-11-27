@@ -1,57 +1,49 @@
 import React from "react";
-import { AppBar, Toolbar, Typography, Button, Box } from "@mui/material";
+import {
+  AppBar,
+  Toolbar,
+  Typography,
+  Box,
+  Button,
+  IconButton,
+} from "@mui/material";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
+import LightModeIcon from "@mui/icons-material/LightMode";
 import { useAuth } from "../../context/AuthContext";
 
-const Header = () => {
+const Header = ({ toggleDarkMode, darkMode }) => {
   const { user, logout } = useAuth();
 
   return (
-    <AppBar
-      position="static"
-      elevation={2}
-      sx={{
-        background: "#1976d2",
-        borderRadius: 0,
-      }}
-    >
+    <AppBar position="fixed" sx={{ zIndex: 1201 }}>
       <Toolbar
         sx={{
           display: "flex",
           justifyContent: "space-between",
-          alignItems: "center",
-          py: 1,
         }}
       >
-        {/* LOGO / TITLE */}
-        <Typography
-          variant="h6"
-          sx={{ fontWeight: 700, letterSpacing: 0.5 }}
-        >
+        <Typography variant="h6" sx={{ fontWeight: "bold" }}>
           Task Manager
         </Typography>
 
-        {/* USER & LOGOUT */}
+        {/* Right Side Controls */}
         <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-          <Typography
-            variant="subtitle1"
-            sx={{ fontWeight: 500 }}
-          >
+          <IconButton onClick={toggleDarkMode} sx={{ color: "white" }}>
+            {darkMode ? <LightModeIcon /> : <DarkModeIcon />}
+          </IconButton>
+
+          <Typography sx={{ color: "white" }}>
             Welcome, {user?.name}
           </Typography>
 
           <Button
             variant="outlined"
-            color="inherit"
-            onClick={logout}
+            size="small"
             sx={{
-              textTransform: "none",
-              borderColor: "white",
               color: "white",
-              "&:hover": {
-                borderColor: "white",
-                background: "rgba(255,255,255,0.1)",
-              },
+              borderColor: "white",
             }}
+            onClick={logout}
           >
             Logout
           </Button>

@@ -3,19 +3,15 @@ import { Box } from "@mui/material";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 
-const Layout = ({ children }) => {
+const Layout = ({ children, toggleDarkMode, darkMode }) => {
   return (
     <Box sx={{ display: "flex" }}>
-      
-      {/* SIDEBAR */}
       <Sidebar />
 
-      {/* MAIN CONTENT AREA */}
-      <Box sx={{ flexGrow: 1, background: "#f9f9f9", minHeight: "100vh" }}>
-        <Header />
+      <Box sx={{ flexGrow: 1, minHeight: "100vh" }}>
+        <Header toggleDarkMode={toggleDarkMode} darkMode={darkMode} />
         <Box sx={{ mt: 10, p: 3 }}>{children}</Box>
       </Box>
-
     </Box>
   );
 };
