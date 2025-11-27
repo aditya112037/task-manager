@@ -46,18 +46,42 @@ const App = () => {
   };
 
   // Create theme
-  const theme = useMemo(
-    () =>
-      createTheme({
-        palette: {
-          mode: darkMode ? "dark" : "light",
-          primary: {
-            main: "#1976d2",
-          },
-        },
-      }),
-    [darkMode]
-  );
+ const theme = useMemo(
+  () =>
+    createTheme({
+      palette: {
+        mode: darkMode ? "dark" : "light",
+
+        ...(darkMode
+          ? {
+              background: {
+                default: "#121212", // Dark mode background
+                paper: "#1E1E1E",   // MUI paper dark
+              },
+              sidebar: {
+                main: "#1E1E1E",   // sidebar dark
+              },
+              header: {
+                main: "#1F1F1F",   // header dark
+              },
+            }
+          : {
+              background: {
+                default: "#f5f5f5",
+                paper: "#ffffff",
+              },
+              sidebar: {
+                main: "#1976d2",
+              },
+              header: {
+                main: "#1976d2",
+              },
+            }),
+      },
+    }),
+  [darkMode]
+);
+
 
   return (
     <AuthProvider>
