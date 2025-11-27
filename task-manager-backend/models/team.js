@@ -11,7 +11,6 @@ const teamSchema = new mongoose.Schema(
     description: {
       type: String,
       default: "",
-      trim: true,
     },
 
     color: {
@@ -24,47 +23,30 @@ const teamSchema = new mongoose.Schema(
       default: "📌",
     },
 
+    // TEAM ADMIN
     admin: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
 
+    // MEMBERS LIST → stores each user + their role
     members: [
       {
-        user: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "User",
-          required: true,
-        },
-        role: {
-          type: String,
-          enum: ["admin", "member"],
-          default: "member",
-        },
+        user: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        role: { type: String, enum: ["admin", "member"], default: "member" },
       },
     ],
 
+    // Optional — if you want invite codes later
     inviteTokens: [
       {
-        token: { type: String, required: true },
-        createdAt: {
-          type: Date,
-          default: Date.now,
-          expires: 60 * 60 * 24 * 7, // auto delete after 7 days
-        },
+        token: String,
+        createdAt: Date,
       },
     ],
   },
   { timestamps: true }
 );
-
-// Always ensure admin is in members list
-teamSchema.pre("save", function (next) {
-  if (!this.members.some((m) => m.user.toString() === this.admin.toString())) {
-    this.members.push({ user: this.admin, role: "admin" });
-  }
-  next();
-});
 
 module.exports = mongoose.model("Team", teamSchema);
