@@ -5,8 +5,8 @@ import {
   Tab,
   Typography,
   CircularProgress,
-  useTheme,
   Paper,
+  useTheme,
 } from "@mui/material";
 
 import TaskList from "../components/Task/TaskList";
@@ -40,12 +40,10 @@ const Dashboard = () => {
   return (
     <Box
       sx={{
-        p: 2,
+        minHeight: "calc(100vh - 64px)", // Prevents white gap
         backgroundColor: theme.palette.background.default,
-        minHeight: "calc(100vh - 64px)",
       }}
     >
-      {/* PAGE TITLE */}
       <Typography
         variant="h4"
         fontWeight="bold"
@@ -70,7 +68,10 @@ const Dashboard = () => {
           textColor="primary"
           indicatorColor="primary"
           sx={{
-            "& .MuiTab-root": { textTransform: "none", fontWeight: 600 },
+            "& .MuiTab-root": {
+              textTransform: "none",
+              fontWeight: 600,
+            },
           }}
         >
           <Tab label="My Tasks" />
@@ -78,14 +79,14 @@ const Dashboard = () => {
         </Tabs>
       </Paper>
 
-      {/* PERSONAL TASKS TAB */}
+      {/* PERSONAL TASKS */}
       {tab === 0 && <TaskList />}
 
-      {/* TEAM TASKS TAB */}
+      {/* TEAM TASKS */}
       {tab === 1 && (
         <Box sx={{ mt: 1 }}>
           {loading ? (
-            <Box sx={{ py: 5, textAlign: "center" }}>
+            <Box sx={{ textAlign: "center", py: 5 }}>
               <CircularProgress />
             </Box>
           ) : teamTasks.length > 0 ? (
@@ -93,14 +94,14 @@ const Dashboard = () => {
               <TeamTaskItem
                 key={task._id}
                 task={task}
-                isAdmin={task?.teamRole === "admin"} // you can adjust this
+                isAdmin={task?.teamRole === "admin"}
               />
             ))
           ) : (
             <Typography
               sx={{
-                mt: 4,
                 textAlign: "center",
+                mt: 4,
                 color: theme.palette.text.secondary,
               }}
             >
