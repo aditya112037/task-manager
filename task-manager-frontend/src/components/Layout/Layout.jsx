@@ -17,6 +17,8 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
       <Box
         sx={{
           flexGrow: 1,
+          backgroundColor: (theme) => theme.palette.background.default,
+          minHeight: "100vh",
           ml: sidebarOpen ? "220px" : "70px",
           transition: "margin-left 0.3s ease",
         }}

@@ -9,6 +9,7 @@ import {
   Toolbar,
   Tooltip,
 } from "@mui/material";
+import { styled, useTheme } from "@mui/material/styles";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import GroupIcon from "@mui/icons-material/Group";
 import MenuIcon from "@mui/icons-material/Menu";
@@ -69,7 +70,7 @@ const Sidebar = ({ open, toggleSidebar }) => {
         sx={{
           display: "flex",
           justifyContent: open ? "flex-end" : "center",
-          background: "#1976d2",
+          background: theme.palette.sidebar.main,
         }}
       >
         <IconButton onClick={toggleSidebar} sx={{ color: "white" }}>

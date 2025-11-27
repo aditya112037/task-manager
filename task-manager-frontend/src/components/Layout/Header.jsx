@@ -16,14 +16,16 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen }) => {
 
   return (
     <AppBar
-      position="fixed"
-      sx={{
-        zIndex: 1201,
-        width: `calc(100% - ${sidebarOpen ? 220 : 70}px)`,
-        ml: `${sidebarOpen ? 220 : 70}px`,
-        transition: "all 0.3s ease",
-      }}
-    >
+  position="fixed"
+  sx={{
+    zIndex: 1201,
+    width: `calc(100% - ${sidebarOpen ? 220 : 70}px)`,
+    ml: `${sidebarOpen ? 220 : 70}px`,
+    background: (theme) => theme.palette.header.main,
+    transition: "all 0.3s ease",
+  }}
+>
+
       <Toolbar
         sx={{
           display: "flex",

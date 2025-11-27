@@ -62,7 +62,7 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
         padding: 1,
         boxShadow: "0 4px 15px rgba(0,0,0,0.08)",
         transition: "0.25s",
-        background: "#ffffff",
+        background:  (theme) => theme.palette.background.paper,
         "&:hover": { boxShadow: "0 6px 20px rgba(0,0,0,0.12)" },
       }}
     >
