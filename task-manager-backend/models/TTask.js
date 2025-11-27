@@ -1,0 +1,49 @@
+const mongoose = require("mongoose");
+
+const TTaskSchema = new mongoose.Schema(
+  {
+    team: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Team",
+      required: true,
+    },
+
+    title: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 100,
+    },
+
+    description: {
+      type: String,
+      trim: true,
+      maxlength: 500,
+    },
+
+    priority: {
+      type: String,
+      enum: ["low", "medium", "high"],
+      default: "medium",
+    },
+
+    status: {
+      type: String,
+      enum: ["todo", "in-progress", "completed"],
+      default: "todo",
+    },
+
+    dueDate: {
+      type: Date,
+    },
+
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
+  },
+  { timestamps: true }
+);
+
+module.exports = mongoose.model("TTask", TTaskSchema);

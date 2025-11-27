@@ -58,6 +58,8 @@ app.use("/api/teams", require("./routes/teams"));
 // 6️⃣ Calendar ICS
 app.use("/api/ics", require("./routes/ics"));
 
+app.use("/api/team-tasks", require("./routes/TTRoutes"));
+
 
 // ----------------------
 // Base route
