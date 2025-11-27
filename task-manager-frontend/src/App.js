@@ -4,18 +4,16 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Layout from "./components/Layout/Layout";
+
 import Login from "./components/Auth/Login";
 import Register from "./components/Auth/Register";
 import OAuthSuccess from "./components/Auth/OAuthSuccess";
-
 import Dashboard from "./pages/Dashboard";
-import TaskList from "./components/Task/TaskList";
+
 import TeamsHome from "./pages/TeamsHome";
 import TeamDetails from "./pages/TeamDetails";
 import CreateTeam from "./pages/CreateTeam";
 import JoinTeam from "./pages/JoinTeam";
-
-import "./App.css";
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -29,137 +27,117 @@ const PublicRoute = ({ children }) => {
   return !user ? children : <Navigate to="/" />;
 };
 
-const App = () => {
+function App() {
   const [darkMode, setDarkMode] = useState(false);
 
-  // Load theme preference
   useEffect(() => {
     const saved = localStorage.getItem("darkMode");
     if (saved) setDarkMode(saved === "true");
   }, []);
 
-  // Save theme preference
   const toggleDarkMode = () => {
-    const newMode = !darkMode;
-    setDarkMode(newMode);
-    localStorage.setItem("darkMode", newMode);
+    const next = !darkMode;
+    setDarkMode(next);
+    localStorage.setItem("darkMode", next);
   };
 
-  // Create theme
- const theme = useMemo(
-  () =>
-    createTheme({
-      palette: {
-        mode: darkMode ? "dark" : "light",
-
-        ...(darkMode
-          ? {
-              background: {
-                default: "#121212", // Dark mode background
-                paper: "#1E1E1E",   // MUI paper dark
-              },
-              sidebar: {
-                main: "#1E1E1E",   // sidebar dark
-              },
-              header: {
-                main: "#1F1F1F",   // header dark
-              },
-            }
-          : {
-              background: {
-                default: "#f5f5f5",
-                paper: "#ffffff",
-              },
-              sidebar: {
-                main: "#1976d2",
-              },
-              header: {
-                main: "#1976d2",
-              },
-            }),
-      },
-    }),
-  [darkMode]
-);
-
+  // ⭐ FULL Dark Mode Theme
+  const theme = useMemo(
+    () =>
+      createTheme({
+        palette: {
+          mode: darkMode ? "dark" : "light",
+          background: {
+            default: darkMode ? "#121212" : "#f5f5f5",
+            paper: darkMode ? "#1E1E1E" : "#ffffff",
+          },
+          sidebar: {
+            main: darkMode ? "#1E1E1E" : "#1976d2",
+          },
+          header: {
+            main: darkMode ? "#1F1F1F" : "#1976d2",
+          },
+        },
+      }),
+    [darkMode]
+  );
 
   return (
     <AuthProvider>
       <ThemeProvider theme={theme}>
-        <CssBaseline /> {/* Enables global dark mode styling */}
+        <CssBaseline />
+
         <Router>
           <Routes>
+            {/* LOGIN / REGISTER - NO SIDEBAR */}
             <Route
-  path="/login"
-  element={
-    <PublicRoute>
-      <Login />
-    </PublicRoute>
-  }
-/>
+              path="/login"
+              element={
+                <PublicRoute>
+                  <Login />
+                </PublicRoute>
+              }
+            />
+            <Route
+              path="/register"
+              element={
+                <PublicRoute>
+                  <Register />
+                </PublicRoute>
+              }
+            />
+            <Route path="/oauth-success" element={<OAuthSuccess />} />
+            <Route path="/join/:inviteCode" element={<JoinTeam />} />
 
-<Route
-  path="/register"
-  element={
-    <PublicRoute>
-      <Register />
-    </PublicRoute>
-  }
-/>
+            {/* PROTECTED ROUTES WITH LAYOUT */}
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                    <Dashboard />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
 
-<Route path="/oauth-success" element={<OAuthSuccess />} />
+            <Route
+              path="/teams"
+              element={
+                <ProtectedRoute>
+                  <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                    <TeamsHome />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
 
-<Route path="/join/:inviteCode" element={<JoinTeam />} />
+            <Route
+              path="/teams/create"
+              element={
+                <ProtectedRoute>
+                  <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                    <CreateTeam />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
 
-{/* Protected routes WITH SIDEBAR */}
-<Route
-  path="/"
-  element={
-    <ProtectedRoute>
-      <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
-        <Dashboard />
-      </Layout>
-    </ProtectedRoute>
-  }
-/>
-
-<Route
-  path="/teams"
-  element={
-    <ProtectedRoute>
-      <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
-        <TeamsHome />
-      </Layout>
-    </ProtectedRoute>
-  }
-/>
-
-<Route
-  path="/teams/create"
-  element={
-    <ProtectedRoute>
-      <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
-        <CreateTeam />
-      </Layout>
-    </ProtectedRoute>
-  }
-/>
-
-<Route
-  path="/teams/:teamId"
-  element={
-    <ProtectedRoute>
-      <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
-        <TeamDetails />
-      </Layout>
-    </ProtectedRoute>
-  }
-/>
+            <Route
+              path="/teams/:teamId"
+              element={
+                <ProtectedRoute>
+                  <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                    <TeamDetails />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
           </Routes>
         </Router>
       </ThemeProvider>
     </AuthProvider>
   );
-};
+}
 
 export default App;

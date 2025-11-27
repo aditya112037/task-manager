@@ -10,23 +10,21 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
 
   return (
     <Box sx={{ display: "flex", minHeight: "100vh" }}>
-      {/* Sidebar */}
       <Sidebar open={sidebarOpen} toggleSidebar={toggleSidebar} />
 
-      {/* Main content */}
       <Box
         sx={{
           flexGrow: 1,
-          backgroundColor: (theme) => theme.palette.background.default,
           minHeight: "100vh",
+          backgroundColor: (theme) => theme.palette.background.default,
           ml: sidebarOpen ? "220px" : "70px",
-          transition: "margin-left 0.3s ease",
+          transition: "all 0.3s ease",
         }}
       >
         <Header
+          sidebarOpen={sidebarOpen}
           toggleDarkMode={toggleDarkMode}
           darkMode={darkMode}
-          sidebarOpen={sidebarOpen}
         />
 
         <Box sx={{ mt: 10, p: 3 }}>{children}</Box>

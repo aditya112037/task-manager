@@ -8,7 +8,7 @@ import {
   Box,
   Stack,
   Tooltip,
-  Button
+  Button,
 } from "@mui/material";
 
 import EditIcon from "@mui/icons-material/Edit";
@@ -16,7 +16,11 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import EventIcon from "@mui/icons-material/Event";
 import GoogleIcon from "@mui/icons-material/Google";
 
+import { useTheme } from "@mui/material/styles";
+
 const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
+  const theme = useTheme();
+
   const priorityColors = {
     high: "error",
     medium: "warning",
@@ -38,12 +42,9 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
     return new Date(dateString).toLocaleDateString();
   };
 
-  // -------------------------------------------------------
-  //  GOOGLE CALENDAR URL (CORRECTED — with end time)
-  // -------------------------------------------------------
+  // GOOGLE Calendar Link Fix
   const startDate = new Date(task.dueDate);
-
-  const endDate = new Date(startDate.getTime() + 30 * 60 * 1000); // +30min
+  const endDate = new Date(startDate.getTime() + 30 * 60 * 1000);
 
   const fmt = (d) =>
     d.toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
@@ -60,14 +61,24 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
         mb: 2,
         borderRadius: 3,
         padding: 1,
-        boxShadow: "0 4px 15px rgba(0,0,0,0.08)",
-        transition: "0.25s",
-        background:  (theme) => theme.palette.background.paper,
-        "&:hover": { boxShadow: "0 6px 20px rgba(0,0,0,0.12)" },
+        backgroundColor: theme.palette.background.paper,
+        transition: "0.2s",
+
+        // ✨ Soft shadows for light mode, subtle shadows for dark mode
+        boxShadow:
+          theme.palette.mode === "dark"
+            ? "0 0 10px rgba(0,0,0,0.4)"
+            : "0 4px 15px rgba(0,0,0,0.08)",
+
+        "&:hover": {
+          boxShadow:
+            theme.palette.mode === "dark"
+              ? "0 0 14px rgba(0,0,0,0.55)"
+              : "0 6px 20px rgba(0,0,0,0.12)",
+        },
       }}
     >
       <CardContent>
-        
         {/* HEADER */}
         <Box
           sx={{
@@ -76,7 +87,13 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
             mb: 1,
           }}
         >
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>
+          <Typography
+            variant="h6"
+            sx={{
+              fontWeight: 700,
+              color: theme.palette.text.primary,
+            }}
+          >
             {task.title}
           </Typography>
 
@@ -97,13 +114,17 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
 
         {/* DESCRIPTION */}
         {task.description && (
-          <Typography variant="body2" sx={{ mb: 2, color: "text.secondary" }}>
+          <Typography
+            variant="body2"
+            sx={{ mb: 2, color: theme.palette.text.secondary }}
+          >
             {task.description}
           </Typography>
         )}
 
         {/* METADATA */}
         <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+          {/* Priority */}
           <Chip
             label={task.priority}
             color={priorityColors[task.priority]}
@@ -111,6 +132,7 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
             sx={{ textTransform: "capitalize" }}
           />
 
+          {/* Status */}
           <Chip
             label={task.status.replace("-", " ")}
             color={statusColors[task.status]}
@@ -118,10 +140,18 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
             sx={{ textTransform: "capitalize" }}
           />
 
+          {/* Date */}
           <Chip
             label={`📅 ${formatDate(task.dueDate)}`}
             variant="outlined"
             size="small"
+            sx={{
+              color: theme.palette.text.primary,
+              borderColor:
+                theme.palette.mode === "dark"
+                  ? "rgba(255,255,255,0.3)"
+                  : "rgba(0,0,0,0.3)",
+            }}
           />
         </Stack>
 
@@ -137,8 +167,7 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
               px: 2,
             }}
             onClick={() => {
-              window.location.href =
-                `${process.env.REACT_APP_API_URL}/api/ics/${task._id}`;
+              window.location.href = `${process.env.REACT_APP_API_URL}/api/ics/${task._id}`;
             }}
           >
             Add to Calendar (Apple)
@@ -152,6 +181,10 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
               textTransform: "none",
               borderRadius: 2,
               px: 2,
+              borderColor:
+                theme.palette.mode === "dark"
+                  ? "rgba(255,255,255,0.4)"
+                  : undefined,
             }}
             href={googleCalendarURL}
             target="_blank"

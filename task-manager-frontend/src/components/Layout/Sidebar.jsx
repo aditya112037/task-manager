@@ -9,16 +9,16 @@ import {
   Toolbar,
   Tooltip,
 } from "@mui/material";
-import { styled, useTheme } from "@mui/material/styles";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import GroupIcon from "@mui/icons-material/Group";
 import MenuIcon from "@mui/icons-material/Menu";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import { styled, useTheme } from "@mui/material/styles";
 import { Link, useLocation } from "react-router-dom";
 
 const drawerWidth = 220;
 
-// Drawer when OPEN
+// Drawer mixins
 const openedMixin = (theme) => ({
   width: drawerWidth,
   transition: theme.transitions.create("width", {
@@ -28,7 +28,6 @@ const openedMixin = (theme) => ({
   overflowX: "hidden",
 });
 
-// Drawer when CLOSED
 const closedMixin = (theme) => ({
   width: 70,
   transition: theme.transitions.create("width", {
@@ -38,11 +37,9 @@ const closedMixin = (theme) => ({
   overflowX: "hidden",
 });
 
-// Styled mini drawer
+// Styled Drawer
 const StyledDrawer = styled(Drawer)(({ theme, open }) => ({
   width: drawerWidth,
-  flexShrink: 0,
-  whiteSpace: "nowrap",
   boxSizing: "border-box",
   ...(open && {
     ...openedMixin(theme),
@@ -55,6 +52,7 @@ const StyledDrawer = styled(Drawer)(({ theme, open }) => ({
 }));
 
 const Sidebar = ({ open, toggleSidebar }) => {
+  const theme = useTheme();
   const location = useLocation();
 
   const menuItems = [
@@ -64,12 +62,11 @@ const Sidebar = ({ open, toggleSidebar }) => {
 
   return (
     <StyledDrawer variant="permanent" open={open}>
-      {/* Toggle */}
       <Toolbar
         sx={{
+          background: theme.palette.sidebar.main,
           display: "flex",
           justifyContent: open ? "flex-end" : "center",
-          background: theme.palette.sidebar.main,
         }}
       >
         <IconButton onClick={toggleSidebar} sx={{ color: "white" }}>
@@ -77,7 +74,7 @@ const Sidebar = ({ open, toggleSidebar }) => {
         </IconButton>
       </Toolbar>
 
-      <List sx={{ background: "#1976d2", height: "100%", color: "white" }}>
+      <List sx={{ background: theme.palette.sidebar.main, height: "100%" }}>
         {menuItems.map((item) => {
           if (location.pathname === item.path) return null;
 
@@ -95,6 +92,7 @@ const Sidebar = ({ open, toggleSidebar }) => {
                   px: open ? 2 : 1.5,
                   mx: open ? 1 : 0,
                   my: 1,
+                  color: "white",
                   borderRadius: open ? "8px" : "50%",
                   "&.Mui-selected": {
                     background: "rgba(255,255,255,0.25)",
