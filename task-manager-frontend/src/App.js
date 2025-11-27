@@ -42,25 +42,37 @@ function App() {
   };
 
   // ⭐ FULL Dark Mode Theme
-  const theme = useMemo(
-    () =>
-      createTheme({
-        palette: {
-          mode: darkMode ? "dark" : "light",
-          background: {
-            default: darkMode ? "#121212" : "#f5f5f5",
-            paper: darkMode ? "#1E1E1E" : "#ffffff",
-          },
-          sidebar: {
-            main: darkMode ? "#1E1E1E" : "#1976d2",
-          },
-          header: {
-            main: darkMode ? "#1F1F1F" : "#1976d2",
+const theme = useMemo(
+  () =>
+    createTheme({
+      palette: {
+        mode: darkMode ? "dark" : "light",
+        background: {
+          default: darkMode ? "#121212" : "#f5f5f5",
+          paper: darkMode ? "#1E1E1E" : "#ffffff",
+        },
+        sidebar: {
+          main: darkMode ? "#1E1E1E" : "#1976d2",
+          hover: darkMode ? "#2d2d2d" : "#1565c0",
+          text: darkMode ? "#ffffff" : "#ffffff",
+        },
+        header: {
+          main: darkMode ? "#1F1F1F" : "#1976d2",
+        },
+      },
+      components: {
+        MuiCssBaseline: {
+          styleOverrides: {
+            body: {
+              backgroundColor: darkMode ? "#121212" : "#f5f5f5",
+              transition: "background-color 0.3s ease",
+            },
           },
         },
-      }),
-    [darkMode]
-  );
+      },
+    }),
+  [darkMode]
+);
 
   return (
     <AuthProvider>

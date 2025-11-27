@@ -19,8 +19,9 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
           flexGrow: 1,
           backgroundColor: (theme) => theme.palette.background.default,
           ml: sidebarOpen ? `${sidebarWidthOpen}px` : `${sidebarWidthClosed}px`,
-          transition: "margin-left 0.3s ease",
+          transition: "margin-left 0.3s ease, background-color 0.3s ease",
           overflowY: "auto",
+          minHeight: '100vh',
         }}
       >
         <Header

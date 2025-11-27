@@ -19,14 +19,6 @@ body,
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen,
     Ubuntu, Cantarell, "Fira Sans", "Droid Sans", "Helvetica Neue", sans-serif;
-
-  /* ⚠️ IMPORTANT:
-     DO NOT set a static background color here.
-     MUI Theme should control it.
-     We force it to transparent so dark mode works properly.
-  */
-  background-color: transparent !important;
-
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -48,7 +40,7 @@ html {
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(200, 200, 200, 0.2); /* works for light + dark */
+  background: rgba(200, 200, 200, 0.2);
 }
 
 ::-webkit-scrollbar-thumb {
@@ -58,4 +50,19 @@ html {
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(150, 150, 150, 0.6);
+}
+
+/* Dark mode scrollbar */
+@media (prefers-color-scheme: dark) {
+  ::-webkit-scrollbar-track {
+    background: rgba(100, 100, 100, 0.2);
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: rgba(200, 200, 200, 0.3);
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(200, 200, 200, 0.5);
+  }
 }

@@ -34,10 +34,11 @@ const Sidebar = ({ open, toggleSidebar }) => {
         "& .MuiDrawer-paper": {
           width: open ? widthOpen : widthClosed,
           background: theme.palette.sidebar.main,
-          color: "white",
+          color: theme.palette.sidebar.text,
           border: "none",
           overflowX: "hidden",
-          transition: "width 0.3s ease",
+          transition: "width 0.3s ease, background-color 0.3s ease",
+          boxShadow: theme.palette.mode === 'dark' ? '2px 0 8px rgba(0,0,0,0.3)' : '2px 0 8px rgba(0,0,0,0.1)',
         },
       }}
     >
@@ -46,21 +47,43 @@ const Sidebar = ({ open, toggleSidebar }) => {
           display: "flex",
           justifyContent: open ? "flex-end" : "center",
           py: 1,
+          minHeight: '64px !important',
         }}
       >
-        <IconButton sx={{ color: "white" }} onClick={toggleSidebar}>
+        <IconButton 
+          sx={{ 
+            color: theme.palette.sidebar.text,
+            '&:hover': {
+              backgroundColor: theme.palette.sidebar.hover,
+            }
+          }} 
+          onClick={toggleSidebar}
+        >
           {open ? <ChevronLeftIcon /> : <MenuIcon />}
         </IconButton>
       </Toolbar>
 
-      <List>
+      <List sx={{ px: 1 }}>
         <ListItemButton
           component={Link}
           to="/"
           selected={location.pathname === "/"}
-          sx={{ color: "white" }}
+          sx={{
+            color: theme.palette.sidebar.text,
+            borderRadius: 2,
+            mb: 1,
+            '&.Mui-selected': {
+              backgroundColor: theme.palette.sidebar.hover,
+              '&:hover': {
+                backgroundColor: theme.palette.sidebar.hover,
+              }
+            },
+            '&:hover': {
+              backgroundColor: theme.palette.sidebar.hover,
+            }
+          }}
         >
-          <ListItemIcon sx={{ color: "white" }}>
+          <ListItemIcon sx={{ color: theme.palette.sidebar.text, minWidth: 40 }}>
             <DashboardIcon />
           </ListItemIcon>
           {open && <ListItemText primary="Dashboard" />}
@@ -70,15 +93,27 @@ const Sidebar = ({ open, toggleSidebar }) => {
           component={Link}
           to="/teams"
           selected={location.pathname.startsWith("/teams")}
-          sx={{ color: "white" }}
+          sx={{
+            color: theme.palette.sidebar.text,
+            borderRadius: 2,
+            mb: 1,
+            '&.Mui-selected': {
+              backgroundColor: theme.palette.sidebar.hover,
+              '&:hover': {
+                backgroundColor: theme.palette.sidebar.hover,
+              }
+            },
+            '&:hover': {
+              backgroundColor: theme.palette.sidebar.hover,
+            }
+          }}
         >
-          <ListItemIcon sx={{ color: "white" }}>
+          <ListItemIcon sx={{ color: theme.palette.sidebar.text, minWidth: 40 }}>
             <GroupIcon />
           </ListItemIcon>
           {open && <ListItemText primary="Teams" />}
         </ListItemButton>
       </List>
-
     </Drawer>
   );
 };

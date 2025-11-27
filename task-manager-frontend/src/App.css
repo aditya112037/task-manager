@@ -8,10 +8,6 @@
 /* Base Font + Background */
 body {
   font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-
-  /* ❗ Prevent white background (your big issue) */
-  background-color: transparent !important;
-
   color: inherit;
   -webkit-font-smoothing: antialiased;
 }

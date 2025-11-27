@@ -38,12 +38,7 @@ const Dashboard = () => {
   };
 
   return (
-    <Box
-      sx={{
-        minHeight: "calc(100vh - 64px)", // Prevents white gap
-        backgroundColor: theme.palette.background.default,
-      }}
-    >
+    <Box>
       <Typography
         variant="h4"
         fontWeight="bold"
@@ -54,12 +49,13 @@ const Dashboard = () => {
 
       {/* TABS */}
       <Paper
-        elevation={0}
+        elevation={1}
         sx={{
           backgroundColor: theme.palette.background.paper,
           borderRadius: 2,
           mb: 3,
           p: 1,
+          border: theme.palette.mode === 'dark' ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)',
         }}
       >
         <Tabs
@@ -71,6 +67,8 @@ const Dashboard = () => {
             "& .MuiTab-root": {
               textTransform: "none",
               fontWeight: 600,
+              fontSize: '0.95rem',
+              minHeight: '48px',
             },
           }}
         >
@@ -86,7 +84,7 @@ const Dashboard = () => {
       {tab === 1 && (
         <Box sx={{ mt: 1 }}>
           {loading ? (
-            <Box sx={{ textAlign: "center", py: 5 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}>
               <CircularProgress />
             </Box>
           ) : teamTasks.length > 0 ? (
@@ -98,15 +96,24 @@ const Dashboard = () => {
               />
             ))
           ) : (
-            <Typography
+            <Paper
+              elevation={1}
               sx={{
                 textAlign: "center",
-                mt: 4,
-                color: theme.palette.text.secondary,
+                p: 4,
+                mt: 2,
+                backgroundColor: theme.palette.background.paper,
+                border: theme.palette.mode === 'dark' ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)',
               }}
             >
-              No team tasks yet.
-            </Typography>
+              <Typography
+                sx={{
+                  color: theme.palette.text.secondary,
+                }}
+              >
+                No team tasks yet.
+              </Typography>
+            </Paper>
           )}
         </Box>
       )}
