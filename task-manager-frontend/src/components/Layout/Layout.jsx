@@ -1,52 +1,19 @@
 import React from "react";
 import { Box } from "@mui/material";
-import Header from "./Header";
 import Sidebar from "./Sidebar";
+import Header from "./Header";
 
 const Layout = ({ children }) => {
   return (
-    <Box sx={{ display: "flex", height: "100vh", overflow: "hidden" }}>
+    <Box sx={{ display: "flex" }}>
       
-      {/* LEFT SIDEBAR */}
-      <Box
-        sx={{
-          width: 220,
-          backgroundColor: "#f8f9fa",
-          borderRight: "1px solid #e0e0e0",
-          p: 2,
-          pt: 4,
-          position: "fixed",
-          left: 0,
-          top: 0,
-          bottom: 0,
-          overflowY: "auto",
-        }}
-      >
-        <Sidebar />
-      </Box>
+      {/* SIDEBAR */}
+      <Sidebar />
 
-      {/* MAIN CONTENT */}
-      <Box
-        sx={{
-          flex: 1,
-          ml: "220px", // leave space for sidebar
-          display: "flex",
-          flexDirection: "column",
-          height: "100vh",
-        }}
-      >
+      {/* MAIN CONTENT AREA */}
+      <Box sx={{ flexGrow: 1, background: "#f9f9f9", minHeight: "100vh" }}>
         <Header />
-
-        <Box
-          sx={{
-            flex: 1,
-            overflowY: "auto",
-            p: 3,
-            mt: 8, // space for header
-          }}
-        >
-          {children}
-        </Box>
+        <Box sx={{ mt: 10, p: 3 }}>{children}</Box>
       </Box>
 
     </Box>
