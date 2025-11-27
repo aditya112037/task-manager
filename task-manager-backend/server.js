@@ -53,8 +53,8 @@ app.use("/api/tasks", require("./routes/tasks"));
 app.use("/api/teams", require("./routes/teams"));
 
 // 5️⃣ Team Tasks  ✅ REQUIRED
-
-
+// Change this line in server.js
+app.use("/api/team-tasks", require("./routes/TeamTasks")); // Capital T
 // 6️⃣ Calendar ICS
 app.use("/api/ics", require("./routes/ics"));
 
