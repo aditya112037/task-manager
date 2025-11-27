@@ -8,8 +8,11 @@
 /* Base Font + Background */
 body {
   font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-  background-color: #f5f7fa;
-  color: #333;
+
+  /* ❗ Prevent white background (your big issue) */
+  background-color: transparent !important;
+
+  color: inherit;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -20,10 +23,6 @@ body {
   padding: 0 20px;
 }
 
-/* Remove old .header, .auth-container, .auth-form, 
-   .btn, .btn-primary, .task-item, .task-form, etc.
-   These are now replaced by Material UI components. */
-
 /* Smooth transitions for UX */
 button,
 input,
@@ -32,7 +31,7 @@ select {
   transition: 0.2s ease;
 }
 
-/* Scrollbar styling (modern clean look) */
+/* Scrollbar styling */
 ::-webkit-scrollbar {
   width: 8px;
 }
