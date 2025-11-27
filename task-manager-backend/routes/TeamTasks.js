@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const Team = require("../models/team");
 const { protect } = require("../middleware/auth");
-const teamTask = require("../models/teamTask");
+const TeamTask = require("../models/teamTask");
 
 /**
  * Helper: check if user is admin of the team
@@ -22,7 +22,7 @@ async function isTeamAdmin(teamId, userId) {
 --------------------------------------------- */
 router.get("/:teamId", protect, async (req, res) => {
   try {
-    const tasks = await teamTask.find({ team: req.params.teamId })
+    const tasks = await TeamTask.find({ team: req.params.teamId }) // ✅ Changed to TeamTask
       .sort({ createdAt: -1 });
 
     res.json(tasks);
@@ -43,7 +43,7 @@ router.post("/:teamId", protect, async (req, res) => {
     if (!teamData) return res.status(404).json({ message: "Team not found" });
     if (!teamData.isAdmin) return res.status(403).json({ message: "Only admin can create tasks." });
 
-    const task = await teamTask.create({
+    const task = await TeamTask.create({ // ✅ Changed to TeamTask
       team: req.params.teamId,
       title: req.body.title,
       description: req.body.description,
@@ -67,14 +67,14 @@ router.post("/:teamId", protect, async (req, res) => {
 --------------------------------------------- */
 router.put("/task/:taskId", protect, async (req, res) => {
   try {
-    const task = await teamTask.findById(req.params.taskId);
+    const task = await TeamTask.findById(req.params.taskId); // ✅ Changed to TeamTask
     if (!task) return res.status(404).json({ message: "Task not found" });
 
     const teamData = await isTeamAdmin(task.team, req.user._id);
     if (!teamData) return res.status(404).json({ message: "Team not found" });
     if (!teamData.isAdmin) return res.status(403).json({ message: "Only admin can update tasks." });
 
-    const updated = await teamTask.findByIdAndUpdate(
+    const updated = await TeamTask.findByIdAndUpdate( // ✅ Changed to TeamTask
       task._id,
       req.body,
       { new: true }
@@ -94,7 +94,7 @@ router.put("/task/:taskId", protect, async (req, res) => {
 --------------------------------------------- */
 router.delete("/task/:taskId", protect, async (req, res) => {
   try {
-    const task = await teamTask.findById(req.params.taskId);
+    const task = await TeamTask.findById(req.params.taskId); // ✅ Changed to TeamTask
     if (!task) return res.status(404).json({ message: "Task not found" });
 
     const teamData = await isTeamAdmin(task.team, req.user._id);
