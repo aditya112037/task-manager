@@ -14,7 +14,6 @@ import DashboardIcon from "@mui/icons-material/Dashboard";
 import GroupIcon from "@mui/icons-material/Group";
 import MenuIcon from "@mui/icons-material/Menu";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import { styled } from "@mui/material/styles";
 import { Link, useLocation } from "react-router-dom";
 
 const drawerWidth = 220;
