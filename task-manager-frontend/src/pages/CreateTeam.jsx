@@ -10,11 +10,14 @@ import {
   Alert,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
+import { teamsAPI } from "../../services/teamsAPI"; // <-- correct import path
 
 const CreateTeam = () => {
   const theme = useTheme();
   const navigate = useNavigate();
+
   const [teamName, setTeamName] = useState("");
+  const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -26,13 +29,20 @@ const CreateTeam = () => {
 
     setLoading(true);
     setError("");
-    
+
     try {
-      // Add your API call here to create team
-      // await teamsAPI.createTeam(teamName);
-      console.log("Creating team:", teamName);
-      navigate("/teams");
+      const data = {
+        name: teamName,
+        description,
+        color: "#1976d2", // default color
+        icon: "👥",       // default icon
+      };
+
+      await teamsAPI.createTeam(data); // 🔥 real backend call
+
+      navigate("/teams"); // redirect after success
     } catch (err) {
+      console.error(err);
       setError("Failed to create team. Please try again.");
     } finally {
       setLoading(false);
@@ -65,7 +75,10 @@ const CreateTeam = () => {
           sx={{
             p: 4,
             backgroundColor: theme.palette.background.paper,
-            border: theme.palette.mode === 'dark' ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)',
+            border:
+              theme.palette.mode === "dark"
+                ? "1px solid rgba(255,255,255,0.1)"
+                : "1px solid rgba(0,0,0,0.1)",
             borderRadius: 2,
           }}
         >
@@ -81,6 +94,17 @@ const CreateTeam = () => {
             value={teamName}
             onChange={(e) => setTeamName(e.target.value)}
             placeholder="Enter your team name"
+            sx={{ mb: 3 }}
+          />
+
+          <TextField
+            fullWidth
+            label="Description (optional)"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Describe your team"
+            multiline
+            rows={3}
             sx={{ mb: 3 }}
           />
 
