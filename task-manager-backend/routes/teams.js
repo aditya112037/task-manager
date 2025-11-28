@@ -3,6 +3,7 @@ const router = express.Router();
 const Team = require("../models/team");
 const { protect } = require("../middleware/auth");
 
+
 // ----------------------------------------------------
 // CREATE TEAM  ✓
 // ----------------------------------------------------
@@ -31,6 +32,7 @@ router.post("/", protect, async (req, res) => {
   }
 });
 
+
 // ----------------------------------------------------
 // GET MY TEAMS  ✓
 // ----------------------------------------------------
@@ -47,6 +49,7 @@ router.get("/my", protect, async (req, res) => {
   }
 });
 
+
 // ----------------------------------------------------
 // GENERATE INVITE LINK  ✓
 // ----------------------------------------------------
@@ -56,6 +59,7 @@ router.get("/:teamId/invite", protect, async (req, res) => {
   const inviteLink = `${process.env.FRONTEND_URL}/join/${teamId}`;
   res.json({ inviteLink });
 });
+
 
 // ----------------------------------------------------
 // JOIN TEAM  ✓
@@ -81,6 +85,7 @@ router.post("/:teamId/join", protect, async (req, res) => {
   }
 });
 
+
 // ----------------------------------------------------
 // REMOVE MEMBER (ADMIN ONLY)  ✓
 // ----------------------------------------------------
@@ -93,7 +98,6 @@ router.delete("/:teamId/members/:userId", protect, async (req, res) => {
       return res.status(403).json({ message: "Not authorized" });
     }
 
-    // remove target user
     team.members = team.members.filter(
       (m) => m.user.toString() !== req.params.userId
     );
@@ -105,6 +109,7 @@ router.delete("/:teamId/members/:userId", protect, async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+
 
 // ----------------------------------------------------
 // DELETE TEAM (ADMIN ONLY)  ✓
@@ -126,9 +131,10 @@ router.delete("/:teamId", protect, async (req, res) => {
   }
 });
 
-// -------------------------------
-// GET TEAM DETAILS
-// -------------------------------
+
+// ----------------------------------------------------
+// GET TEAM DETAILS  (with members + admin info) ✓
+// ----------------------------------------------------
 router.get("/:teamId/details", protect, async (req, res) => {
   try {
     const team = await Team.findById(req.params.teamId)
@@ -137,7 +143,6 @@ router.get("/:teamId/details", protect, async (req, res) => {
 
     if (!team) return res.status(404).json({ message: "Team not found" });
 
-    // Check if user belongs to team
     const isMember = team.members.some(
       m => String(m.user._id) === String(req.user._id)
     );
@@ -151,7 +156,6 @@ router.get("/:teamId/details", protect, async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
-
 
 
 module.exports = router;
