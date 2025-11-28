@@ -33,8 +33,8 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
           overflowY: "auto",
           minHeight: '100vh',
           // Remove any left padding/margin that creates gap
-          paddingLeft: 0,
-          marginLeft: 0,
+          paddingLeft: 1,
+          marginLeft: 1,
         }}
       >
         {/* Header */}
@@ -46,7 +46,7 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
         />
 
         {/* Page Content */}
-        <Box sx={{ p: 2, pl: 0 }}> {/* Remove left padding */}
+        <Box sx={{ p: 2, pl: 1 }}> {/* Remove left padding */}
           {children}
         </Box>
       </Box>
