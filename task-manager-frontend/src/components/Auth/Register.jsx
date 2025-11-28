@@ -18,7 +18,6 @@ const Register = () => {
     password: "",
     confirmPassword: "",
   });
-
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -34,16 +33,17 @@ const Register = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
+    
     if (formData.password !== formData.confirmPassword) {
-      return setError("Passwords do not match");
+      setError("Passwords do not match");
+      return;
     }
 
     try {
       setError("");
       setLoading(true);
       await register(formData.name, formData.email, formData.password);
-      setTimeout(() => navigate("/"), 100);
+      navigate("/");
     } catch (error) {
       setError(error.response?.data?.message || "Failed to register");
     } finally {
@@ -66,123 +66,97 @@ const Register = () => {
         sx={{
           width: "100%",
           maxWidth: 400,
-          borderRadius: 3,
-          p: 1,
-          boxShadow: "0px 10px 30px rgba(0, 0, 0, 0.2)",
-          background: "white",
+          borderRadius: 2,
+          boxShadow: 3,
         }}
       >
-        <CardContent>
+        <CardContent sx={{ p: 4 }}>
           <Typography
-            variant="h5"
-            fontWeight={700}
-            textAlign="center"
-            mb={2}
-            color="#333"
+            variant="h4"
+            component="h1"
+            gutterBottom
+            align="center"
+            fontWeight="bold"
+            color="primary"
           >
             Create Account
           </Typography>
 
           {error && (
             <Typography
-              sx={{
-                mb: 2,
-                textAlign: "center",
-                fontSize: "0.9rem",
-                fontWeight: 500,
-                color: "#d32f2f",
-              }}
+              color="error"
+              align="center"
+              sx={{ mb: 2 }}
             >
               {error}
             </Typography>
           )}
 
-          <form onSubmit={handleSubmit}>
+          <Box component="form" onSubmit={handleSubmit} noValidate>
             <TextField
+              margin="normal"
+              required
+              fullWidth
+              id="name"
               label="Full Name"
               name="name"
-              fullWidth
-              margin="normal"
-              required
+              autoComplete="name"
+              autoFocus
+              value={formData.name}
               onChange={handleChange}
               variant="outlined"
             />
-
             <TextField
-              label="Email"
+              margin="normal"
+              required
+              fullWidth
+              id="email"
+              label="Email Address"
               name="email"
-              type="email"
-              fullWidth
-              margin="normal"
-              required
+              autoComplete="email"
+              value={formData.email}
               onChange={handleChange}
               variant="outlined"
             />
-
             <TextField
-              label="Password"
+              margin="normal"
+              required
+              fullWidth
               name="password"
+              label="Password"
               type="password"
-              fullWidth
-              margin="normal"
-              required
+              id="password"
+              autoComplete="new-password"
+              value={formData.password}
               onChange={handleChange}
               variant="outlined"
             />
-
             <TextField
-              label="Confirm Password"
-              name="confirmPassword"
-              type="password"
-              fullWidth
               margin="normal"
               required
+              fullWidth
+              name="confirmPassword"
+              label="Confirm Password"
+              type="password"
+              id="confirmPassword"
+              value={formData.confirmPassword}
               onChange={handleChange}
               variant="outlined"
             />
-
             <Button
               type="submit"
               fullWidth
               variant="contained"
-              size="large"
+              sx={{ mt: 3, mb: 2, py: 1.5 }}
               disabled={loading}
-              sx={{
-                mt: 2,
-                py: 1.4,
-                fontSize: "1rem",
-                borderRadius: "10px",
-                textTransform: "none",
-                fontWeight: 600,
-                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                '&:hover': {
-                  background: "linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)",
-                }
-              }}
             >
-              {loading ? (
-                <CircularProgress size={24} color="inherit" />
-              ) : (
-                "Register"
-              )}
+              {loading ? <CircularProgress size={24} /> : "Register"}
             </Button>
-          </form>
+          </Box>
 
-          <Typography
-            variant="body2"
-            textAlign="center"
-            mt={2}
-            sx={{ color: "#666" }}
-          >
+          <Typography variant="body2" align="center">
             Already have an account?{" "}
-            <Link
-              to="/login"
-              style={{ 
-                textDecoration: "none", 
-                color: "#667eea",
-                fontWeight: 600,
-              }}
-            >
+            <Link to="/login" style={{ textDecoration: 'none' }}>
               Login here
             </Link>
           </Typography>

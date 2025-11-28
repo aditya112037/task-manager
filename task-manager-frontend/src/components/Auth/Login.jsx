@@ -33,7 +33,6 @@ const Login = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     try {
       setError("");
       setLoading(true);
@@ -64,136 +63,93 @@ const Login = () => {
       <Card
         sx={{
           width: "100%",
-          maxWidth: 380,
-          borderRadius: 3,
-          p: 1,
-          boxShadow: "0px 10px 30px rgba(0,0,0,0.2)",
-          background: "white",
+          maxWidth: 400,
+          borderRadius: 2,
+          boxShadow: 3,
         }}
       >
-        <CardContent>
+        <CardContent sx={{ p: 4 }}>
           <Typography
-            variant="h5"
-            fontWeight={700}
-            textAlign="center"
-            mb={2}
-            color="#333"
+            variant="h4"
+            component="h1"
+            gutterBottom
+            align="center"
+            fontWeight="bold"
+            color="primary"
           >
             Login to Task Manager
           </Typography>
 
-          {/* Error Message */}
           {error && (
             <Typography
               color="error"
-              sx={{
-                mb: 2,
-                textAlign: "center",
-                fontSize: "0.9rem",
-                fontWeight: 500,
-                color: "#d32f2f",
-              }}
+              align="center"
+              sx={{ mb: 2 }}
             >
               {error}
             </Typography>
           )}
 
-          {/* Google Login Button */}
           <Button
-            onClick={handleGoogleLogin}
             fullWidth
             variant="outlined"
-            sx={{
-              py: 1.3,
-              borderRadius: "10px",
-              textTransform: "none",
-              fontWeight: 600,
-              mb: 2,
-              gap: 1,
-              borderColor: "#ddd",
-              color: "#333",
-              '&:hover': {
-                borderColor: '#999',
-                backgroundColor: 'rgba(0,0,0,0.04)',
-              }
-            }}
+            onClick={handleGoogleLogin}
+            startIcon={
+              <img
+                src="https://developers.google.com/identity/images/g-logo.png"
+                alt="Google"
+                width="20"
+                height="20"
+              />
+            }
+            sx={{ mb: 3, py: 1.5 }}
           >
-            <img
-              src="https://developers.google.com/identity/images/g-logo.png"
-              alt="google"
-              style={{ width: 20 }}
-            />
             Continue with Google
           </Button>
 
-          <Divider sx={{ my: 2, color: '#666' }}>or</Divider>
+          <Divider sx={{ my: 2 }}>or</Divider>
 
-          {/* Email & Password Login */}
-          <form onSubmit={handleSubmit}>
+          <Box component="form" onSubmit={handleSubmit} noValidate>
             <TextField
-              label="Email"
+              margin="normal"
+              required
+              fullWidth
+              id="email"
+              label="Email Address"
               name="email"
-              type="email"
-              fullWidth
-              required
-              margin="normal"
+              autoComplete="email"
+              autoFocus
+              value={formData.email}
               onChange={handleChange}
               variant="outlined"
             />
-
             <TextField
-              label="Password"
-              name="password"
-              type="password"
-              fullWidth
-              required
               margin="normal"
+              required
+              fullWidth
+              name="password"
+              label="Password"
+              type="password"
+              id="password"
+              autoComplete="current-password"
+              value={formData.password}
               onChange={handleChange}
               variant="outlined"
             />
-
             <Button
               type="submit"
               fullWidth
               variant="contained"
-              size="large"
-              sx={{
-                mt: 2,
-                py: 1.4,
-                fontSize: "1rem",
-                borderRadius: "10px",
-                textTransform: "none",
-                fontWeight: 600,
-                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
-                '&:hover': {
-                  background: "linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)",
-                }
-              }}
+              sx={{ mt: 3, mb: 2, py: 1.5 }}
               disabled={loading}
             >
-              {loading ? (
-                <CircularProgress size={24} color="inherit" />
-              ) : (
-                "Login"
-              )}
+              {loading ? <CircularProgress size={24} /> : "Login"}
             </Button>
-          </form>
+          </Box>
 
-          <Typography
-            variant="body2"
-            textAlign="center"
-            mt={2}
-            sx={{ color: "#666" }}
-          >
+          <Typography variant="body2" align="center">
             Don't have an account?{" "}
-            <Link
-              to="/register"
-              style={{ 
-                textDecoration: "none", 
-                color: "#667eea",
-                fontWeight: 600,
-              }}
-            >
+            <Link to="/register" style={{ textDecoration: 'none' }}>
               Register here
             </Link>
           </Typography>
