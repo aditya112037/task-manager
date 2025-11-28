@@ -10,6 +10,7 @@ import {
   Alert,
 } from "@mui/material";
 import { useParams, useNavigate } from "react-router-dom";
+import { teamsAPI } from "../services/api";
 
 const JoinTeam = () => {
   const theme = useTheme();
