@@ -18,21 +18,17 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
       {/* Sidebar */}
       <Sidebar open={sidebarOpen} toggleSidebar={toggleSidebar} />
 
-      {/* Main Content */}
+      {/* Main Content - FIXED: Remove dynamic margin */}
       <Box
         component="main"
         sx={{
           flexGrow: 1,
           backgroundColor: (theme) => theme.palette.background.default,
-          marginLeft: `${sidebarWidthClosed}px`,
-          width: `calc(100% - ${sidebarWidthClosed}px)`,
+          width: `calc(100% - ${sidebarOpen ? sidebarWidthOpen : sidebarWidthClosed}px)`,
+          marginLeft: `${sidebarOpen ? sidebarWidthOpen : sidebarWidthClosed}px`,
           transition: theme => theme.transitions.create(['width', 'margin'], {
             easing: theme.transitions.easing.sharp,
             duration: theme.transitions.duration.enteringScreen,
-          }),
-          ...(sidebarOpen && {
-            marginLeft: `${sidebarWidthOpen}px`,
-            width: `calc(100% - ${sidebarWidthOpen}px)`,
           }),
           overflowY: "auto",
           minHeight: '100vh',
@@ -46,7 +42,7 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
           toggleSidebar={toggleSidebar}
         />
 
-        {/* Page Content - REMOVED mt:8 and reduced padding */}
+        {/* Page Content */}
         <Box sx={{ p: 2 }}>
           {children}
         </Box>

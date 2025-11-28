@@ -17,6 +17,9 @@ import { useAuth } from "../../context/AuthContext";
 const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
   const { user, logout } = useAuth();
 
+  const sidebarWidthOpen = 240;
+  const sidebarWidthClosed = 64;
+
   return (
     <AppBar
       position="fixed"
@@ -25,19 +28,19 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
         backgroundColor: (theme) => theme.palette.header?.main || theme.palette.primary.main,
         backgroundImage: 'none',
         boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
-        width: `calc(100% - ${sidebarOpen ? 240 : 64}px)`,
-        marginLeft: sidebarOpen ? '240px' : '64px',
+        width: `calc(100% - ${sidebarOpen ? sidebarWidthOpen : sidebarWidthClosed}px)`,
+        marginLeft: `${sidebarOpen ? sidebarWidthOpen : sidebarWidthClosed}px`,
         transition: theme => theme.transitions.create(['width', 'margin'], {
           easing: theme.transitions.easing.sharp,
           duration: theme.transitions.duration.enteringScreen,
         }),
-        height: '60px', // Reduced header height
+        height: '60px',
       }}
     >
       <Toolbar sx={{ 
         display: "flex", 
         justifyContent: "space-between",
-        minHeight: '60px !important', // Reduced toolbar height
+        minHeight: '60px !important',
       }}>
         {/* Sidebar Toggle Button for Mobile/Alternative */}
         <IconButton
@@ -68,14 +71,14 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
           <Typography sx={{ 
             color: "white", 
             display: { xs: 'none', sm: 'block' },
-            fontSize: '0.9rem' // Slightly smaller text
+            fontSize: '0.9rem'
           }}>
             Welcome, {user?.name}
           </Typography>
 
           <Button
             variant="outlined"
-            size="small" // Smaller button
+            size="small"
             sx={{ 
               color: "white", 
               borderColor: "white",
