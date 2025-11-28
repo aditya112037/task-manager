@@ -138,11 +138,7 @@ const Login = () => {
               required
               margin="normal"
               onChange={handleChange}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: '10px',
-                }
-              }}
+              variant="outlined"
             />
 
             <TextField
@@ -153,11 +149,7 @@ const Login = () => {
               required
               margin="normal"
               onChange={handleChange}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: '10px',
-                }
-              }}
+              variant="outlined"
             />
 
             <Button

@@ -105,11 +105,7 @@ const Register = () => {
               margin="normal"
               required
               onChange={handleChange}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: '10px',
-                }
-              }}
+              variant="outlined"
             />
 
             <TextField
@@ -120,11 +116,7 @@ const Register = () => {
               margin="normal"
               required
               onChange={handleChange}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: '10px',
-                }
-              }}
+              variant="outlined"
             />
 
             <TextField
@@ -135,11 +127,7 @@ const Register = () => {
               margin="normal"
               required
               onChange={handleChange}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: '10px',
-                }
-              }}
+              variant="outlined"
             />
 
             <TextField
@@ -150,11 +138,7 @@ const Register = () => {
               margin="normal"
               required
               onChange={handleChange}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: '10px',
-                }
-              }}
+              variant="outlined"
             />
 
             <Button
