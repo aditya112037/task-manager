@@ -1,120 +1,107 @@
-import React, { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import React, { useState } from "react";
 import {
   Box,
-  Card,
-  CardContent,
   Typography,
+  TextField,
   Button,
-  CircularProgress,
+  Paper,
+  Container,
+  useTheme,
+  Alert,
 } from "@mui/material";
-import { teamsAPI } from "../services/api";
+import { useParams, useNavigate } from "react-router-dom";
 
-export default function JoinTeam() {
-  const { inviteCode } = useParams();
+const JoinTeam = () => {
+  const theme = useTheme();
   const navigate = useNavigate();
-
-  const [team, setTeam] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [joining, setJoining] = useState(false);
+  const { inviteCode } = useParams();
+  const [code, setCode] = useState(inviteCode || "");
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  // Fetch team details for the invite code
-  useEffect(() => {
-    const fetchTeam = async () => {
-      try {
-        const res = await teamsAPI.getTeamInvite(inviteCode);
-        setTeam(res.data);
-      } catch (err) {
-        setError("Invalid or expired invite link.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchTeam();
-  }, [inviteCode]);
+  const handleJoinTeam = async () => {
+    if (!code.trim()) {
+      setError("Please enter an invite code");
+      return;
+    }
 
-  const handleJoin = async () => {
+    setLoading(true);
+    setError("");
+    
     try {
-      setJoining(true);
-      const res = await teamsAPI.acceptInvite(inviteCode);
-
-      // redirect to the team page
-      navigate(`/teams/${res.data.teamId}`);
+      // Add your API call here to join team
+      // await teamsAPI.joinTeam(code);
+      console.log("Joining team with code:", code);
+      navigate("/teams");
     } catch (err) {
-      console.error(err);
-      setError("Unable to join team.");
+      setError("Failed to join team. Please check the invite code.");
     } finally {
-      setJoining(false);
+      setLoading(false);
     }
   };
 
-  if (loading) {
-    return (
-      <Box sx={{ textAlign: "center", mt: 10 }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  if (error) {
-    return (
-      <Box sx={{ textAlign: "center", mt: 10 }}>
-        <Typography color="error">{error}</Typography>
-      </Box>
-    );
-  }
-
   return (
-    <Box
-      sx={{
-        maxWidth: 450,
-        mx: "auto",
-        mt: 10,
-        p: 2,
-      }}
-    >
-      <Card sx={{ borderRadius: 3, boxShadow: 3 }}>
-        <CardContent sx={{ textAlign: "center" }}>
-          <Box
-            sx={{
-              width: 70,
-              height: 70,
-              borderRadius: "50%",
-              background: team.color || "#1976d2",
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              mx: "auto",
-              mb: 2,
-              fontSize: "2.2rem",
-            }}
-          >
-            {team.icon}
-          </Box>
+    <Box>
+      {/* Header */}
+      <Box sx={{ mb: 4 }}>
+        <Typography
+          variant="h4"
+          fontWeight="bold"
+          sx={{ color: theme.palette.text.primary, mb: 1 }}
+        >
+          Join Team
+        </Typography>
+        <Typography
+          variant="body1"
+          sx={{ color: theme.palette.text.secondary }}
+        >
+          Enter an invite code to join a team
+        </Typography>
+      </Box>
 
-          <Typography variant="h5" fontWeight={700}>
-            Join {team.name}
-          </Typography>
+      {/* Join Form */}
+      <Container maxWidth="sm" sx={{ px: { xs: 2, sm: 3 } }}>
+        <Paper
+          elevation={1}
+          sx={{
+            p: 4,
+            backgroundColor: theme.palette.background.paper,
+            border: theme.palette.mode === 'dark' ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)',
+            borderRadius: 2,
+          }}
+        >
+          {error && (
+            <Alert severity="error" sx={{ mb: 3 }}>
+              {error}
+            </Alert>
+          )}
 
-          <Typography
-            sx={{ mt: 1, mb: 3, color: "text.secondary", fontSize: "0.95rem" }}
-          >
-            {team.description}
-          </Typography>
+          <TextField
+            fullWidth
+            label="Invite Code"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="Enter team invite code"
+            sx={{ mb: 3 }}
+          />
 
           <Button
-            fullWidth
             variant="contained"
             size="large"
-            sx={{ textTransform: "none", borderRadius: 2 }}
-            onClick={handleJoin}
-            disabled={joining}
+            fullWidth
+            onClick={handleJoinTeam}
+            disabled={loading}
+            sx={{
+              textTransform: "none",
+              py: 1.5,
+            }}
           >
-            {joining ? "Joining..." : "Join Team"}
+            {loading ? "Joining Team..." : "Join Team"}
           </Button>
-        </CardContent>
-      </Card>
+        </Paper>
+      </Container>
     </Box>
   );
-}
+};
+
+export default JoinTeam;

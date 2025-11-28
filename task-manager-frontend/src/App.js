@@ -99,6 +99,18 @@ const theme = useMemo(
               }
             />
             <Route path="/oauth-success" element={<OAuthSuccess />} />
+
+              <Route
+  path="/join-team"
+  element={
+    <ProtectedRoute>
+      <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+        <JoinTeam />
+      </Layout>
+    </ProtectedRoute>
+  }
+/>
+
             <Route path="/join/:inviteCode" element={<JoinTeam />} />
 
             {/* PROTECTED ROUTES WITH LAYOUT */}
