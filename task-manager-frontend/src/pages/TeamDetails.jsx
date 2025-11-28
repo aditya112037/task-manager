@@ -61,7 +61,7 @@ export default function TeamDetails() {
   if (loadingTeam) return <Typography>Loading team...</Typography>;
 
   return (
-    <Box sx={{ p: 2 }}>
+  <Box sx={{ px: 2, pt: { xs: 12, sm: 10 } }}>
       {/* ------- TEAM HEADER ------- */}
       <Paper
         sx={{
