@@ -149,7 +149,7 @@ const Login = () => {
 
           <Typography variant="body2" align="center">
             Don't have an account?{" "}
-            <Link to="/register" style={{ textDecoration: 'none' }}>
+            <Link to="/register" style={{ textDecoration: 'none', color: "skyblue" }}>
               Register here
             </Link>
           </Typography>
