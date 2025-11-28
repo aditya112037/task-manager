@@ -106,20 +106,16 @@ export default function TeamDetails() {
       {/* ------- TAB CONTENT ------- */}
 
       {/* OVERVIEW */}
-      <Typography color="text.secondary" sx={{ mt: 1 }}>
-  Team stats coming soon.
-</Typography>
-
-<Button
-  variant="outlined"
-  sx={{ mt: 3 }}
-  onClick={() =>
-    navigator.clipboard.writeText(`${window.location.origin}/join/${team._id}`)
-  }
->
-  Copy Invite Link
-</Button>
-
+      {tab === 0 && (
+        <Paper sx={{ p: 3, borderRadius: 3 }}>
+          <Typography variant="h6" fontWeight={700}>
+            Overview
+          </Typography>
+          <Typography color="text.secondary" sx={{ mt: 1 }}>
+            Team stats coming soon.
+          </Typography>
+        </Paper>
+      )}
 
       {/* MEMBERS */}
       {tab === 1 && (
@@ -170,50 +166,48 @@ export default function TeamDetails() {
 
       {/* SETTINGS */}
       {tab === 3 && (
-  <Paper sx={{ p: 3, borderRadius: 3 }}>
-    <Typography variant="h6" fontWeight={700}>Settings</Typography>
+        <Paper sx={{ p: 3, borderRadius: 3 }}>
+          <Typography variant="h6" fontWeight={700}>Settings</Typography>
 
-    {/* INVITE LINK SECTION */}
-    <Box sx={{ mt: 3 }}>
-      <Typography variant="subtitle1" fontWeight={600}>
-        Invite Members
-      </Typography>
+          {/* INVITE LINK SECTION */}
+          <Box sx={{ mt: 3 }}>
+            <Typography variant="subtitle1" fontWeight={600}>
+              Invite Members
+            </Typography>
 
-      <Box
-        sx={{
-          mt: 1,
-          p: 2,
-          borderRadius: 2,
-          border: "1px solid rgba(255,255,255,0.1)",
-          display: "flex",
-          alignItems: "center",
-          gap: 2,
-          bgcolor: "background.paper",
-        }}
-      >
-        <Typography
-          variant="body2"
-          sx={{ flexGrow: 1, wordBreak: "break-all" }}
-        >
-          {`${window.location.origin}/join/${team._id}`}
-        </Typography>
+            <Box
+              sx={{
+                mt: 1,
+                p: 2,
+                borderRadius: 2,
+                border: "1px solid rgba(255,255,255,0.1)",
+                display: "flex",
+                alignItems: "center",
+                gap: 2,
+                bgcolor: "background.paper",
+              }}
+            >
+              <Typography
+                variant="body2"
+                sx={{ flexGrow: 1, wordBreak: "break-all" }}
+              >
+                {`${window.location.origin}/join/${team._id}`}
+              </Typography>
 
-        <Button
-          variant="contained"
-          onClick={() => {
-            navigator.clipboard.writeText(
-              `${window.location.origin}/join/${team._id}`
-            );
-          }}
-        >
-          Copy Link
-        </Button>
-      </Box>
-    </Box>
-  </Paper>
-)}
-
-
+              <Button
+                variant="contained"
+                onClick={() => {
+                  navigator.clipboard.writeText(
+                    `${window.location.origin}/join/${team._id}`
+                  );
+                }}
+              >
+                Copy Link
+              </Button>
+            </Box>
+          </Box>
+        </Paper>
+      )}
     </Box>
   );
 }
