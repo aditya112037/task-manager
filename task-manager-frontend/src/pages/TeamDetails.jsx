@@ -67,7 +67,7 @@ export default function TeamDetails() {
         sx={{
           p: 3,
           borderRadius: 3,
-          mb: 3,
+          mb: 3, // This creates space between header and content
           boxShadow: "0 4px 15px rgba(0,0,0,0.08)"
         }}
       >
@@ -107,28 +107,30 @@ export default function TeamDetails() {
 
       {/* OVERVIEW */}
       {tab === 0 && (
-        <Paper sx={{ p: 3, borderRadius: 3 }}>
+        <Paper sx={{ p: 3, borderRadius: 3, mt: 2 }}> {/* Added mt:2 for more spacing */}
           <Typography variant="h6" fontWeight={700}>
             Overview
           </Typography>
           <Typography color="text.secondary" sx={{ mt: 1 }}>
             Team stats coming soon.
           </Typography>
+          
+          {/* Copy Invite Link Button in Overview Tab */}
           <Button
-  variant="outlined"
-  sx={{ mt: 3 }}
-  onClick={() =>
-    navigator.clipboard.writeText(`${window.location.origin}/join/${team._id}`)
-  }
->
-  Copy Invite Link
-</Button>
+            variant="outlined"
+            sx={{ mt: 3 }}
+            onClick={() =>
+              navigator.clipboard.writeText(`${window.location.origin}/join/${team._id}`)
+            }
+          >
+            Copy Invite Link
+          </Button>
         </Paper>
       )}
 
       {/* MEMBERS */}
       {tab === 1 && (
-        <Paper sx={{ p: 3, borderRadius: 3 }}>
+        <Paper sx={{ p: 3, borderRadius: 3, mt: 2 }}> {/* Added mt:2 for more spacing */}
           <Typography variant="h6" fontWeight={700}>
             Members
           </Typography>
@@ -146,7 +148,7 @@ export default function TeamDetails() {
 
       {/* TASKS */}
       {tab === 2 && (
-        <Paper sx={{ p: 3, borderRadius: 3 }}>
+        <Paper sx={{ p: 3, borderRadius: 3, mt: 2 }}> {/* Added mt:2 for more spacing */}
           <Typography variant="h6" fontWeight={700}>
             Team Tasks
           </Typography>
@@ -175,7 +177,7 @@ export default function TeamDetails() {
 
       {/* SETTINGS */}
       {tab === 3 && (
-        <Paper sx={{ p: 3, borderRadius: 3 }}>
+        <Paper sx={{ p: 3, borderRadius: 3, mt: 2 }}> {/* Added mt:2 for more spacing */}
           <Typography variant="h6" fontWeight={700}>Settings</Typography>
 
           {/* INVITE LINK SECTION */}
