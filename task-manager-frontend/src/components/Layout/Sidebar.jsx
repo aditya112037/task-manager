@@ -42,7 +42,14 @@ const Sidebar = ({ open, toggleSidebar }) => {
             easing: theme.transitions.easing.sharp,
             duration: theme.transitions.duration.enteringScreen,
           }),
-          boxShadow: theme.palette.mode === 'dark' ? '2px 0 8px rgba(0,0,0,0.3)' : '2px 0 8px rgba(0,0,0,0.1)',
+          // REMOVE any right border or shadow that creates gap
+          boxShadow: 'none',
+          borderRight: `1px solid ${theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
+          // Ensure it's flush with the edge
+          position: 'fixed',
+          left: 0,
+          top: 0,
+          bottom: 0,
         },
       }}
     >
@@ -78,7 +85,7 @@ const Sidebar = ({ open, toggleSidebar }) => {
           selected={location.pathname === "/"}
           sx={{
             color: theme.palette.sidebar.text,
-            borderRadius: 2,
+            borderRadius: 1, // Reduced border radius
             mb: 1,
             justifyContent: open ? 'initial' : 'center',
             px: open ? 2 : 1,
@@ -119,7 +126,7 @@ const Sidebar = ({ open, toggleSidebar }) => {
           selected={location.pathname.startsWith("/teams")}
           sx={{
             color: theme.palette.sidebar.text,
-            borderRadius: 2,
+            borderRadius: 1, // Reduced border radius
             mb: 1,
             justifyContent: open ? 'initial' : 'center',
             px: open ? 2 : 1,

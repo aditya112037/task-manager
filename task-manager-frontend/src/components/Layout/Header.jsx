@@ -27,10 +27,13 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
         zIndex: 1201,
         backgroundColor: (theme) => theme.palette.header?.main || theme.palette.primary.main,
         backgroundImage: 'none',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24)',
+        // Remove shadow that might create visual separation
+        boxShadow: 'none',
+        // Make it flush with sidebar
         width: `calc(100% - ${sidebarOpen ? sidebarWidthOpen : sidebarWidthClosed}px)`,
-        marginLeft: `${sidebarOpen ? sidebarWidthOpen : sidebarWidthClosed}px`,
-        transition: theme => theme.transitions.create(['width', 'margin'], {
+        left: `${sidebarOpen ? sidebarWidthOpen : sidebarWidthClosed}px`,
+        right: 0,
+        transition: theme => theme.transitions.create(['width', 'left'], {
           easing: theme.transitions.easing.sharp,
           duration: theme.transitions.duration.enteringScreen,
         }),
@@ -41,6 +44,8 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
         display: "flex", 
         justifyContent: "space-between",
         minHeight: '60px !important',
+        // Remove any left padding
+        pl: 2,
       }}>
         {/* Sidebar Toggle Button for Mobile/Alternative */}
         <IconButton

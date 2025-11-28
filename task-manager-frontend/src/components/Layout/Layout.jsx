@@ -18,7 +18,7 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
       {/* Sidebar */}
       <Sidebar open={sidebarOpen} toggleSidebar={toggleSidebar} />
 
-      {/* Main Content - FIXED: Remove dynamic margin */}
+      {/* Main Content - Make it flush with sidebar */}
       <Box
         component="main"
         sx={{
@@ -32,6 +32,9 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
           }),
           overflowY: "auto",
           minHeight: '100vh',
+          // Remove any left padding/margin that creates gap
+          paddingLeft: 0,
+          marginLeft: 0,
         }}
       >
         {/* Header */}
@@ -43,7 +46,7 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
         />
 
         {/* Page Content */}
-        <Box sx={{ p: 2 }}>
+        <Box sx={{ p: 2, pl: 0 }}> {/* Remove left padding */}
           {children}
         </Box>
       </Box>
