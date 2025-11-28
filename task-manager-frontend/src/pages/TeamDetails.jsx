@@ -114,6 +114,15 @@ export default function TeamDetails() {
           <Typography color="text.secondary" sx={{ mt: 1 }}>
             Team stats coming soon.
           </Typography>
+          <Button
+  variant="outlined"
+  sx={{ mt: 3 }}
+  onClick={() =>
+    navigator.clipboard.writeText(`${window.location.origin}/join/${team._id}`)
+  }
+>
+  Copy Invite Link
+</Button>
         </Paper>
       )}
 
