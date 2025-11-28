@@ -46,10 +46,9 @@ const Login = () => {
     }
   };
 
-const handleGoogleLogin = () => {
-  window.location.href = `${API_URL}/api/auth/google`;
-};
-
+  const handleGoogleLogin = () => {
+    window.location.href = `${API_URL}/api/auth/google`;
+  };
 
   return (
     <Box
@@ -58,7 +57,7 @@ const handleGoogleLogin = () => {
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
-        background: "#f2f4f7",
+        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
         p: 2,
       }}
     >
@@ -68,7 +67,8 @@ const handleGoogleLogin = () => {
           maxWidth: 380,
           borderRadius: 3,
           p: 1,
-          boxShadow: "0px 6px 18px rgba(0,0,0,0.08)",
+          boxShadow: "0px 10px 30px rgba(0,0,0,0.2)",
+          background: "white",
         }}
       >
         <CardContent>
@@ -77,7 +77,7 @@ const handleGoogleLogin = () => {
             fontWeight={700}
             textAlign="center"
             mb={2}
-            color="primary"
+            color="#333"
           >
             Login to Task Manager
           </Typography>
@@ -91,6 +91,7 @@ const handleGoogleLogin = () => {
                 textAlign: "center",
                 fontSize: "0.9rem",
                 fontWeight: 500,
+                color: "#d32f2f",
               }}
             >
               {error}
@@ -109,6 +110,12 @@ const handleGoogleLogin = () => {
               fontWeight: 600,
               mb: 2,
               gap: 1,
+              borderColor: "#ddd",
+              color: "#333",
+              '&:hover': {
+                borderColor: '#999',
+                backgroundColor: 'rgba(0,0,0,0.04)',
+              }
             }}
           >
             <img
@@ -119,7 +126,7 @@ const handleGoogleLogin = () => {
             Continue with Google
           </Button>
 
-          <Divider sx={{ my: 2 }}>or</Divider>
+          <Divider sx={{ my: 2, color: '#666' }}>or</Divider>
 
           {/* Email & Password Login */}
           <form onSubmit={handleSubmit}>
@@ -131,6 +138,11 @@ const handleGoogleLogin = () => {
               required
               margin="normal"
               onChange={handleChange}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: '10px',
+                }
+              }}
             />
 
             <TextField
@@ -141,6 +153,11 @@ const handleGoogleLogin = () => {
               required
               margin="normal"
               onChange={handleChange}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: '10px',
+                }
+              }}
             />
 
             <Button
@@ -154,6 +171,11 @@ const handleGoogleLogin = () => {
                 fontSize: "1rem",
                 borderRadius: "10px",
                 textTransform: "none",
+                fontWeight: 600,
+                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                '&:hover': {
+                  background: "linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)",
+                }
               }}
               disabled={loading}
             >
@@ -169,12 +191,16 @@ const handleGoogleLogin = () => {
             variant="body2"
             textAlign="center"
             mt={2}
-            sx={{ color: "#555" }}
+            sx={{ color: "#666" }}
           >
             Don't have an account?{" "}
             <Link
               to="/register"
-              style={{ textDecoration: "none", color: "#1976d2" }}
+              style={{ 
+                textDecoration: "none", 
+                color: "#667eea",
+                fontWeight: 600,
+              }}
             >
               Register here
             </Link>

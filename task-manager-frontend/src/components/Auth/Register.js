@@ -43,7 +43,7 @@ const Register = () => {
       setError("");
       setLoading(true);
       await register(formData.name, formData.email, formData.password);
-setTimeout(() => navigate("/"), 100);
+      setTimeout(() => navigate("/"), 100);
     } catch (error) {
       setError(error.response?.data?.message || "Failed to register");
     } finally {
@@ -58,7 +58,7 @@ setTimeout(() => navigate("/"), 100);
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
-        background: "#f2f4f7",
+        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
         p: 2,
       }}
     >
@@ -68,7 +68,8 @@ setTimeout(() => navigate("/"), 100);
           maxWidth: 400,
           borderRadius: 3,
           p: 1,
-          boxShadow: "0px 6px 18px rgba(0, 0, 0, 0.08)",
+          boxShadow: "0px 10px 30px rgba(0, 0, 0, 0.2)",
+          background: "white",
         }}
       >
         <CardContent>
@@ -77,19 +78,19 @@ setTimeout(() => navigate("/"), 100);
             fontWeight={700}
             textAlign="center"
             mb={2}
-            color="primary"
+            color="#333"
           >
             Create Account
           </Typography>
 
           {error && (
             <Typography
-              color="error"
               sx={{
                 mb: 2,
                 textAlign: "center",
                 fontSize: "0.9rem",
                 fontWeight: 500,
+                color: "#d32f2f",
               }}
             >
               {error}
@@ -104,6 +105,11 @@ setTimeout(() => navigate("/"), 100);
               margin="normal"
               required
               onChange={handleChange}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: '10px',
+                }
+              }}
             />
 
             <TextField
@@ -114,6 +120,11 @@ setTimeout(() => navigate("/"), 100);
               margin="normal"
               required
               onChange={handleChange}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: '10px',
+                }
+              }}
             />
 
             <TextField
@@ -124,6 +135,11 @@ setTimeout(() => navigate("/"), 100);
               margin="normal"
               required
               onChange={handleChange}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: '10px',
+                }
+              }}
             />
 
             <TextField
@@ -134,6 +150,11 @@ setTimeout(() => navigate("/"), 100);
               margin="normal"
               required
               onChange={handleChange}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: '10px',
+                }
+              }}
             />
 
             <Button
@@ -148,6 +169,11 @@ setTimeout(() => navigate("/"), 100);
                 fontSize: "1rem",
                 borderRadius: "10px",
                 textTransform: "none",
+                fontWeight: 600,
+                background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+                '&:hover': {
+                  background: "linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)",
+                }
               }}
             >
               {loading ? (
@@ -162,12 +188,16 @@ setTimeout(() => navigate("/"), 100);
             variant="body2"
             textAlign="center"
             mt={2}
-            sx={{ color: "#555" }}
+            sx={{ color: "#666" }}
           >
             Already have an account?{" "}
             <Link
               to="/login"
-              style={{ textDecoration: "none", color: "#1976d2" }}
+              style={{ 
+                textDecoration: "none", 
+                color: "#667eea",
+                fontWeight: 600,
+              }}
             >
               Login here
             </Link>
