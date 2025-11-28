@@ -20,25 +20,24 @@ const JoinTeam = () => {
   const [error, setError] = useState("");
 
   const handleJoinTeam = async () => {
-    if (!code.trim()) {
-      setError("Please enter an invite code");
-      return;
-    }
+  if (!code.trim()) {
+    setError("Please enter an invite code");
+    return;
+  }
 
-    setLoading(true);
-    setError("");
-    
-    try {
-      // Add your API call here to join team
-      // await teamsAPI.joinTeam(code);
-      console.log("Joining team with code:", code);
-      navigate("/teams");
-    } catch (err) {
-      setError("Failed to join team. Please check the invite code.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  setLoading(true);
+  setError("");
+
+  try {
+    const res = await teamsAPI.joinTeam(code);
+    navigate(`/teams/${code}`);
+  } catch (err) {
+    setError("Failed to join team.");
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   return (
     <Box>

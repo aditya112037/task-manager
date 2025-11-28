@@ -20,31 +20,30 @@ const CreateTeam = () => {
   const [error, setError] = useState("");
 
   const handleCreateTeam = async () => {
-    if (!teamName.trim()) {
-      setError("Please enter a team name");
-      return;
-    }
+  if (!teamName.trim()) {
+    setError("Please enter a team name");
+    return;
+  }
 
-    setLoading(true);
-    setError("");
-    
-    try {
-      const response = await teamsAPI.createTeam({
-        name: teamName,
-        description: "", // Add if your backend expects this
-        color: "#1976d2", // Default color
-        icon: "group" // Default icon
-      });
-      
-      console.log("Team created:", response.data);
-      navigate("/teams");
-    } catch (err) {
-      console.error("Create team error:", err);
-      setError(err.response?.data?.message || "Failed to create team. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
+  setLoading(true);
+  setError("");
+
+  try {
+    const response = await teamsAPI.createTeam({
+      name: teamName,
+      description: "",
+      color: "#1976d2",
+      icon: "group"
+    });
+
+    navigate(`/teams/${response.data._id}`);
+  } catch (err) {
+    setError("Failed to create team. Please try again.");
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   return (
     <Box>
