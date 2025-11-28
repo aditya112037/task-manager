@@ -29,9 +29,10 @@ export default function TeamDetails() {
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
 
-  const isAdmin = true; // TEMP, real roles later
+  // TEMP → replace later with real role from backend
+  const isAdmin = true;
 
-  // ------- FETCH TEAM -------
+  // -------- FETCH TEAM --------
   const fetchTeam = async () => {
     try {
       const res = await teamsAPI.getTeam(teamId);
@@ -42,7 +43,7 @@ export default function TeamDetails() {
     setLoadingTeam(false);
   };
 
-  // ------- FETCH TEAM TASKS -------
+  // -------- FETCH TASKS --------
   const fetchTeamTasks = async () => {
     try {
       const res = await teamTasksAPI.getTasks(teamId);
@@ -56,13 +57,13 @@ export default function TeamDetails() {
   useEffect(() => {
     fetchTeam();
     fetchTeamTasks();
-  }, []);
+  }, [teamId]);
 
   if (loadingTeam) return <Typography>Loading team...</Typography>;
 
   return (
     <Box sx={{ p: 2 }}>
-      {/* TEAM HEADER */}
+      {/* ------- TEAM HEADER ------- */}
       <Paper
         sx={{
           p: 3,
@@ -73,7 +74,12 @@ export default function TeamDetails() {
       >
         <Stack direction="row" spacing={2} alignItems="center">
           <Avatar
-            sx={{ width: 70, height: 70, bgcolor: team.color || "primary.main", fontSize: 28 }}
+            sx={{
+              width: 70,
+              height: 70,
+              bgcolor: team.color || "primary.main",
+              fontSize: 28
+            }}
           >
             {team.icon || "T"}
           </Avatar>
@@ -98,19 +104,26 @@ export default function TeamDetails() {
         </Tabs>
       </Paper>
 
-      {/* TAB CONTENT */}
+      {/* ------- TAB CONTENT ------- */}
+
+      {/* OVERVIEW */}
       {tab === 0 && (
         <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Typography variant="h6" fontWeight={700}>Overview</Typography>
-          <Typography color="text.secondary" sx={{ mt: 1 }}>
-            Team stats & activity coming soon.
+          <Typography variant="h6" fontWeight={700}>
+            Overview
+          </Typography>
+          <Typography sx={{ mt: 1 }} color="text.secondary">
+            Team stats coming soon.
           </Typography>
         </Paper>
       )}
 
+      {/* MEMBERS */}
       {tab === 1 && (
         <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Typography variant="h6" fontWeight={700}>Members</Typography>
+          <Typography variant="h6" fontWeight={700}>
+            Members
+          </Typography>
 
           {team.members?.map((m) => (
             <Chip
@@ -123,9 +136,12 @@ export default function TeamDetails() {
         </Paper>
       )}
 
+      {/* TASKS */}
       {tab === 2 && (
         <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Typography variant="h6" fontWeight={700}>Team Tasks</Typography>
+          <Typography variant="h6" fontWeight={700}>
+            Team Tasks
+          </Typography>
 
           {isAdmin && (
             <Button
@@ -139,6 +155,8 @@ export default function TeamDetails() {
 
           {loadingTasks ? (
             <Typography>Loading tasks...</Typography>
+          ) : teamTasks.length === 0 ? (
+            <Typography>No team tasks yet.</Typography>
           ) : (
             teamTasks.map((task) => (
               <TeamTaskItem key={task._id} task={task} />
@@ -147,11 +165,14 @@ export default function TeamDetails() {
         </Paper>
       )}
 
+      {/* SETTINGS */}
       {tab === 3 && (
         <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Typography variant="h6" fontWeight={700}>Settings</Typography>
-          <Typography color="text.secondary" sx={{ mt: 1 }}>
-            Team roles, rename, delete coming soon.
+          <Typography variant="h6" fontWeight={700}>
+            Settings
+          </Typography>
+          <Typography sx={{ mt: 1 }} color="text.secondary">
+            Rename team, manage roles — coming soon.
           </Typography>
         </Paper>
       )}

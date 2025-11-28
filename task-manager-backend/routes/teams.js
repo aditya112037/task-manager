@@ -126,4 +126,32 @@ router.delete("/:teamId", protect, async (req, res) => {
   }
 });
 
+// -------------------------------
+// GET TEAM DETAILS
+// -------------------------------
+router.get("/:teamId/details", protect, async (req, res) => {
+  try {
+    const team = await Team.findById(req.params.teamId)
+      .populate("members.user", "name email photo")
+      .populate("admin", "name email photo");
+
+    if (!team) return res.status(404).json({ message: "Team not found" });
+
+    // Check if user belongs to team
+    const isMember = team.members.some(
+      m => String(m.user._id) === String(req.user._id)
+    );
+
+    if (!isMember)
+      return res.status(403).json({ message: "Not authorized in this team" });
+
+    res.json(team);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+
+
 module.exports = router;
