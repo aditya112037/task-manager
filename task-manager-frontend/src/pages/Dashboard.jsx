@@ -11,7 +11,7 @@ import {
 
 import TaskList from "../components/Task/TaskList";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
-import { teamsAPI } from "../services/teamsAPI";
+import { teamsAPI } from "../services/api";
 
 const Dashboard = () => {
   const theme = useTheme();

@@ -12,7 +12,7 @@ import {
   Chip
 } from "@mui/material";
 import { useParams } from "react-router-dom";
-import { teamsAPI, teamTasksAPI } from "../services/teamsAPI";
+import { teamsAPI, teamTasksAPI } from "../services/api";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import TeamTaskForm from "../components/Teams/TeamTaskForm";
 

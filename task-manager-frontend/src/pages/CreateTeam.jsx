@@ -10,7 +10,7 @@ import {
   Alert,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import { teamsAPI } from "../services/teamsAPI"; // <-- correct import path
+import { teamsAPI } from "../services/api"; // <-- correct import path
 
 const CreateTeam = () => {
   const theme = useTheme();
