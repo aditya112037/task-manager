@@ -5,96 +5,97 @@ const AuthContext = createContext();
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (!context)
-    throw new Error("useAuth must be used within an AuthProvider");
+  if (!context) throw new Error("useAuth must be used within an AuthProvider");
   return context;
 };
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true); // for initial load
+  const [loading, setLoading] = useState(true);
 
-  // ==========================================
-  // FETCH USER PROFILE ONCE (IF TOKEN EXISTS)
-  // ==========================================
+  // =======================================================
+  // LOAD USER IF STORED IN LOCALSTORAGE
+  // (must use "user" object because api.js expects it)
+  // =======================================================
   useEffect(() => {
-    const token = localStorage.getItem("token");
-
-    if (!token) {
+    const saved = localStorage.getItem("user");
+    if (!saved) {
       setLoading(false);
       return;
     }
 
-    const fetchProfile = async () => {
-      try {
-        const response = await authAPI.getProfile();
-        setUser(response.data);
-      } catch (err) {
-        // Token invalid → wipe it
-        localStorage.removeItem("token");
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
-    };
+    const parsed = JSON.parse(saved);
 
-    fetchProfile();
+    // token exists → fetch profile for safety
+    if (parsed?.token) {
+      authAPI
+        .getProfile()
+        .then((res) => {
+          setUser({ ...res.data, token: parsed.token });
+        })
+        .catch(() => {
+          localStorage.removeItem("user");
+          setUser(null);
+        })
+        .finally(() => setLoading(false));
+    } else {
+      setLoading(false);
+    }
   }, []);
 
-  // ==========================================
+  // =======================================================
   // LOGIN
-  // ==========================================
+  // =======================================================
   const login = async (email, password) => {
-    const response = await authAPI.login({ email, password });
+    const res = await authAPI.login({ email, password });
 
-    const { token, ...userData } = response.data;
+    const userObj = {
+      ...res.data.user,
+      token: res.data.token,
+    };
 
-    localStorage.setItem("token", token);
-    setUser(userData);
+    localStorage.setItem("user", JSON.stringify(userObj));
+    setUser(userObj);
 
-    return response.data;
+    return userObj;
   };
 
-  // ==========================================
+  // =======================================================
   // REGISTER
-  // ==========================================
-const register = async (name, email, password) => {
-  const response = await authAPI.register({ name, email, password });
-  const { token, ...userData } = response.data;
+  // =======================================================
+  const register = async (name, email, password) => {
+    const res = await authAPI.register({ name, email, password });
 
-  // Save token FIRST
-  localStorage.setItem("token", token);
+    const userObj = {
+      ...res.data.user,
+      token: res.data.token,
+    };
 
-  // Force re-render BEFORE redirect
-  await new Promise(resolve => {
-    setUser(userData);
-    setTimeout(resolve, 50);
-  });
+    localStorage.setItem("user", JSON.stringify(userObj));
+    setUser(userObj);
 
-  return response.data;
-};
+    return userObj;
+  };
 
-
-  // ==========================================
+  // =======================================================
   // LOGOUT
-  // ==========================================
+  // =======================================================
   const logout = () => {
-    localStorage.removeItem("token");
+    localStorage.removeItem("user");
     setUser(null);
   };
 
-  const value = {
-    user,
-    setUser,
-    login,
-    register,
-    logout,
-    loading, // used to hide UI until auth state is known
-  };
-
   return (
-    <AuthContext.Provider value={value}>
-      {/* Prevent UI flicker while checking token */}
+    <AuthContext.Provider
+      value={{
+        user,
+        setUser,
+        login,
+        register,
+        logout,
+        loading,
+      }}
+    >
       {!loading && children}
     </AuthContext.Provider>
   );

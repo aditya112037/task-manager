@@ -29,25 +29,21 @@ const CreateTeam = () => {
 
     setLoading(true);
     setError("");
-
-    try {
-      const data = {
-        name: teamName,
-        description,
-        color: "#1976d2", // default color
-        icon: "👥",       // default icon
-      };
-
-      await teamsAPI.createTeam(data); // 🔥 real backend call
-
-      navigate("/teams"); // redirect after success
-    } catch (err) {
-      console.error(err);
-      setError("Failed to create team. Please try again.");
-    } finally {
-      setLoading(false);
-    }
+  
+try {
+  const data = {
+    name: teamName,
+    description,
+    color: "#1976d2",
+    icon: "👥",
   };
+
+  await teamsAPI.createTeam(data);
+  navigate("/teams");
+} catch (err) {
+  console.error(err);
+  setError("Failed to create team. Please try again.");
+}};
 
   return (
     <Box>

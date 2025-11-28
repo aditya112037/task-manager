@@ -1,7 +1,7 @@
 import axios from "axios";
 
 // -------------------------
-// BASE API INSTANCE
+// BASE API INSTANCE (THIS IS THE ONE)
 // -------------------------
 const api = axios.create({
   baseURL: process.env.REACT_APP_API_URL,
@@ -56,9 +56,12 @@ export const teamsAPI = {
 // -------------------------
 export const teamTasksAPI = {
   getTasks: (teamId) => api.get(`/api/team-tasks/${teamId}`),
-  createTask: (teamId, data) => api.post(`/api/team-tasks/${teamId}`, data),
-  updateTask: (taskId, data) => api.put(`/api/team-tasks/${taskId}`, data),
-  deleteTask: (taskId) => api.delete(`/api/team-tasks/${taskId}`),
+  createTask: (teamId, data) =>
+    api.post(`/api/team-tasks/${teamId}`, data),
+  updateTask: (taskId, data) =>
+    api.put(`/api/team-tasks/${taskId}`, data),
+  deleteTask: (taskId) =>
+    api.delete(`/api/team-tasks/${taskId}`),
 };
 
 export default api;
