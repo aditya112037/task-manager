@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { authAPI } from "../../services/api";
-import { useAuth } from "..//../context/AuthContext";
+import { useAuth } from "../../context/AuthContext";
 
 export default function OAuthSuccess() {
   const navigate = useNavigate();
@@ -16,21 +16,36 @@ export default function OAuthSuccess() {
       return;
     }
 
-    // Save JWT from backend
-    localStorage.setItem("token", token);
-
-    // 🎯 Fetch user immediately after receiving token
-    authAPI
-      .getProfile()
-      .then((res) => {
-        setUser(res.data);        // update global auth state
-        navigate("/");            // go to dashboard
-      })
-      .catch(() => {
+    const handleOAuthSuccess = async () => {
+      try {
+        // Save token
+        localStorage.setItem("token", token);
+        
+        // Fetch user profile
+        const response = await authAPI.getProfile();
+        const userData = response.data;
+        
+        // Store complete user info with token
+        localStorage.setItem("user", JSON.stringify({
+          token: token,
+          ...userData
+        }));
+        
+        // Update auth context
+        setUser(userData);
+        
+        // Redirect to dashboard
+        navigate("/");
+      } catch (error) {
+        console.error("OAuth failed:", error);
         localStorage.removeItem("token");
+        localStorage.removeItem("user");
         navigate("/login");
-      });
-  }, []);
+      }
+    };
+
+    handleOAuthSuccess();
+  }, [navigate, setUser]);
 
   return (
     <div style={{ textAlign: "center", paddingTop: "50px", fontSize: "20px" }}>

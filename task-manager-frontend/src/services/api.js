@@ -1,7 +1,7 @@
 import axios from "axios";
 
 // -------------------------
-// BASE API INSTANCE (THIS IS THE ONE)
+// BASE API INSTANCE
 // -------------------------
 const api = axios.create({
   baseURL: process.env.REACT_APP_API_URL,
@@ -9,17 +9,33 @@ const api = axios.create({
 });
 
 // -------------------------
-// TOKEN ATTACH
+// TOKEN ATTACH - FIXED
 // -------------------------
 api.interceptors.request.use(
   (config) => {
-    const user = JSON.parse(localStorage.getItem("user"));
-    if (user?.token) {
-      config.headers.Authorization = `Bearer ${user.token}`;
+    const token = localStorage.getItem("token");
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   },
   (error) => Promise.reject(error)
+);
+
+// -------------------------
+// RESPONSE INTERCEPTOR - ADD THIS
+// -------------------------
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Token expired or invalid
+      localStorage.removeItem("token");
+      localStorage.removeItem("user");
+      window.location.href = "/login";
+    }
+    return Promise.reject(error);
+  }
 );
 
 // -------------------------
@@ -42,26 +58,25 @@ export const tasksAPI = {
 };
 
 // -------------------------
-// TEAMS CRUD
+// TEAMS CRUD - FIXED ENDPOINTS
 // -------------------------
 export const teamsAPI = {
   getTeams: () => api.get("/api/teams/my"),
   createTeam: (data) => api.post("/api/teams", data),
   getTeam: (teamId) => api.get(`/api/teams/${teamId}/details`),
   joinTeam: (teamId) => api.post(`/api/teams/${teamId}/join`),
+  // Add this for dashboard team tasks
+  getAllMyTeamTasks: () => api.get("/api/teams/my/tasks"), // You might need to create this endpoint
 };
 
 // -------------------------
-// TEAM TASKS CRUD
+// TEAM TASKS CRUD - FIXED ENDPOINTS
 // -------------------------
 export const teamTasksAPI = {
   getTasks: (teamId) => api.get(`/api/team-tasks/${teamId}`),
-  createTask: (teamId, data) =>
-    api.post(`/api/team-tasks/${teamId}`, data),
-  updateTask: (taskId, data) =>
-    api.put(`/api/team-tasks/${taskId}`, data),
-  deleteTask: (taskId) =>
-    api.delete(`/api/team-tasks/${taskId}`),
+  createTask: (teamId, data) => api.post(`/api/team-tasks/${teamId}`, data),
+  updateTask: (taskId, data) => api.put(`/api/team-tasks/task/${taskId}`, data),
+  deleteTask: (taskId) => api.delete(`/api/team-tasks/task/${taskId}`),
 };
 
 export default api;

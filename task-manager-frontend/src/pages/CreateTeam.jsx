@@ -10,14 +10,12 @@ import {
   Alert,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import { teamsAPI } from "../services/api"; // <-- correct import path
+import { teamsAPI } from "../services/api"; // Make sure this import is correct
 
 const CreateTeam = () => {
   const theme = useTheme();
   const navigate = useNavigate();
-
   const [teamName, setTeamName] = useState("");
-  const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -29,52 +27,43 @@ const CreateTeam = () => {
 
     setLoading(true);
     setError("");
-  
-try {
-  const data = {
-    name: teamName,
-    description,
-    color: "#1976d2",
-    icon: "👥",
+    
+    try {
+      const response = await teamsAPI.createTeam({
+        name: teamName,
+        description: "", // Add if your backend expects this
+        color: "#1976d2", // Default color
+        icon: "group" // Default icon
+      });
+      
+      console.log("Team created:", response.data);
+      navigate("/teams");
+    } catch (err) {
+      console.error("Create team error:", err);
+      setError(err.response?.data?.message || "Failed to create team. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
-
-  await teamsAPI.createTeam(data);
-  navigate("/teams");
-} catch (err) {
-  console.error(err);
-  setError("Failed to create team. Please try again.");
-}};
 
   return (
     <Box>
-      {/* Header */}
       <Box sx={{ mb: 4 }}>
-        <Typography
-          variant="h4"
-          fontWeight="bold"
-          sx={{ color: theme.palette.text.primary, mb: 1 }}
-        >
+        <Typography variant="h4" fontWeight="bold" sx={{ color: theme.palette.text.primary, mb: 1 }}>
           Create New Team
         </Typography>
-        <Typography
-          variant="body1"
-          sx={{ color: theme.palette.text.secondary }}
-        >
+        <Typography variant="body1" sx={{ color: theme.palette.text.secondary }}>
           Create a new team to start collaborating
         </Typography>
       </Box>
 
-      {/* Create Form */}
       <Container maxWidth="sm" sx={{ px: { xs: 2, sm: 3 } }}>
         <Paper
           elevation={1}
           sx={{
             p: 4,
             backgroundColor: theme.palette.background.paper,
-            border:
-              theme.palette.mode === "dark"
-                ? "1px solid rgba(255,255,255,0.1)"
-                : "1px solid rgba(0,0,0,0.1)",
+            border: theme.palette.mode === 'dark' ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)',
             borderRadius: 2,
           }}
         >
@@ -90,17 +79,6 @@ try {
             value={teamName}
             onChange={(e) => setTeamName(e.target.value)}
             placeholder="Enter your team name"
-            sx={{ mb: 3 }}
-          />
-
-          <TextField
-            fullWidth
-            label="Description (optional)"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Describe your team"
-            multiline
-            rows={3}
             sx={{ mb: 3 }}
           />
 
