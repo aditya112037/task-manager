@@ -38,11 +38,11 @@ const Dashboard = () => {
   };
 
   return (
-    <Box>
+    <Box sx={{ pt: 1 }}> {/* Reduced top padding */}
       <Typography
         variant="h4"
         fontWeight="bold"
-        sx={{ mb: 3, color: theme.palette.text.primary }}
+        sx={{ mb: 2, color: theme.palette.text.primary }} // Reduced mb from 3 to 2
       >
         Dashboard
       </Typography>
@@ -53,7 +53,7 @@ const Dashboard = () => {
         sx={{
           backgroundColor: theme.palette.background.paper,
           borderRadius: 2,
-          mb: 3,
+          mb: 2, // Reduced from 3 to 2
           p: 1,
           border: theme.palette.mode === 'dark' ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)',
         }}
@@ -82,9 +82,9 @@ const Dashboard = () => {
 
       {/* TEAM TASKS */}
       {tab === 1 && (
-        <Box sx={{ mt: 1 }}>
+        <Box>
           {loading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 5 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}> {/* Reduced py */}
               <CircularProgress />
             </Box>
           ) : teamTasks.length > 0 ? (
@@ -100,8 +100,7 @@ const Dashboard = () => {
               elevation={1}
               sx={{
                 textAlign: "center",
-                p: 4,
-                mt: 2,
+                p: 3, // Reduced from 4 to 3
                 backgroundColor: theme.palette.background.paper,
                 border: theme.palette.mode === 'dark' ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)',
               }}

@@ -46,8 +46,8 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
           toggleSidebar={toggleSidebar}
         />
 
-        {/* Page Content */}
-        <Box sx={{ mt: 8, p: 3 }}>
+        {/* Page Content - REMOVED mt:8 and reduced padding */}
+        <Box sx={{ p: 2 }}>
           {children}
         </Box>
       </Box>

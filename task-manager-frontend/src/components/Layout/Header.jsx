@@ -31,9 +31,14 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
           easing: theme.transitions.easing.sharp,
           duration: theme.transitions.duration.enteringScreen,
         }),
+        height: '60px', // Reduced header height
       }}
     >
-      <Toolbar sx={{ display: "flex", justifyContent: "space-between" }}>
+      <Toolbar sx={{ 
+        display: "flex", 
+        justifyContent: "space-between",
+        minHeight: '60px !important', // Reduced toolbar height
+      }}>
         {/* Sidebar Toggle Button for Mobile/Alternative */}
         <IconButton
           color="inherit"
@@ -60,12 +65,17 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
             {darkMode ? <LightModeIcon /> : <DarkModeIcon />}
           </IconButton>
 
-          <Typography sx={{ color: "white", display: { xs: 'none', sm: 'block' } }}>
+          <Typography sx={{ 
+            color: "white", 
+            display: { xs: 'none', sm: 'block' },
+            fontSize: '0.9rem' // Slightly smaller text
+          }}>
             Welcome, {user?.name}
           </Typography>
 
           <Button
             variant="outlined"
+            size="small" // Smaller button
             sx={{ 
               color: "white", 
               borderColor: "white",
