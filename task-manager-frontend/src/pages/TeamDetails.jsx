@@ -15,6 +15,8 @@ import { useParams } from "react-router-dom";
 import { teamsAPI, teamTasksAPI } from "../services/api";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import TeamTaskForm from "../components/Teams/TeamTaskForm";
+import { useAuth } from "../context/AuthContext";
+
 
 export default function TeamDetails() {
   const { teamId } = useParams();
@@ -28,9 +30,11 @@ export default function TeamDetails() {
   const [loadingTasks, setLoadingTasks] = useState(true);
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
+  const { user } = useAuth();
+  
 
   // TEMP → replace later with real role from backend
-  const isAdmin = true;
+  const isAdmin = team?.admin === user?._id;
 
   // -------- FETCH TEAM --------
   const fetchTeam = async () => {
