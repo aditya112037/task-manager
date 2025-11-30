@@ -26,10 +26,10 @@ const Dashboard = () => {
     fetchTeamTasks();
   }, []);
 
-  const fetchTeamTasks = async () => {
+const fetchTeamTasks = async () => {
   try {
-    const res = await teamTasksAPI.getMyTeamTasks();
-    setTeamTasks(res.data);
+    const response = await teamTasksAPI.getAllMyTeamTasks();
+    setTeamTasks(response.data);
   } catch (err) {
     console.error("Error loading team tasks:", err);
   } finally {

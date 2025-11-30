@@ -148,32 +148,75 @@ export default function TeamDetails() {
 
       {/* TASKS */}
       {tab === 2 && (
-        <Paper sx={{ p: 3, borderRadius: 3, mt: 2 }}> {/* Added mt:2 for more spacing */}
-          <Typography variant="h6" fontWeight={700}>
-            Team Tasks
-          </Typography>
+  <Paper sx={{ p: 3, borderRadius: 3, mt: 2 }}>
+    <Typography variant="h6" fontWeight={700}>
+      Team Tasks
+    </Typography>
 
-          {isAdmin && (
-            <Button
-              variant="contained"
-              sx={{ mt: 2, mb: 2, borderRadius: 2 }}
-              onClick={() => setShowTaskForm(true)}
-            >
-              Create Task
-            </Button>
-          )}
+    {/* CREATE BUTTON (Admin Only) */}
+    {isAdmin && (
+      <Button
+        variant="contained"
+        sx={{ mt: 2, mb: 2, borderRadius: 2 }}
+        onClick={() => {
+          setEditingTask(null);
+          setShowTaskForm(true);
+        }}
+      >
+        Create Task
+      </Button>
+    )}
 
-          {loadingTasks ? (
-            <Typography>Loading tasks...</Typography>
-          ) : teamTasks.length === 0 ? (
-            <Typography>No team tasks yet.</Typography>
-          ) : (
-            teamTasks.map((task) => (
-              <TeamTaskItem key={task._id} task={task} />
-            ))
-          )}
-        </Paper>
-      )}
+    {/* LOADING */}
+    {loadingTasks ? (
+      <Typography>Loading tasks...</Typography>
+    ) : teamTasks.length === 0 ? (
+      <Typography>No team tasks yet.</Typography>
+    ) : (
+      teamTasks.map((task) => (
+        <TeamTaskItem
+          key={task._id}
+          task={task}
+          onEdit={(t) => {
+            setEditingTask(t);
+            setShowTaskForm(true);
+          }}
+          onDelete={async () => {
+            await teamTasksAPI.deleteTask(task._id);
+            fetchTeamTasks();
+          }}
+        />
+      ))
+    )}
+
+    {/* TASK FORM MODAL */}
+    {showTaskForm && (
+      <TeamTaskForm
+        open={showTaskForm}
+        task={editingTask}
+        onCancel={() => setShowTaskForm(false)}
+        onSubmit={async (formData) => {
+          try {
+            if (editingTask) {
+              // UPDATE
+              await teamTasksAPI.updateTask(editingTask._id, formData);
+            } else {
+              // CREATE
+              await teamTasksAPI.createTask(teamId, formData);
+            }
+
+            await fetchTeamTasks();
+            setShowTaskForm(false);
+            setEditingTask(null);
+          } catch (err) {
+            console.error("Task save error:", err);
+          }
+        }}
+      />
+    )}
+  </Paper>
+)}
+
 
       {/* SETTINGS */}
       {tab === 3 && (
