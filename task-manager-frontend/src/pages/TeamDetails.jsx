@@ -32,7 +32,8 @@ export default function TeamDetails() {
   const [editingTask, setEditingTask] = useState(null);
 
   // Real Admin Check — user MUST match team.admin
-  const isAdmin = team?.admin === user?._id;
+  const isAdmin = team?.admin?._id === user?._id;
+
 
   // -------- FETCH TEAM --------
   const fetchTeam = async () => {
