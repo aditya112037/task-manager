@@ -20,6 +20,27 @@ router.get("/:teamId", protect, async (req, res) => {
   }
 });
 
+// GET ALL TEAM TASKS FOR LOGGED-IN USER
+router.get("/my/all", protect, async (req, res) => {
+  try {
+    const tasks = await TTask.find({})
+      .populate("team")
+      .populate("createdBy", "name email")
+      .lean();
+
+    // Filter tasks by teams where user is a member
+    const filtered = tasks.filter(t =>
+      t.team.members.some(m => String(m.user) === String(req.user._id))
+    );
+
+    res.json(filtered);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error loading team tasks" });
+  }
+});
+
+
 // --------------------------------------------------
 // CREATE TASK — ADMIN ONLY
 // --------------------------------------------------

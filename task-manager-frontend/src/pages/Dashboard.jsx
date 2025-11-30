@@ -27,15 +27,15 @@ const Dashboard = () => {
   }, []);
 
   const fetchTeamTasks = async () => {
-    try {
-      const response = await teamTasksAPI.getTasks(teamId);
-      setTeamTasks(response.data);
-    } catch (err) {
-      console.error("Error loading team tasks:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
+  try {
+    const res = await teamTasksAPI.getMyTeamTasks();
+    setTeamTasks(res.data);
+  } catch (err) {
+    console.error("Error loading team tasks:", err);
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <Box sx={{ pt: 1 }}> {/* Reduced top padding */}
