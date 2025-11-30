@@ -9,19 +9,19 @@ import {
   Divider,
   Stack,
   Button,
-  Chip
+  Chip,
 } from "@mui/material";
+
 import { useParams } from "react-router-dom";
 import { teamsAPI, teamTasksAPI } from "../services/api";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import TeamTaskForm from "../components/Teams/TeamTaskForm";
 import { useAuth } from "../context/AuthContext";
 
-
 export default function TeamDetails() {
   const { teamId } = useParams();
+  const { user } = useAuth();
 
-  // --- STATE ---
   const [tab, setTab] = useState(0);
   const [team, setTeam] = useState(null);
   const [loadingTeam, setLoadingTeam] = useState(true);
@@ -30,10 +30,8 @@ export default function TeamDetails() {
   const [loadingTasks, setLoadingTasks] = useState(true);
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
-  const { user } = useAuth();
-  
 
-  // TEMP → replace later with real role from backend
+  // Real Admin Check — user MUST match team.admin
   const isAdmin = team?.admin === user?._id;
 
   // -------- FETCH TEAM --------
@@ -42,18 +40,18 @@ export default function TeamDetails() {
       const res = await teamsAPI.getTeam(teamId);
       setTeam(res.data);
     } catch (err) {
-      console.error(err);
+      console.error("Team load error:", err);
     }
     setLoadingTeam(false);
   };
 
-  // -------- FETCH TASKS --------
+  // -------- FETCH TEAM TASKS --------
   const fetchTeamTasks = async () => {
     try {
       const res = await teamTasksAPI.getTasks(teamId);
       setTeamTasks(res.data);
     } catch (err) {
-      console.error(err);
+      console.error("Task load error:", err);
     }
     setLoadingTasks(false);
   };
@@ -65,15 +63,17 @@ export default function TeamDetails() {
 
   if (loadingTeam) return <Typography>Loading team...</Typography>;
 
+  const inviteURL = `${window.location.origin}/join/${team._id}`;
+
   return (
-  <Box sx={{ px: 2, pt: { xs: 12, sm: 10 } }}>
-      {/* ------- TEAM HEADER ------- */}
+    <Box sx={{ px: 2, pt: { xs: 10, sm: 8 } }}>
+      {/* HEADER */}
       <Paper
         sx={{
           p: 3,
           borderRadius: 3,
-          mb: 3, // This creates space between header and content
-          boxShadow: "0 4px 15px rgba(0,0,0,0.08)"
+          mb: 3,
+          boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
         }}
       >
         <Stack direction="row" spacing={2} alignItems="center">
@@ -82,7 +82,7 @@ export default function TeamDetails() {
               width: 70,
               height: 70,
               bgcolor: team.color || "primary.main",
-              fontSize: 28
+              fontSize: 28,
             }}
           >
             {team.icon || "T"}
@@ -100,7 +100,7 @@ export default function TeamDetails() {
 
         <Divider sx={{ my: 2 }} />
 
-        <Tabs value={tab} onChange={(e, v) => setTab(v)} sx={{ mb: 1 }}>
+        <Tabs value={tab} onChange={(e, v) => setTab(v)}>
           <Tab label="Overview" />
           <Tab label="Members" />
           <Tab label="Tasks" />
@@ -108,25 +108,20 @@ export default function TeamDetails() {
         </Tabs>
       </Paper>
 
-      {/* ------- TAB CONTENT ------- */}
-
       {/* OVERVIEW */}
       {tab === 0 && (
-        <Paper sx={{ p: 3, borderRadius: 3, mt: 2 }}> {/* Added mt:2 for more spacing */}
+        <Paper sx={{ p: 3, borderRadius: 3 }}>
           <Typography variant="h6" fontWeight={700}>
             Overview
           </Typography>
           <Typography color="text.secondary" sx={{ mt: 1 }}>
-            Team stats coming soon.
+            Team statistics and analytics will appear here soon.
           </Typography>
-          
-          {/* Copy Invite Link Button in Overview Tab */}
+
           <Button
             variant="outlined"
             sx={{ mt: 3 }}
-            onClick={() =>
-              navigator.clipboard.writeText(`${window.location.origin}/join/${team._id}`)
-            }
+            onClick={() => navigator.clipboard.writeText(inviteURL)}
           >
             Copy Invite Link
           </Button>
@@ -135,7 +130,7 @@ export default function TeamDetails() {
 
       {/* MEMBERS */}
       {tab === 1 && (
-        <Paper sx={{ p: 3, borderRadius: 3, mt: 2 }}> {/* Added mt:2 for more spacing */}
+        <Paper sx={{ p: 3, borderRadius: 3 }}>
           <Typography variant="h6" fontWeight={700}>
             Members
           </Typography>
@@ -144,7 +139,7 @@ export default function TeamDetails() {
             <Chip
               key={m.user._id}
               label={m.user.name}
-              sx={{ mr: 1, mt: 1 }}
+              sx={{ mt: 1, mr: 1 }}
               color={m.role === "admin" ? "primary" : "default"}
             />
           ))}
@@ -153,117 +148,102 @@ export default function TeamDetails() {
 
       {/* TASKS */}
       {tab === 2 && (
-  <Paper sx={{ p: 3, borderRadius: 3, mt: 2 }}>
-    <Typography variant="h6" fontWeight={700}>
-      Team Tasks
-    </Typography>
+        <Paper sx={{ p: 3, borderRadius: 3 }}>
+          <Typography variant="h6" fontWeight={700}>
+            Team Tasks
+          </Typography>
 
-    {/* CREATE BUTTON (Admin Only) */}
-    {isAdmin && (
-      <Button
-        variant="contained"
-        sx={{ mt: 2, mb: 2, borderRadius: 2 }}
-        onClick={() => {
-          setEditingTask(null);
-          setShowTaskForm(true);
-        }}
-      >
-        Create Task
-      </Button>
-    )}
+          {isAdmin && (
+            <Button
+              variant="contained"
+              sx={{ mt: 2, mb: 2 }}
+              onClick={() => {
+                setEditingTask(null);
+                setShowTaskForm(true);
+              }}
+            >
+              Create Task
+            </Button>
+          )}
 
-    {/* LOADING */}
-    {loadingTasks ? (
-      <Typography>Loading tasks...</Typography>
-    ) : teamTasks.length === 0 ? (
-      <Typography>No team tasks yet.</Typography>
-    ) : (
-      teamTasks.map((task) => (
-        <TeamTaskItem
-          key={task._id}
-          task={task}
-          onEdit={(t) => {
-            setEditingTask(t);
-            setShowTaskForm(true);
-          }}
-          onDelete={async () => {
-            await teamTasksAPI.deleteTask(task._id);
-            fetchTeamTasks();
-          }}
-        />
-      ))
-    )}
+          {loadingTasks ? (
+            <Typography>Loading tasks...</Typography>
+          ) : teamTasks.length === 0 ? (
+            <Typography>No team tasks yet.</Typography>
+          ) : (
+            teamTasks.map((task) => (
+              <TeamTaskItem
+                key={task._id}
+                task={task}
+                onEdit={() => {
+                  setEditingTask(task);
+                  setShowTaskForm(true);
+                }}
+                onDelete={async () => {
+                  await teamTasksAPI.deleteTask(task._id);
+                  fetchTeamTasks();
+                }}
+                isAdmin={isAdmin}
+              />
+            ))
+          )}
 
-    {/* TASK FORM MODAL */}
-    {showTaskForm && (
-      <TeamTaskForm
-        open={showTaskForm}
-        task={editingTask}
-        onCancel={() => setShowTaskForm(false)}
-        onSubmit={async (formData) => {
-          try {
-            if (editingTask) {
-              // UPDATE
-              await teamTasksAPI.updateTask(editingTask._id, formData);
-            } else {
-              // CREATE
-              await teamTasksAPI.createTask(teamId, formData);
-            }
+          {/* Modal Form */}
+          {showTaskForm && (
+            <TeamTaskForm
+              open={showTaskForm}
+              task={editingTask}
+              onCancel={() => setShowTaskForm(false)}
+              onSubmit={async (formData) => {
+                try {
+                  if (editingTask) {
+                    await teamTasksAPI.updateTask(editingTask._id, formData);
+                  } else {
+                    await teamTasksAPI.createTask(teamId, formData);
+                  }
 
-            await fetchTeamTasks();
-            setShowTaskForm(false);
-            setEditingTask(null);
-          } catch (err) {
-            console.error("Task save error:", err);
-          }
-        }}
-      />
-    )}
-  </Paper>
-)}
-
+                  await fetchTeamTasks();
+                  setShowTaskForm(false);
+                  setEditingTask(null);
+                } catch (err) {
+                  console.error("Task save error:", err);
+                }
+              }}
+            />
+          )}
+        </Paper>
+      )}
 
       {/* SETTINGS */}
       {tab === 3 && (
-        <Paper sx={{ p: 3, borderRadius: 3, mt: 2 }}> {/* Added mt:2 for more spacing */}
-          <Typography variant="h6" fontWeight={700}>Settings</Typography>
+        <Paper sx={{ p: 3, borderRadius: 3 }}>
+          <Typography variant="h6" fontWeight={700}>
+            Settings
+          </Typography>
 
-          {/* INVITE LINK SECTION */}
-          <Box sx={{ mt: 3 }}>
-            <Typography variant="subtitle1" fontWeight={600}>
-              Invite Members
-            </Typography>
+          <Typography variant="subtitle1" sx={{ mt: 2 }}>
+            Invite Members
+          </Typography>
 
-            <Box
-              sx={{
-                mt: 1,
-                p: 2,
-                borderRadius: 2,
-                border: "1px solid rgba(255,255,255,0.1)",
-                display: "flex",
-                alignItems: "center",
-                gap: 2,
-                bgcolor: "background.paper",
-              }}
+          <Box
+            sx={{
+              mt: 1,
+              p: 2,
+              borderRadius: 2,
+              border: "1px solid rgba(255,255,255,0.15)",
+              display: "flex",
+              alignItems: "center",
+              gap: 2,
+            }}
+          >
+            <Typography sx={{ flexGrow: 1 }}>{inviteURL}</Typography>
+
+            <Button
+              variant="contained"
+              onClick={() => navigator.clipboard.writeText(inviteURL)}
             >
-              <Typography
-                variant="body2"
-                sx={{ flexGrow: 1, wordBreak: "break-all" }}
-              >
-                {`${window.location.origin}/join/${team._id}`}
-              </Typography>
-
-              <Button
-                variant="contained"
-                onClick={() => {
-                  navigator.clipboard.writeText(
-                    `${window.location.origin}/join/${team._id}`
-                  );
-                }}
-              >
-                Copy Link
-              </Button>
-            </Box>
+              Copy Link
+            </Button>
           </Box>
         </Paper>
       )}
