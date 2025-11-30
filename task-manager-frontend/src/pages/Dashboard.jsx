@@ -11,7 +11,7 @@ import {
 
 import TaskList from "../components/Task/TaskList";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
-import { teamsAPI } from "../services/api";
+import { teamTasksAPI } from "../services/api";
 
 const Dashboard = () => {
   const theme = useTheme();
@@ -28,7 +28,7 @@ const Dashboard = () => {
 
   const fetchTeamTasks = async () => {
     try {
-      const response = await teamsAPI.getAllMyTeamTasks();
+      const response = await teamTasksAPI.getTasks(teamId);
       setTeamTasks(response.data);
     } catch (err) {
       console.error("Error loading team tasks:", err);
