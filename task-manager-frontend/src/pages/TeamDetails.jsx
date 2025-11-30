@@ -14,6 +14,7 @@ import {
 import { useParams } from "react-router-dom";
 import { teamsAPI, teamTasksAPI } from "../services/api";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
+import TeamTaskForm from "../components/Teams/TeamTaskForm";
 
 export default function TeamDetails() {
   const { teamId } = useParams();
