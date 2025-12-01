@@ -149,71 +149,80 @@ export default function TeamDetails() {
 
       {/* TASKS */}
       {tab === 2 && (
-        <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Typography variant="h6" fontWeight={700}>
-            Team Tasks
-          </Typography>
+  <Paper sx={{ p: 3, borderRadius: 3, mt: 2 }}>
+    <Typography variant="h6" fontWeight={700}>
+      Team Tasks
+    </Typography>
 
-          {isAdmin && (
-            <Button
-              variant="contained"
-              sx={{ mt: 2, mb: 2 }}
-              onClick={() => {
-                setEditingTask(null);
-                setShowTaskForm(true);
-              }}
-            >
-              Create Task
-            </Button>
-          )}
+    {/* CREATE BUTTON (Admin Only) */}
+    {isAdmin && (
+      <Button
+        variant="contained"
+        sx={{ mt: 2, mb: 2, borderRadius: 2 }}
+        onClick={() => {
+          setEditingTask(null);
+          setShowTaskForm(true);
+        }}
+      >
+        Create Task
+      </Button>
+    )}
 
-          {loadingTasks ? (
-            <Typography>Loading tasks...</Typography>
-          ) : teamTasks.length === 0 ? (
-            <Typography>No team tasks yet.</Typography>
-          ) : (
-            teamTasks.map((task) => (
-              <TeamTaskItem
-                key={task._id}
-                task={task}
-                onEdit={() => {
-                  setEditingTask(task);
-                  setShowTaskForm(true);
-                }}
-                onDelete={async () => {
-                  await teamTasksAPI.deleteTask(task._id);
-                  fetchTeamTasks();
-                }}
-                isAdmin={isAdmin}
-              />
-            ))
-          )}
+    {/* LOADING */}
+    {loadingTasks ? (
+      <Typography>Loading tasks...</Typography>
+    ) : teamTasks.length === 0 ? (
+      <Typography>No team tasks yet.</Typography>
+    ) : (
+      teamTasks.map((task) => (
+        <TeamTaskItem
+          key={task._id}
+          task={task}
+          canEdit={isAdmin}     // gives admin edit/delete button
+          onEdit={() => {
+            setEditingTask(task);
+            setShowTaskForm(true);
+          }}
+          onDelete={async () => {
+            try {
+              await teamTasksAPI.deleteTask(task._id);
+              await fetchTeamTasks();
+            } catch (err) {
+              console.error("Delete error:", err);
+            }
+          }}
+        />
+      ))
+    )}
 
-          {/* Modal Form */}
-          {showTaskForm && (
-            <TeamTaskForm
-              open={showTaskForm}
-              task={editingTask}
-              onCancel={() => setShowTaskForm(false)}
-              onSubmit={async (formData) => {
-                try {
-                  if (editingTask) {
-                    await teamTasksAPI.updateTask(editingTask._id, formData);
-                  } else {
-                    await teamTasksAPI.createTask(teamId, formData);
-                  }
+    {/* TASK FORM MODAL */}
+    {showTaskForm && (
+      <TeamTaskForm
+        open={showTaskForm}
+        task={editingTask}
+        onCancel={() => setShowTaskForm(false)}
+        onSubmit={async (formData) => {
+          try {
+            if (editingTask) {
+              // UPDATE
+              await teamTasksAPI.updateTask(editingTask._id, formData);
+            } else {
+              // CREATE
+              await teamTasksAPI.createTask(teamId, formData);
+            }
 
-                  await fetchTeamTasks();
-                  setShowTaskForm(false);
-                  setEditingTask(null);
-                } catch (err) {
-                  console.error("Task save error:", err);
-                }
-              }}
-            />
-          )}
-        </Paper>
-      )}
+            await fetchTeamTasks();
+            setShowTaskForm(false);
+            setEditingTask(null);
+          } catch (err) {
+            console.error("Task save error:", err);
+          }
+        }}
+      />
+    )}
+  </Paper>
+)}
+
 
       {/* SETTINGS */}
       {tab === 3 && (

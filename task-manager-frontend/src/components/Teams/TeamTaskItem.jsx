@@ -170,6 +170,20 @@ export default function TeamTaskItem({ task, isAdmin, onEdit, onDelete, onStatus
               onStatusChange && onStatusChange(task._id, "completed")
             }
           />
+          <Button
+  onClick={onEdit}
+  disabled={!canEdit}
+>
+  Edit
+</Button>
+
+<Button
+  color="error"
+  onClick={onDelete}
+  disabled={!canEdit}
+>
+  Delete
+</Button>
         </Stack>
       </CardContent>
     </Card>
