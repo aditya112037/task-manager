@@ -31,41 +31,52 @@ export default function TeamDetails() {
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
 
-  // true admin check
-  const isAdmin = team?.admin?._id === user?._id;
+  // Real Admin Check — user MUST match team.admin (works whether admin is populated or just id)
+  const isAdmin =
+    !!team &&
+    ((team.admin && team.admin._id && team.admin._id === user?._id) ||
+      (team.admin && String(team.admin) === String(user?._id)));
 
+  // -------- FETCH TEAM --------
   const fetchTeam = async () => {
+    setLoadingTeam(true);
     try {
       const res = await teamsAPI.getTeam(teamId);
       setTeam(res.data);
     } catch (err) {
       console.error("Team load error:", err);
+    } finally {
+      setLoadingTeam(false);
     }
-    setLoadingTeam(false);
   };
 
+  // -------- FETCH TEAM TASKS --------
   const fetchTeamTasks = async () => {
+    setLoadingTasks(true);
     try {
       const res = await teamTasksAPI.getTasks(teamId);
       setTeamTasks(res.data);
     } catch (err) {
       console.error("Task load error:", err);
+    } finally {
+      setLoadingTasks(false);
     }
-    setLoadingTasks(false);
   };
 
   useEffect(() => {
     fetchTeam();
     fetchTeamTasks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamId]);
 
   if (loadingTeam) return <Typography>Loading team...</Typography>;
+  if (!team) return <Typography>Team not found.</Typography>;
 
   const inviteURL = `${window.location.origin}/join/${team._id}`;
 
   return (
     <Box sx={{ px: 2, pt: { xs: 10, sm: 8 } }}>
-      {/* TEAM HEADER */}
+      {/* HEADER */}
       <Paper
         sx={{
           p: 3,
@@ -112,8 +123,8 @@ export default function TeamDetails() {
           <Typography variant="h6" fontWeight={700}>
             Overview
           </Typography>
-          <Typography sx={{ mt: 1 }} color="text.secondary">
-            Team statistics coming soon.
+          <Typography color="text.secondary" sx={{ mt: 1 }}>
+            Team statistics and analytics will appear here soon.
           </Typography>
 
           <Button
@@ -135,26 +146,27 @@ export default function TeamDetails() {
 
           {team.members?.map((m) => (
             <Chip
-              key={m.user._id}
-              label={m.user.name}
-              sx={{ mr: 1, mt: 1 }}
+              key={m.user._id || m.user}
+              label={m.user?.name ?? (m.userName || "User")}
+              sx={{ mt: 1, mr: 1 }}
               color={m.role === "admin" ? "primary" : "default"}
             />
           ))}
         </Paper>
       )}
 
-      {/* TASKS TAB */}
+      {/* TASKS */}
       {tab === 2 && (
-        <Paper sx={{ p: 3, borderRadius: 3 }}>
+        <Paper sx={{ p: 3, borderRadius: 3, mt: 2 }}>
           <Typography variant="h6" fontWeight={700}>
             Team Tasks
           </Typography>
 
+          {/* CREATE BUTTON (Admin Only) */}
           {isAdmin && (
             <Button
               variant="contained"
-              sx={{ mt: 2, mb: 2 }}
+              sx={{ mt: 2, mb: 2, borderRadius: 2 }}
               onClick={() => {
                 setEditingTask(null);
                 setShowTaskForm(true);
@@ -164,6 +176,7 @@ export default function TeamDetails() {
             </Button>
           )}
 
+          {/* LOADING */}
           {loadingTasks ? (
             <Typography>Loading tasks...</Typography>
           ) : teamTasks.length === 0 ? (
@@ -173,15 +186,15 @@ export default function TeamDetails() {
               <TeamTaskItem
                 key={task._id}
                 task={task}
-                canEdit={isAdmin}
+                canEdit={isAdmin} // pass canEdit flag
                 onEdit={() => {
                   setEditingTask(task);
                   setShowTaskForm(true);
                 }}
-                onDelete={async () => {
+                onDelete={async (id) => {
                   try {
-                    await teamTasksAPI.deleteTask(task._id);
-                    fetchTeamTasks();
+                    await teamTasksAPI.deleteTask(id);
+                    await fetchTeamTasks();
                   } catch (err) {
                     console.error("Delete error:", err);
                   }
@@ -189,16 +202,16 @@ export default function TeamDetails() {
                 onStatusChange={async (id, status) => {
                   try {
                     await teamTasksAPI.updateTask(id, { status });
-                    fetchTeamTasks();
+                    await fetchTeamTasks();
                   } catch (err) {
-                    console.error("Status update error:", err);
+                    console.error("Status change error:", err);
                   }
                 }}
               />
             ))
           )}
 
-          {/* TASK FORM */}
+          {/* TASK FORM MODAL */}
           {showTaskForm && (
             <TeamTaskForm
               open={showTaskForm}
@@ -207,15 +220,18 @@ export default function TeamDetails() {
               onSubmit={async (formData) => {
                 try {
                   if (editingTask) {
+                    // UPDATE
                     await teamTasksAPI.updateTask(editingTask._id, formData);
                   } else {
+                    // CREATE
                     await teamTasksAPI.createTask(teamId, formData);
                   }
-                  fetchTeamTasks();
+
+                  await fetchTeamTasks();
                   setShowTaskForm(false);
                   setEditingTask(null);
                 } catch (err) {
-                  console.error("Save error:", err);
+                  console.error("Task save error:", err);
                 }
               }}
             />
@@ -245,9 +261,7 @@ export default function TeamDetails() {
               gap: 2,
             }}
           >
-            <Typography sx={{ flexGrow: 1, wordBreak: "break-all" }}>
-              {inviteURL}
-            </Typography>
+            <Typography sx={{ flexGrow: 1 }}>{inviteURL}</Typography>
 
             <Button
               variant="contained"

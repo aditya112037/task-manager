@@ -8,13 +8,20 @@ import {
   Box,
   Stack,
   Tooltip,
+  Button,
 } from "@mui/material";
 
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { useTheme } from "@mui/material/styles";
 
-export default function TeamTaskItem({ task, isAdmin, onEdit, onDelete, onStatusChange }) {
+export default function TeamTaskItem({
+  task,
+  canEdit = false,
+  onEdit,
+  onDelete,
+  onStatusChange,
+}) {
   const theme = useTheme();
 
   const priorityColors = {
@@ -24,14 +31,18 @@ export default function TeamTaskItem({ task, isAdmin, onEdit, onDelete, onStatus
   };
 
   const statusColors = {
-    "todo": "default",
+    todo: "default",
     "in-progress": "info",
-    "completed": "success",
+    completed: "success",
   };
 
   const formatDate = (dateString) => {
     if (!dateString) return "No due date";
-    return new Date(dateString).toLocaleDateString();
+    try {
+      return new Date(dateString).toLocaleDateString();
+    } catch {
+      return String(dateString);
+    }
   };
 
   return (
@@ -61,6 +72,7 @@ export default function TeamTaskItem({ task, isAdmin, onEdit, onDelete, onStatus
             display: "flex",
             justifyContent: "space-between",
             mb: 1,
+            alignItems: "center",
           }}
         >
           <Typography variant="h6" fontWeight={700}>
@@ -68,16 +80,28 @@ export default function TeamTaskItem({ task, isAdmin, onEdit, onDelete, onStatus
           </Typography>
 
           {/* ADMIN CONTROLS */}
-          {isAdmin && (
+          {canEdit && (
             <Box>
               <Tooltip title="Edit">
-                <IconButton color="primary" onClick={() => onEdit(task)}>
+                <IconButton
+                  color="primary"
+                  onClick={() => {
+                    if (onEdit) onEdit(task);
+                  }}
+                  size="large"
+                >
                   <EditIcon />
                 </IconButton>
               </Tooltip>
 
               <Tooltip title="Delete">
-                <IconButton color="error" onClick={() => onDelete(task._id)}>
+                <IconButton
+                  color="error"
+                  onClick={() => {
+                    if (onDelete) onDelete(task._id);
+                  }}
+                  size="large"
+                >
                   <DeleteIcon />
                 </IconButton>
               </Tooltip>
@@ -96,14 +120,16 @@ export default function TeamTaskItem({ task, isAdmin, onEdit, onDelete, onStatus
         <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
           <Chip
             label={task.priority}
-            color={priorityColors[task.priority]}
+            color={priorityColors[task.priority] ?? "default"}
             size="small"
+            sx={{ textTransform: "capitalize" }}
           />
 
           <Chip
-            label={task.status.replace("-", " ")}
-            color={statusColors[task.status]}
+            label={(task.status || "").replace("-", " ")}
+            color={statusColors[task.status] ?? "default"}
             size="small"
+            sx={{ textTransform: "capitalize" }}
           />
 
           <Chip
@@ -115,26 +141,33 @@ export default function TeamTaskItem({ task, isAdmin, onEdit, onDelete, onStatus
 
         {/* STATUS CHANGE BUTTONS */}
         <Stack direction="row" spacing={1}>
-          <Chip
-            label="To Do"
-            clickable
-            color={task.status === "todo" ? "primary" : "default"}
-            onClick={() => onStatusChange(task._id, "todo")}
-          />
+          <Button
+            variant={task.status === "todo" ? "contained" : "outlined"}
+            size="small"
+            onClick={() => onStatusChange && onStatusChange(task._id, "todo")}
+          >
+            To Do
+          </Button>
 
-          <Chip
-            label="In Progress"
-            clickable
-            color={task.status === "in-progress" ? "info" : "default"}
-            onClick={() => onStatusChange(task._id, "in-progress")}
-          />
+          <Button
+            variant={task.status === "in-progress" ? "contained" : "outlined"}
+            size="small"
+            onClick={() =>
+              onStatusChange && onStatusChange(task._id, "in-progress")
+            }
+          >
+            In Progress
+          </Button>
 
-          <Chip
-            label="Completed"
-            clickable
-            color={task.status === "completed" ? "success" : "default"}
-            onClick={() => onStatusChange(task._id, "completed")}
-          />
+          <Button
+            variant={task.status === "completed" ? "contained" : "outlined"}
+            size="small"
+            onClick={() =>
+              onStatusChange && onStatusChange(task._id, "completed")
+            }
+          >
+            Completed
+          </Button>
         </Stack>
       </CardContent>
     </Card>
