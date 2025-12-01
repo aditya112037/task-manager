@@ -76,7 +76,10 @@ export const teamTasksAPI = {
   getTasks: (teamId) => api.get(`/api/team-tasks/${teamId}`),
   getMyTeamTasks: () => api.get("/api/team-tasks/my/all"),
   createTask: (teamId, data) => api.post(`/api/team-tasks/${teamId}`, data),
+    // UPDATE existing task
   updateTask: (taskId, data) => api.put(`/api/team-tasks/task/${taskId}`, data),
+
+  // DELETE a task
   deleteTask: (taskId) => api.delete(`/api/team-tasks/task/${taskId}`),
 };
 

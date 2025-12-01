@@ -157,87 +157,84 @@ export default function TeamDetails() {
 
       {/* TASKS */}
       {tab === 2 && (
-        <Paper sx={{ p: 3, borderRadius: 3, mt: 2 }}>
-          <Typography variant="h6" fontWeight={700}>
-            Team Tasks
-          </Typography>
+  <Paper sx={{ p: 3, borderRadius: 3, mt: 2 }}>
+    <Typography variant="h6" fontWeight={700}>
+      Team Tasks
+    </Typography>
 
-          {/* CREATE BUTTON (Admin Only) */}
-          {isAdmin && (
-            <Button
-              variant="contained"
-              sx={{ mt: 2, mb: 2, borderRadius: 2 }}
-              onClick={() => {
-                setEditingTask(null);
-                setShowTaskForm(true);
-              }}
-            >
-              Create Task
-            </Button>
-          )}
+    {isAdmin && (
+      <Button
+        variant="contained"
+        sx={{ mt: 2, mb: 2, borderRadius: 2 }}
+        onClick={() => {
+          setEditingTask(null);
+          setShowTaskForm(true);
+        }}
+      >
+        Create Task
+      </Button>
+    )}
 
-          {/* LOADING */}
-          {loadingTasks ? (
-            <Typography>Loading tasks...</Typography>
-          ) : teamTasks.length === 0 ? (
-            <Typography>No team tasks yet.</Typography>
-          ) : (
-            teamTasks.map((task) => (
-              <TeamTaskItem
-                key={task._id}
-                task={task}
-                canEdit={isAdmin} // pass canEdit flag
-                onEdit={() => {
-                  setEditingTask(task);
-                  setShowTaskForm(true);
-                }}
-                onDelete={async (id) => {
-                  try {
-                    await teamTasksAPI.deleteTask(id);
-                    await fetchTeamTasks();
-                  } catch (err) {
-                    console.error("Delete error:", err);
-                  }
-                }}
-                onStatusChange={async (id, status) => {
-                  try {
-                    await teamTasksAPI.updateTask(id, { status });
-                    await fetchTeamTasks();
-                  } catch (err) {
-                    console.error("Status change error:", err);
-                  }
-                }}
-              />
-            ))
-          )}
+    {loadingTasks ? (
+      <Typography>Loading tasks...</Typography>
+    ) : teamTasks.length === 0 ? (
+      <Typography>No team tasks yet.</Typography>
+    ) : (
+      teamTasks.map((task) => (
+        <TeamTaskItem
+          key={task._id}
+          task={task}
+          isAdmin={isAdmin}
+          onEdit={() => {
+            setEditingTask(task);
+            setShowTaskForm(true);
+          }}
+          onDelete={async () => {
+            try {
+              await teamTasksAPI.deleteTask(task._id);
+              await fetchTeamTasks();
+            } catch (err) {
+              console.error("Delete task error:", err);
+            }
+          }}
+          onStatusChange={async (taskId, newStatus) => {
+            try {
+              await teamTasksAPI.updateTask(taskId, { status: newStatus });
+              await fetchTeamTasks();
+            } catch (err) {
+              console.error("Status update error:", err);
+            }
+          }}
+        />
+      ))
+    )}
 
-          {/* TASK FORM MODAL */}
-          {showTaskForm && (
-            <TeamTaskForm
-              open={showTaskForm}
-              task={editingTask}
-              onCancel={() => setShowTaskForm(false)}
-              onSubmit={async (formData) => {
-                try {
-                  if (editingTask) {
-                    // UPDATE
-                    await teamTasksAPI.updateTask(editingTask._id, formData);
-                  } else {
-                    // CREATE
-                    await teamTasksAPI.createTask(teamId, formData);
-                  }
+    {showTaskForm && (
+      <TeamTaskForm
+        open={showTaskForm}
+        task={editingTask}
+        onCancel={() => setShowTaskForm(false)}
+        onSubmit={async (formData) => {
+          try {
+            if (editingTask) {
+              // UPDATE ROUTE FIXED
+              await teamTasksAPI.updateTask(editingTask._id, formData);
+            } else {
+              await teamTasksAPI.createTask(teamId, formData);
+            }
 
-                  await fetchTeamTasks();
-                  setShowTaskForm(false);
-                  setEditingTask(null);
-                } catch (err) {
-                  console.error("Task save error:", err);
-                }
-              }}
-            />
-          )}
-        </Paper>
-      )}
+            await fetchTeamTasks();
+            setShowTaskForm(false);
+            setEditingTask(null);
+          } catch (err) {
+            console.error("Task save error:", err);
+          }
+        }}
+      />
+    )}
+  </Paper>
+)}
+
 
       {/* SETTINGS */}
       {tab === 3 && (
