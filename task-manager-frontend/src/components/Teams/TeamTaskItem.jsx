@@ -14,13 +14,7 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { useTheme } from "@mui/material/styles";
 
-export default function TeamTaskItem({
-  task,
-  isAdmin,
-  onEdit,
-  onDelete,
-  onStatusChange
-}) {
+export default function TeamTaskItem({ task, isAdmin, onEdit, onDelete, onStatusChange }) {
   const theme = useTheme();
 
   const priorityColors = {
@@ -30,9 +24,9 @@ export default function TeamTaskItem({
   };
 
   const statusColors = {
-    todo: "default",
+    "todo": "default",
     "in-progress": "info",
-    completed: "success",
+    "completed": "success",
   };
 
   const formatDate = (dateString) => {
@@ -61,7 +55,7 @@ export default function TeamTaskItem({
       }}
     >
       <CardContent>
-        {/* ===== HEADER ===== */}
+        {/* HEADER */}
         <Box
           sx={{
             display: "flex",
@@ -69,26 +63,21 @@ export default function TeamTaskItem({
             mb: 1,
           }}
         >
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>
+          <Typography variant="h6" fontWeight={700}>
             {task.title}
           </Typography>
 
+          {/* ADMIN CONTROLS */}
           {isAdmin && (
             <Box>
               <Tooltip title="Edit">
-                <IconButton
-                  color="primary"
-                  onClick={() => onEdit(task)}
-                >
+                <IconButton color="primary" onClick={() => onEdit(task)}>
                   <EditIcon />
                 </IconButton>
               </Tooltip>
 
               <Tooltip title="Delete">
-                <IconButton
-                  color="error"
-                  onClick={() => onDelete(task._id)}
-                >
+                <IconButton color="error" onClick={() => onDelete(task._id)}>
                   <DeleteIcon />
                 </IconButton>
               </Tooltip>
@@ -96,27 +85,25 @@ export default function TeamTaskItem({
           )}
         </Box>
 
-        {/* ===== DESCRIPTION ===== */}
+        {/* DESCRIPTION */}
         {task.description && (
-          <Typography variant="body2" sx={{ mb: 2, color: "text.secondary" }}>
+          <Typography variant="body2" sx={{ mb: 2 }}>
             {task.description}
           </Typography>
         )}
 
-        {/* ===== METADATA ===== */}
+        {/* METADATA */}
         <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
           <Chip
             label={task.priority}
             color={priorityColors[task.priority]}
             size="small"
-            sx={{ textTransform: "capitalize" }}
           />
 
           <Chip
             label={task.status.replace("-", " ")}
             color={statusColors[task.status]}
             size="small"
-            sx={{ textTransform: "capitalize" }}
           />
 
           <Chip
@@ -126,30 +113,27 @@ export default function TeamTaskItem({
           />
         </Stack>
 
-        {/* ===== STATUS CONTROLS ===== */}
+        {/* STATUS CHANGE BUTTONS */}
         <Stack direction="row" spacing={1}>
           <Chip
             label="To Do"
             clickable
             color={task.status === "todo" ? "primary" : "default"}
-            variant={task.status === "todo" ? "filled" : "outlined"}
-            onClick={() => onStatusChange?.(task._id, "todo")}
+            onClick={() => onStatusChange(task._id, "todo")}
           />
 
           <Chip
             label="In Progress"
             clickable
             color={task.status === "in-progress" ? "info" : "default"}
-            variant={task.status === "in-progress" ? "filled" : "outlined"}
-            onClick={() => onStatusChange?.(task._id, "in-progress")}
+            onClick={() => onStatusChange(task._id, "in-progress")}
           />
 
           <Chip
             label="Completed"
             clickable
             color={task.status === "completed" ? "success" : "default"}
-            variant={task.status === "completed" ? "filled" : "outlined"}
-            onClick={() => onStatusChange?.(task._id, "completed")}
+            onClick={() => onStatusChange(task._id, "completed")}
           />
         </Stack>
       </CardContent>
