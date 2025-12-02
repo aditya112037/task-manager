@@ -70,6 +70,8 @@ export const teamsAPI = {
   updateTeam: (teamId, data) => api.put(`/api/teams/${teamId}/`, data),
   updateMemberRole: (teamId, userId, role) => api.put(`/api/teams/${teamId}/members/${userId}/role`, { role }),
   leaveTeam: (teamId) => api.post(`/api/teams/${teamId}/leave`),
+   deleteTeam: (teamId) => api.delete(`/api/teams/${teamId}`),
+  removeMember: (teamId, userId) => api.delete(`/api/teams/${teamId}/members/${userId}`),
 
 };
 

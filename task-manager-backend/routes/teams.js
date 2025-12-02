@@ -115,22 +115,15 @@ router.delete("/:teamId/members/:userId", protect, async (req, res) => {
 // DELETE TEAM (ADMIN ONLY)  ✓
 // ----------------------------------------------------
 router.delete("/:teamId", protect, async (req, res) => {
-  try {
-    const team = await Team.findById(req.params.teamId);
-    if (!team) return res.status(404).json({ message: "Team not found" });
+  const team = await Team.findById(req.params.teamId);
+  if (!team) return res.status(404).json({ message: "Team not found" });
 
-    if (team.admin.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: "Not authorized" });
-    }
+  if (String(team.admin) !== String(req.user._id))
+    return res.status(403).json({ message: "Not authorized" });
 
-    await team.deleteOne();
-    res.json({ message: "Team deleted" });
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({ message: "Server error" });
-  }
+  await team.deleteOne();
+  res.json({ message: "Team deleted" });
 });
-
 
 // ----------------------------------------------------
 // GET TEAM DETAILS  (with members + admin info) ✓
@@ -223,6 +216,8 @@ router.post("/:teamId/leave", protect, async (req, res) => {
 
   res.json({ message: "Left team" });
 });
+
+
 
 
 module.exports = router;
