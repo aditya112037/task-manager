@@ -158,6 +158,7 @@ router.get("/:teamId/details", protect, async (req, res) => {
 });
 
 // UPDATE TEAM INFO (ADMIN ONLY)
+// UPDATE TEAM INFO (ADMIN ONLY)
 router.put("/:teamId", protect, async (req, res) => {
   try {
     const team = await Team.findById(req.params.teamId);
