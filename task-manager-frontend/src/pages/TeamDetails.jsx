@@ -237,13 +237,122 @@ export default function TeamDetails() {
 
 
       {/* SETTINGS */}
-      {tab === 3 && (
-        <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Typography variant="h6" fontWeight={700}>
-            Settings
+      {/* SETTINGS */}
+{tab === 3 && (
+  <Paper sx={{ p: 3, borderRadius: 3 }}>
+    <Typography variant="h6" fontWeight={700}>
+      Team Settings
+    </Typography>
+
+    {!isAdmin && (
+      <Typography sx={{ mt: 2 }} color="text.secondary">
+        Only team admins can update settings.
+      </Typography>
+    )}
+
+    {isAdmin && (
+      <>
+        {/* TEAM INFO FORM */}
+        <Box sx={{ mt: 3 }}>
+          <Typography variant="subtitle1" fontWeight={600}>
+            Edit Team Info
           </Typography>
 
-          <Typography variant="subtitle1" sx={{ mt: 2 }}>
+          <Box sx={{ mt: 2, display: "flex", flexDirection: "column", gap: 2 }}>
+            {/* NAME */}
+            <input
+              type="text"
+              placeholder="Team Name"
+              value={team.name}
+              onChange={(e) =>
+                setTeam({ ...team, name: e.target.value })
+              }
+              style={{
+                padding: "10px",
+                borderRadius: "8px",
+                border: "1px solid #ccc",
+                fontSize: "16px",
+              }}
+            />
+
+            {/* DESCRIPTION */}
+            <textarea
+              placeholder="Team Description"
+              value={team.description}
+              onChange={(e) =>
+                setTeam({ ...team, description: e.target.value })
+              }
+              style={{
+                padding: "10px",
+                borderRadius: "8px",
+                border: "1px solid #ccc",
+                fontSize: "16px",
+                minHeight: "80px",
+              }}
+            />
+
+            {/* ICON */}
+            <input
+              type="text"
+              placeholder="Icon (emoji like 🚀)"
+              value={team.icon || ""}
+              onChange={(e) =>
+                setTeam({ ...team, icon: e.target.value })
+              }
+              style={{
+                padding: "10px",
+                borderRadius: "8px",
+                border: "1px solid #ccc",
+                fontSize: "18px",
+              }}
+            />
+
+            {/* COLOR */}
+            <Box>
+              <Typography sx={{ mb: 1 }}>Team Color</Typography>
+              <input
+                type="color"
+                value={team.color || "#1976d2"}
+                onChange={(e) =>
+                  setTeam({ ...team, color: e.target.value })
+                }
+                style={{
+                  width: "80px",
+                  height: "40px",
+                  border: "none",
+                  borderRadius: "8px",
+                }}
+              />
+            </Box>
+
+            {/* SAVE BUTTON */}
+            <Button
+              variant="contained"
+              sx={{ mt: 2, borderRadius: 2 }}
+              onClick={async () => {
+                try {
+                  await teamsAPI.updateTeam(teamId, {
+                    name: team.name,
+                    description: team.description,
+                    icon: team.icon,
+                    color: team.color,
+                  });
+                  alert("Team updated!");
+                  fetchTeam(); // refresh UI
+                } catch (err) {
+                  console.error(err);
+                  alert("Failed to update team");
+                }
+              }}
+            >
+              Save Changes
+            </Button>
+          </Box>
+        </Box>
+
+        {/* INVITE LINK */}
+        <Box sx={{ mt: 4 }}>
+          <Typography variant="subtitle1" fontWeight={600}>
             Invite Members
           </Typography>
 
@@ -267,8 +376,12 @@ export default function TeamDetails() {
               Copy Link
             </Button>
           </Box>
-        </Paper>
-      )}
+        </Box>
+      </>
+    )}
+  </Paper>
+)}
+
     </Box>
   );
 }
