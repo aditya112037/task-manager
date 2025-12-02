@@ -181,5 +181,48 @@ router.put("/:teamId", protect, async (req, res) => {
   }
 });
 
+// UPDATE MEMBER ROLE (ADMIN ONLY)
+router.put("/:teamId/members/:userId/role", protect, async (req, res) => {
+  try {
+    const team = await Team.findById(req.params.teamId);
+    if (!team) return res.status(404).json({ message: "Team not found" });
+
+    if (String(team.admin) !== String(req.user._id)) {
+      return res.status(403).json({ message: "Only admin can update roles" });
+    }
+
+    const member = team.members.find(
+      (m) => String(m.user) === req.params.userId
+    );
+
+    if (!member)
+      return res.status(404).json({ message: "Member not found" });
+
+    member.role = req.body.role; // "admin" or "member"
+    await team.save();
+
+    res.json({ message: "Role updated", team });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+router.post("/:teamId/leave", protect, async (req, res) => {
+  const team = await Team.findById(req.params.teamId);
+  if (!team) return res.status(404).json({ message: "Team not found" });
+
+  if (String(team.admin) === String(req.user._id)) {
+    return res.status(400).json({ message: "Admin cannot leave. Transfer admin role first." });
+  }
+
+  team.members = team.members.filter(
+    m => String(m.user) !== String(req.user._id)
+  );
+
+  await team.save();
+
+  res.json({ message: "Left team" });
+});
+
 
 module.exports = router;

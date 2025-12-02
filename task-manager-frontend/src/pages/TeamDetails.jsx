@@ -120,21 +120,36 @@ export default function TeamDetails() {
       {/* OVERVIEW */}
       {tab === 0 && (
         <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Typography variant="h6" fontWeight={700}>
-            Overview
-          </Typography>
-          <Typography color="text.secondary" sx={{ mt: 1 }}>
-            Team statistics and analytics will appear here soon.
-          </Typography>
+  <Typography variant="h6" fontWeight={700}>Overview</Typography>
 
-          <Button
-            variant="outlined"
-            sx={{ mt: 3 }}
-            onClick={() => navigator.clipboard.writeText(inviteURL)}
-          >
-            Copy Invite Link
-          </Button>
-        </Paper>
+  <Typography sx={{ mt: 2 }}>
+    Members: {team.members.length}
+  </Typography>
+
+  <Typography sx={{ mt: 1 }}>
+    Total Tasks: {teamTasks.length}
+  </Typography>
+
+  <Button
+    sx={{ mt: 3 }}
+    variant="outlined"
+    onClick={() => navigator.clipboard.writeText(inviteURL)}
+  >
+    Copy Invite Link
+  </Button>
+
+  <Box sx={{ mt: 3 }}>
+    <Typography fontWeight={600} sx={{ mb: 1 }}>
+      Latest Tasks
+    </Typography>
+
+    {teamTasks.slice(0, 3).map((t) => (
+      <Typography key={t._id} sx={{ color: "text.secondary" }}>
+        • {t.title}
+      </Typography>
+    ))}
+  </Box>
+</Paper>
       )}
 
       {/* MEMBERS */}
@@ -144,14 +159,29 @@ export default function TeamDetails() {
             Members
           </Typography>
 
-          {team.members?.map((m) => (
-            <Chip
-              key={m.user._id || m.user}
-              label={m.user?.name ?? (m.userName || "User")}
-              sx={{ mt: 1, mr: 1 }}
-              color={m.role === "admin" ? "primary" : "default"}
-            />
-          ))}
+          {team.members.map((m) => (
+  <Box key={m.user._id} sx={{ display: "flex", alignItems: "center", mb: 1 }}>
+    <Chip
+      label={m.user.name}
+      color={m.role === "admin" ? "primary" : "default"}
+      sx={{ mr: 2 }}
+    />
+
+    {isAdmin && m.user._id !== team.admin._id && (
+      <select
+        value={m.role}
+        onChange={(e) =>
+          teamsAPI.updateMemberRole(team._id, m.user._id, e.target.value)
+            .then(fetchTeam)
+        }
+      >
+        <option value="member">Member</option>
+        <option value="admin">Admin</option>
+      </select>
+    )}
+  </Box>
+))}
+
         </Paper>
       )}
 
@@ -347,6 +377,34 @@ export default function TeamDetails() {
             >
               Save Changes
             </Button>
+            {!isAdmin && (
+  <Button
+    color="warning"
+    variant="outlined"
+    sx={{ mt: 3 }}
+    onClick={async () => {
+      await teamsAPI.leaveTeam(team._id);
+      navigate("/teams");
+    }}
+  >
+    Leave Team
+  </Button>
+)}
+
+            {isAdmin && (
+  <Button
+    color="error"
+    variant="contained"
+    sx={{ mt: 4 }}
+    onClick={async () => {
+      await teamsAPI.deleteTeam(team._id);
+      navigate("/teams");
+    }}
+  >
+    Delete Team
+  </Button>
+)}
+
           </Box>
         </Box>
 
