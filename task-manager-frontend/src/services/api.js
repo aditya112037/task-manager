@@ -67,7 +67,7 @@ export const teamsAPI = {
   joinTeam: (teamId) => api.post(`/api/teams/${teamId}/join`),
   getInviteLink: (teamId) => api.get(`/api/teams/${teamId}/invite`),
   getAllMyTeamTasks: () => api.get("/api/teams/my/tasks"), // You might need to create this endpoint
-  
+  updateTeam: (teamId, data) => api.post(`/api/teams/${teamId}/`, data),
 };
 
 // -------------------------

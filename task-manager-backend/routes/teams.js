@@ -157,5 +157,28 @@ router.get("/:teamId/details", protect, async (req, res) => {
   }
 });
 
+// UPDATE TEAM INFO (ADMIN ONLY)
+router.put("/:teamId", protect, async (req, res) => {
+  try {
+    const team = await Team.findById(req.params.teamId);
+
+    if (!team) return res.status(404).json({ message: "Team not found" });
+
+    if (String(team.admin) !== String(req.user._id)) {
+      return res.status(403).json({ message: "Only admin can update the team." });
+    }
+
+    const updated = await Team.findByIdAndUpdate(
+      req.params.teamId,
+      req.body,
+      { new: true }
+    );
+
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 
 module.exports = router;
