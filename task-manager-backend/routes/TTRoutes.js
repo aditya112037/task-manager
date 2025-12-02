@@ -54,9 +54,16 @@ router.put("/:taskId", protect, async (req, res) => {
 
     const team = await Team.findById(task.team);
 
-    if (String(team.admin) !== String(req.user._id)) {
-      return res.status(403).json({ message: "Only admin can update tasks." });
-    }
+    const member = team.members.find(
+  (m) => String(m.user) === String(req.user._id)
+);
+
+
+if (!member || !["admin", "manager"].includes(member.role)) {
+  return res.status(403).json({
+    message: "Only admin or manager can modify tasks."
+  });
+}
 
     const updated = await TTask.findByIdAndUpdate(task._id, req.body, {
       new: true,
@@ -76,9 +83,15 @@ router.delete("/:taskId", protect, async (req, res) => {
 
     const team = await Team.findById(task.team);
 
-    if (String(team.admin) !== String(req.user._id)) {
-      return res.status(403).json({ message: "Only admin can delete tasks." });
-    }
+const member = team.members.find(
+  (m) => String(m.user) === String(req.user._id)
+);
+
+if (!member || !["admin", "manager"].includes(member.role)) {
+  return res.status(403).json({
+    message: "Only admin or manager can modify tasks."
+  });
+}
 
     await task.deleteOne();
 

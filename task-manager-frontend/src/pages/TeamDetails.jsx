@@ -33,10 +33,9 @@ export default function TeamDetails() {
   const [editingTask, setEditingTask] = useState(null);
 
   // Real Admin Check — user MUST match team.admin (works whether admin is populated or just id)
-  const isAdmin =
-    !!team &&
-    ((team.admin && team.admin._id && team.admin._id === user?._id) ||
-      (team.admin && String(team.admin) === String(user?._id)));
+const myRole = team?.members?.find(m => m.user._id === user?._id)?.role;
+const canEditTasks = myRole === "admin" || myRole === "manager";
+const isAdmin = myRole === "admin";
 
   // -------- FETCH TEAM --------
   const fetchTeam = async () => {
@@ -215,7 +214,7 @@ export default function TeamDetails() {
         <TeamTaskItem
           key={task._id}
           task={task}
-          isAdmin={isAdmin}
+           canEdit={canEditTasks}
           onEdit={() => {
             setEditingTask(task);
             setShowTaskForm(true);
