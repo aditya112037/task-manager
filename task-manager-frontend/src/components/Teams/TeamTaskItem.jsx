@@ -76,6 +76,44 @@ export default function TeamTaskItem({ task, isAdmin, onEdit, onDelete, onStatus
           <Chip label={`📅 ${formatDate(task.dueDate)}`} variant="outlined" size="small" />
         </Stack>
 
+         {/* CALENDAR BUTTONS */}
+        <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+          <Button
+            variant="contained"
+            color="secondary"
+            startIcon={<EventIcon />}
+            sx={{
+              textTransform: "none",
+              borderRadius: 2,
+              px: 2,
+            }}
+            onClick={() => {
+              window.location.href = `${process.env.REACT_APP_API_URL}/api/ics/${task._id}`;
+            }}
+          >
+            Add to Calendar (Apple)
+          </Button>
+
+          <Button
+            variant="outlined"
+            color="primary"
+            startIcon={<GoogleIcon />}
+            sx={{
+              textTransform: "none",
+              borderRadius: 2,
+              px: 2,
+              borderColor:
+                theme.palette.mode === "dark"
+                  ? "rgba(255,255,255,0.4)"
+                  : undefined,
+            }}
+            href={googleCalendarURL}
+            target="_blank"
+          >
+            Add to Google Calendar
+          </Button>
+        </Stack>
+
         {/* STATUS CHANGE BUTTONS */}
         <Stack direction="row" spacing={1}>
           <Chip label="To Do" clickable color={task.status === "todo" ? "primary" : "default"} onClick={() => onStatusChange(task._id, "todo")} />
