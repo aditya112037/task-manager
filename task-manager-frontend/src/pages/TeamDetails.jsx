@@ -17,11 +17,12 @@ import { teamsAPI, teamTasksAPI } from "../services/api";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import TeamTaskForm from "../components/Teams/TeamTaskForm";
 import { useAuth } from "../context/AuthContext";
+import { useNavigate } from "react-router-dom";
 
 export default function TeamDetails() {
   const { teamId } = useParams();
   const { user } = useAuth();
-
+  const navigate = useNavigate();
   const [tab, setTab] = useState(0);
   const [team, setTeam] = useState(null);
   const [loadingTeam, setLoadingTeam] = useState(true);
