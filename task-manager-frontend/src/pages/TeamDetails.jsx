@@ -377,19 +377,26 @@ const isAdmin = myRole === "admin";
             >
               Save Changes
             </Button>
-            {!isAdmin && (
-  <Button
-    color="warning"
-    variant="outlined"
-    sx={{ mt: 3 }}
-    onClick={async () => {
-      await teamsAPI.leaveTeam(team._id);
-      navigate("/teams");
-    }}
-  >
-    Leave Team
-  </Button>
+            {myRole !== "admin" && (
+  <Box sx={{ mt: 3 }}>
+    <Typography variant="subtitle1" fontWeight={600}>
+      Leave Team
+    </Typography>
+
+    <Button
+      variant="outlined"
+      color="error"
+      sx={{ mt: 1 }}
+      onClick={async () => {
+        await teamsAPI.removeMember(teamId, user._id);
+        navigate("/teams");
+      }}
+    >
+      Leave Team
+    </Button>
+  </Box>
 )}
+
 
             {isAdmin && (
   <Button
