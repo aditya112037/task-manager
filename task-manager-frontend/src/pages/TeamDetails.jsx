@@ -10,8 +10,23 @@ import {
   Stack,
   Button,
   Chip,
+  IconButton,
+  MenuItem,
+  Select,
+  FormControl,
+  InputLabel,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  Snackbar,
+  Alert,
 } from "@mui/material";
-
+import EditIcon from "@mui/icons-material/Edit";
+import DeleteIcon from "@mui/icons-material/Delete";
+import ExitToAppIcon from "@mui/icons-material/ExitToApp";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import { useParams } from "react-router-dom";
 import { teamsAPI, teamTasksAPI } from "../services/api";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
@@ -23,19 +38,29 @@ export default function TeamDetails() {
   const { teamId } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
+  
   const [tab, setTab] = useState(0);
   const [team, setTeam] = useState(null);
   const [loadingTeam, setLoadingTeam] = useState(true);
-
   const [teamTasks, setTeamTasks] = useState([]);
   const [loadingTasks, setLoadingTasks] = useState(true);
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
+  const [editTeamDialog, setEditTeamDialog] = useState(false);
+  const [teamFormData, setTeamFormData] = useState({});
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
 
-  // Real Admin Check — user MUST match team.admin (works whether admin is populated or just id)
-const myRole = team?.members?.find(m => m.user._id === user?._id)?.role;
-const canEditTasks = myRole === "admin" || myRole === "manager";
-const isAdmin = myRole === "admin";
+  // Calculate user role
+  const myRole = team?.members?.find(m => 
+    m.user?._id === user?._id || m.user === user?._id
+  )?.role;
+  
+  const canEditTasks = myRole === "admin" || myRole === "manager";
+  const isAdmin = myRole === "admin";
 
   // -------- FETCH TEAM --------
   const fetchTeam = async () => {
@@ -43,8 +68,19 @@ const isAdmin = myRole === "admin";
     try {
       const res = await teamsAPI.getTeam(teamId);
       setTeam(res.data);
+      setTeamFormData({
+        name: res.data.name,
+        description: res.data.description || "",
+        icon: res.data.icon || "",
+        color: res.data.color || "#1976d2",
+      });
     } catch (err) {
       console.error("Team load error:", err);
+      setSnackbar({
+        open: true,
+        message: "Failed to load team",
+        severity: "error",
+      });
     } finally {
       setLoadingTeam(false);
     }
@@ -66,8 +102,125 @@ const isAdmin = myRole === "admin";
   useEffect(() => {
     fetchTeam();
     fetchTeamTasks();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamId]);
+
+  // -------- HANDLE LEAVE TEAM --------
+  const handleLeaveTeam = async () => {
+    if (!window.confirm("Are you sure you want to leave this team?")) return;
+    
+    try {
+      await teamsAPI.leaveTeam(teamId);
+      setSnackbar({
+        open: true,
+        message: "Successfully left the team",
+        severity: "success",
+      });
+      navigate("/teams");
+    } catch (err) {
+      console.error("Leave team error:", err);
+      setSnackbar({
+        open: true,
+        message: err.response?.data?.message || "Failed to leave team",
+        severity: "error",
+      });
+    }
+  };
+
+  // -------- HANDLE UPDATE MEMBER ROLE --------
+  const handleUpdateRole = async (userId, newRole) => {
+    try {
+      await teamsAPI.updateMemberRole(teamId, userId, newRole);
+      fetchTeam(); // Refresh team data
+      setSnackbar({
+        open: true,
+        message: "Role updated successfully",
+        severity: "success",
+      });
+    } catch (err) {
+      console.error("Update role error:", err);
+      setSnackbar({
+        open: true,
+        message: "Failed to update role",
+        severity: "error",
+      });
+    }
+  };
+
+  // -------- HANDLE REMOVE MEMBER --------
+  const handleRemoveMember = async (userId) => {
+    if (!window.confirm("Are you sure you want to remove this member?")) return;
+    
+    try {
+      await teamsAPI.removeMember(teamId, userId);
+      fetchTeam();
+      setSnackbar({
+        open: true,
+        message: "Member removed",
+        severity: "success",
+      });
+    } catch (err) {
+      console.error("Remove member error:", err);
+      setSnackbar({
+        open: true,
+        message: "Failed to remove member",
+        severity: "error",
+      });
+    }
+  };
+
+  // -------- HANDLE COPY INVITE LINK --------
+  const handleCopyInviteLink = () => {
+    const inviteURL = `${window.location.origin}/join/${team._id}`;
+    navigator.clipboard.writeText(inviteURL);
+    setSnackbar({
+      open: true,
+      message: "Invite link copied to clipboard!",
+      severity: "success",
+    });
+  };
+
+  // -------- HANDLE UPDATE TEAM --------
+  const handleUpdateTeam = async () => {
+    try {
+      await teamsAPI.updateTeam(teamId, teamFormData);
+      fetchTeam();
+      setEditTeamDialog(false);
+      setSnackbar({
+        open: true,
+        message: "Team updated successfully",
+        severity: "success",
+      });
+    } catch (err) {
+      console.error("Update team error:", err);
+      setSnackbar({
+        open: true,
+        message: "Failed to update team",
+        severity: "error",
+      });
+    }
+  };
+
+  // -------- HANDLE DELETE TEAM --------
+  const handleDeleteTeam = async () => {
+    if (!window.confirm("Are you sure you want to delete this team? This action cannot be undone.")) return;
+    
+    try {
+      await teamsAPI.deleteTeam(teamId);
+      setSnackbar({
+        open: true,
+        message: "Team deleted successfully",
+        severity: "success",
+      });
+      navigate("/teams");
+    } catch (err) {
+      console.error("Delete team error:", err);
+      setSnackbar({
+        open: true,
+        message: "Failed to delete team",
+        severity: "error",
+      });
+    }
+  };
 
   if (loadingTeam) return <Typography>Loading team...</Typography>;
   if (!team) return <Typography>Team not found.</Typography>;
@@ -75,7 +228,19 @@ const isAdmin = myRole === "admin";
   const inviteURL = `${window.location.origin}/join/${team._id}`;
 
   return (
-    <Box sx={{ px: 2, pt: { xs: 10, sm: 8 } }}>
+    <Box sx={{ px: 2, pt: { xs: 10, sm: 8 }, maxWidth: 1200, mx: "auto" }}>
+      {/* SNACKBAR */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity={snackbar.severity} sx={{ width: "100%" }}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+
       {/* HEADER */}
       <Paper
         sx={{
@@ -85,26 +250,40 @@ const isAdmin = myRole === "admin";
           boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
         }}
       >
-        <Stack direction="row" spacing={2} alignItems="center">
-          <Avatar
-            sx={{
-              width: 70,
-              height: 70,
-              bgcolor: team.color || "primary.main",
-              fontSize: 28,
-            }}
-          >
-            {team.icon || "T"}
-          </Avatar>
+        <Stack direction="row" justifyContent="space-between" alignItems="center">
+          <Stack direction="row" spacing={2} alignItems="center">
+            <Avatar
+              sx={{
+                width: 70,
+                height: 70,
+                bgcolor: team.color || "primary.main",
+                fontSize: 28,
+              }}
+            >
+              {team.icon || "T"}
+            </Avatar>
 
-          <Box>
-            <Typography variant="h5" fontWeight={700}>
-              {team.name}
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {team.description}
-            </Typography>
-          </Box>
+            <Box>
+              <Typography variant="h5" fontWeight={700}>
+                {team.name}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {team.description || "No description"}
+              </Typography>
+              <Chip
+                label={`${myRole || "member"}`.toUpperCase()}
+                color={isAdmin ? "primary" : "default"}
+                size="small"
+                sx={{ mt: 1 }}
+              />
+            </Box>
+          </Stack>
+
+          {isAdmin && (
+            <IconButton onClick={() => setEditTeamDialog(true)}>
+              <EditIcon />
+            </IconButton>
+          )}
         </Stack>
 
         <Divider sx={{ my: 2 }} />
@@ -117,336 +296,377 @@ const isAdmin = myRole === "admin";
         </Tabs>
       </Paper>
 
-      {/* OVERVIEW */}
+      {/* OVERVIEW TAB */}
       {tab === 0 && (
         <Paper sx={{ p: 3, borderRadius: 3 }}>
-  <Typography variant="h6" fontWeight={700}>Overview</Typography>
+          <Typography variant="h6" fontWeight={700}>Overview</Typography>
 
-  <Typography sx={{ mt: 2 }}>
-    Members: {team.members.length}
-  </Typography>
+          <Stack spacing={2} sx={{ mt: 2 }}>
+            <Box>
+              <Typography color="text.secondary">Total Members</Typography>
+              <Typography variant="h5">{team.members?.length || 0}</Typography>
+            </Box>
 
-  <Typography sx={{ mt: 1 }}>
-    Total Tasks: {teamTasks.length}
-  </Typography>
+            <Box>
+              <Typography color="text.secondary">Total Tasks</Typography>
+              <Typography variant="h5">{teamTasks.length}</Typography>
+            </Box>
 
-  <Button
-    sx={{ mt: 3 }}
-    variant="outlined"
-    onClick={() => navigator.clipboard.writeText(inviteURL)}
-  >
-    Copy Invite Link
-  </Button>
+            <Box>
+              <Typography color="text.secondary">Completed Tasks</Typography>
+              <Typography variant="h5">
+                {teamTasks.filter(t => t.status === "completed").length}
+              </Typography>
+            </Box>
+          </Stack>
 
-  <Box sx={{ mt: 3 }}>
-    <Typography fontWeight={600} sx={{ mb: 1 }}>
-      Latest Tasks
-    </Typography>
+          <Button
+            variant="outlined"
+            startIcon={<ContentCopyIcon />}
+            sx={{ mt: 3 }}
+            onClick={handleCopyInviteLink}
+          >
+            Copy Invite Link
+          </Button>
 
-    {teamTasks.slice(0, 3).map((t) => (
-      <Typography key={t._id} sx={{ color: "text.secondary" }}>
-        • {t.title}
-      </Typography>
-    ))}
-  </Box>
-</Paper>
-      )}
-
-      {/* MEMBERS */}
-      {tab === 1 && (
-        <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Typography variant="h6" fontWeight={700}>
-            Members
-          </Typography>
-
-          {team.members.map((m) => (
-  <Box key={m.user._id} sx={{ display: "flex", alignItems: "center", mb: 1 }}>
-    <Chip
-      label={m.user.name}
-      color={m.role === "admin" ? "primary" : "default"}
-      sx={{ mr: 2 }}
-    />
-
-    {isAdmin && m.user._id !== team.admin._id && (
-      <select
-        value={m.role}
-        onChange={(e) =>
-          teamsAPI.updateMemberRole(team._id, m.user._id, e.target.value)
-            .then(fetchTeam)
-        }
-      >
-        <option value="member">Member</option>
-        <option value="admin">Admin</option>
-      </select>
-    )}
-  </Box>
-))}
-
+          <Box sx={{ mt: 4 }}>
+            <Typography fontWeight={600} sx={{ mb: 2 }}>
+              Recent Tasks
+            </Typography>
+            {teamTasks.slice(0, 5).map((t) => (
+              <Box key={t._id} sx={{ display: "flex", alignItems: "center", mb: 1 }}>
+                <Chip
+                  label={t.status}
+                  color={t.status === "completed" ? "success" : "default"}
+                  size="small"
+                  sx={{ mr: 2 }}
+                />
+                <Typography>{t.title}</Typography>
+              </Box>
+            ))}
+            {teamTasks.length === 0 && (
+              <Typography color="text.secondary">No tasks yet</Typography>
+            )}
+          </Box>
         </Paper>
       )}
 
-      {/* TASKS */}
-      {tab === 2 && (
-  <Paper sx={{ p: 3, borderRadius: 3, mt: 2 }}>
-    <Typography variant="h6" fontWeight={700}>
-      Team Tasks
-    </Typography>
-
-    {isAdmin && (
-      <Button
-        variant="contained"
-        sx={{ mt: 2, mb: 2, borderRadius: 2 }}
-        onClick={() => {
-          setEditingTask(null);
-          setShowTaskForm(true);
-        }}
-      >
-        Create Task
-      </Button>
-    )}
-
-    {loadingTasks ? (
-      <Typography>Loading tasks...</Typography>
-    ) : teamTasks.length === 0 ? (
-      <Typography>No team tasks yet.</Typography>
-    ) : (
-      teamTasks.map((task) => (
-        <TeamTaskItem
-          key={task._id}
-          task={task}
-           canEdit={canEditTasks}
-          onEdit={() => {
-            setEditingTask(task);
-            setShowTaskForm(true);
-          }}
-          onDelete={async () => {
-            try {
-              await teamTasksAPI.deleteTask(task._id);
-              await fetchTeamTasks();
-            } catch (err) {
-              console.error("Delete task error:", err);
-            }
-          }}
-          onStatusChange={async (taskId, newStatus) => {
-            try {
-              await teamTasksAPI.updateTask(taskId, { status: newStatus });
-              await fetchTeamTasks();
-            } catch (err) {
-              console.error("Status update error:", err);
-            }
-          }}
-        />
-      ))
-    )}
-
-    {showTaskForm && (
-      <TeamTaskForm
-        open={showTaskForm}
-        task={editingTask}
-        onCancel={() => setShowTaskForm(false)}
-        onSubmit={async (formData) => {
-          try {
-            if (editingTask) {
-              // UPDATE ROUTE FIXED
-              await teamTasksAPI.updateTask(editingTask._id, formData);
-            } else {
-              await teamTasksAPI.createTask(teamId, formData);
-            }
-
-            await fetchTeamTasks();
-            setShowTaskForm(false);
-            setEditingTask(null);
-          } catch (err) {
-            console.error("Task save error:", err);
-          }
-        }}
-      />
-    )}
-  </Paper>
-)}
-
-
-      {/* SETTINGS */}
-      {/* SETTINGS */}
-{tab === 3 && (
-  <Paper sx={{ p: 3, borderRadius: 3 }}>
-    <Typography variant="h6" fontWeight={700}>
-      Team Settings
-    </Typography>
-
-    {!isAdmin && (
-      <Typography sx={{ mt: 2 }} color="text.secondary">
-        Only team admins can update settings.
-      </Typography>
-    )}
-
-    {isAdmin && (
-      <>
-        {/* TEAM INFO FORM */}
-        <Box sx={{ mt: 3 }}>
-          <Typography variant="subtitle1" fontWeight={600}>
-            Edit Team Info
+      {/* MEMBERS TAB */}
+      {tab === 1 && (
+        <Paper sx={{ p: 3, borderRadius: 3 }}>
+          <Typography variant="h6" fontWeight={700} sx={{ mb: 3 }}>
+            Team Members ({team.members?.length || 0})
           </Typography>
 
-          <Box sx={{ mt: 2, display: "flex", flexDirection: "column", gap: 2 }}>
-            {/* NAME */}
-            <input
-              type="text"
-              placeholder="Team Name"
-              value={team.name}
-              onChange={(e) =>
-                setTeam({ ...team, name: e.target.value })
-              }
-              style={{
-                padding: "10px",
-                borderRadius: "8px",
-                border: "1px solid #ccc",
-                fontSize: "16px",
+          <Stack spacing={2}>
+            {team.members?.map((m) => {
+              const member = m.user?._id ? m.user : { _id: m.user, name: "Unknown User" };
+              const isCurrentUser = member._id === user?._id;
+              const isTeamAdmin = team.admin?._id === member._id || team.admin === member._id;
+              
+              return (
+                <Paper
+                  key={member._id}
+                  sx={{
+                    p: 2,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                  }}
+                >
+                  <Box>
+                    <Typography fontWeight={600}>
+                      {member.name}
+                      {isTeamAdmin && (
+                        <Chip
+                          label="ADMIN"
+                          color="primary"
+                          size="small"
+                          sx={{ ml: 2 }}
+                        />
+                      )}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {m.role}
+                    </Typography>
+                  </Box>
+
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    {isAdmin && !isTeamAdmin && (
+                      <FormControl size="small" sx={{ minWidth: 120 }}>
+                        <Select
+                          value={m.role}
+                          onChange={(e) => handleUpdateRole(member._id, e.target.value)}
+                        >
+                          <MenuItem value="member">Member</MenuItem>
+                          <MenuItem value="manager">Manager</MenuItem>
+                          <MenuItem value="admin">Admin</MenuItem>
+                        </Select>
+                      </FormControl>
+                    )}
+
+                    {isAdmin && !isTeamAdmin && !isCurrentUser && (
+                      <IconButton
+                        color="error"
+                        onClick={() => handleRemoveMember(member._id)}
+                      >
+                        <DeleteIcon />
+                      </IconButton>
+                    )}
+
+                    {!isAdmin && isCurrentUser && (
+                      <Button
+                        startIcon={<ExitToAppIcon />}
+                        color="error"
+                        onClick={handleLeaveTeam}
+                      >
+                        Leave
+                      </Button>
+                    )}
+                  </Box>
+                </Paper>
+              );
+            })}
+          </Stack>
+        </Paper>
+      )}
+
+      {/* TASKS TAB */}
+      {tab === 2 && (
+        <Paper sx={{ p: 3, borderRadius: 3 }}>
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+            <Typography variant="h6" fontWeight={700}>
+              Team Tasks
+            </Typography>
+
+            {canEditTasks && (
+              <Button
+                variant="contained"
+                onClick={() => {
+                  setEditingTask(null);
+                  setShowTaskForm(true);
+                }}
+              >
+                Create Task
+              </Button>
+            )}
+          </Box>
+
+          {loadingTasks ? (
+            <Typography>Loading tasks...</Typography>
+          ) : teamTasks.length === 0 ? (
+            <Typography color="text.secondary">No team tasks yet.</Typography>
+          ) : (
+            <Stack spacing={2}>
+              {teamTasks.map((task) => (
+                <TeamTaskItem
+                  key={task._id}
+                  task={task}
+                  canEdit={canEditTasks}
+                  onEdit={() => {
+                    setEditingTask(task);
+                    setShowTaskForm(true);
+                  }}
+                  onDelete={async () => {
+                    try {
+                      await teamTasksAPI.deleteTask(task._id);
+                      await fetchTeamTasks();
+                      setSnackbar({
+                        open: true,
+                        message: "Task deleted",
+                        severity: "success",
+                      });
+                    } catch (err) {
+                      console.error("Delete task error:", err);
+                      setSnackbar({
+                        open: true,
+                        message: "Failed to delete task",
+                        severity: "error",
+                      });
+                    }
+                  }}
+                  onStatusChange={async (taskId, newStatus) => {
+                    try {
+                      await teamTasksAPI.updateTask(taskId, { status: newStatus });
+                      await fetchTeamTasks();
+                    } catch (err) {
+                      console.error("Status update error:", err);
+                    }
+                  }}
+                />
+              ))}
+            </Stack>
+          )}
+
+          {showTaskForm && (
+            <TeamTaskForm
+              open={showTaskForm}
+              task={editingTask}
+              onCancel={() => setShowTaskForm(false)}
+              onSubmit={async (formData) => {
+                try {
+                  if (editingTask) {
+                    await teamTasksAPI.updateTask(editingTask._id, formData);
+                  } else {
+                    await teamTasksAPI.createTask(teamId, formData);
+                  }
+                  await fetchTeamTasks();
+                  setShowTaskForm(false);
+                  setEditingTask(null);
+                  setSnackbar({
+                    open: true,
+                    message: editingTask ? "Task updated" : "Task created",
+                    severity: "success",
+                  });
+                } catch (err) {
+                  console.error("Task save error:", err);
+                  setSnackbar({
+                    open: true,
+                    message: "Failed to save task",
+                    severity: "error",
+                  });
+                }
               }}
             />
+          )}
+        </Paper>
+      )}
 
-            {/* DESCRIPTION */}
-            <textarea
-              placeholder="Team Description"
-              value={team.description}
-              onChange={(e) =>
-                setTeam({ ...team, description: e.target.value })
-              }
-              style={{
-                padding: "10px",
-                borderRadius: "8px",
-                border: "1px solid #ccc",
-                fontSize: "16px",
-                minHeight: "80px",
-              }}
-            />
+      {/* SETTINGS TAB */}
+      {tab === 3 && (
+        <Paper sx={{ p: 3, borderRadius: 3 }}>
+          <Typography variant="h6" fontWeight={700} sx={{ mb: 3 }}>
+            Team Settings
+          </Typography>
 
-            {/* ICON */}
-            <input
-              type="text"
-              placeholder="Icon (emoji like 🚀)"
-              value={team.icon || ""}
-              onChange={(e) =>
-                setTeam({ ...team, icon: e.target.value })
-              }
-              style={{
-                padding: "10px",
-                borderRadius: "8px",
-                border: "1px solid #ccc",
-                fontSize: "18px",
-              }}
-            />
-
-            {/* COLOR */}
+          {!isAdmin && (
             <Box>
-              <Typography sx={{ mb: 1 }}>Team Color</Typography>
+              <Typography color="text.secondary" sx={{ mb: 2 }}>
+                Only team admins can update team settings.
+              </Typography>
+              <Button
+                variant="outlined"
+                color="error"
+                startIcon={<ExitToAppIcon />}
+                onClick={handleLeaveTeam}
+              >
+                Leave Team
+              </Button>
+            </Box>
+          )}
+
+          {isAdmin && (
+            <Stack spacing={4}>
+              {/* INVITE LINK SECTION */}
+              <Box>
+                <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>
+                  Invite Members
+                </Typography>
+                <Paper
+                  sx={{
+                    p: 2,
+                    borderRadius: 2,
+                    bgcolor: "background.default",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 2,
+                  }}
+                >
+                  <Typography sx={{ flexGrow: 1, wordBreak: "break-all" }}>
+                    {inviteURL}
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    startIcon={<ContentCopyIcon />}
+                    onClick={handleCopyInviteLink}
+                  >
+                    Copy
+                  </Button>
+                </Paper>
+              </Box>
+
+              {/* TEAM ACTIONS */}
+              <Box>
+                <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>
+                  Team Actions
+                </Typography>
+                <Stack spacing={2}>
+                  <Button
+                    variant="contained"
+                    onClick={() => setEditTeamDialog(true)}
+                    startIcon={<EditIcon />}
+                  >
+                    Edit Team Info
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    onClick={handleDeleteTeam}
+                    startIcon={<DeleteIcon />}
+                  >
+                    Delete Team
+                  </Button>
+                </Stack>
+              </Box>
+            </Stack>
+          )}
+        </Paper>
+      )}
+
+      {/* EDIT TEAM DIALOG */}
+      <Dialog open={editTeamDialog} onClose={() => setEditTeamDialog(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Edit Team</DialogTitle>
+        <DialogContent>
+          <Stack spacing={3} sx={{ mt: 2 }}>
+            <TextField
+              label="Team Name"
+              value={teamFormData.name}
+              onChange={(e) => setTeamFormData({ ...teamFormData, name: e.target.value })}
+              fullWidth
+              required
+            />
+            
+            <TextField
+              label="Description"
+              value={teamFormData.description}
+              onChange={(e) => setTeamFormData({ ...teamFormData, description: e.target.value })}
+              fullWidth
+              multiline
+              rows={3}
+            />
+            
+            <Box>
+              <Typography variant="body2" sx={{ mb: 1 }}>Team Color</Typography>
               <input
                 type="color"
-                value={team.color || "#1976d2"}
-                onChange={(e) =>
-                  setTeam({ ...team, color: e.target.value })
-                }
+                value={teamFormData.color}
+                onChange={(e) => setTeamFormData({ ...teamFormData, color: e.target.value })}
                 style={{
-                  width: "80px",
+                  width: "100%",
                   height: "40px",
                   border: "none",
                   borderRadius: "8px",
+                  cursor: "pointer",
                 }}
               />
             </Box>
-
-            {/* SAVE BUTTON */}
-            <Button
-              variant="contained"
-              sx={{ mt: 2, borderRadius: 2 }}
-              onClick={async () => {
-                try {
-                  await teamsAPI.updateTeam(teamId, {
-                    name: team.name,
-                    description: team.description,
-                    icon: team.icon,
-                    color: team.color,
-                  });
-                  alert("Team updated!");
-                  fetchTeam(); // refresh UI
-                } catch (err) {
-                  console.error(err);
-                  alert("Failed to update team");
-                }
-              }}
-            >
-              Save Changes
-            </Button>
-            {myRole !== "admin" && (
-  <Box sx={{ mt: 3 }}>
-    <Typography variant="subtitle1" fontWeight={600}>
-      Leave Team
-    </Typography>
-
-    <Button
-      variant="outlined"
-      color="error"
-      sx={{ mt: 1 }}
-      onClick={async () => {
-        await teamsAPI.removeMember(teamId, user._id);
-        navigate("/teams");
-      }}
-    >
-      Leave Team
-    </Button>
-  </Box>
-)}
-
-
-            {isAdmin && (
-  <Button
-    color="error"
-    variant="contained"
-    sx={{ mt: 4 }}
-    onClick={async () => {
-      await teamsAPI.deleteTeam(team._id);
-      navigate("/teams");
-    }}
-  >
-    Delete Team
-  </Button>
-)}
-
-          </Box>
-        </Box>
-
-        {/* INVITE LINK */}
-        <Box sx={{ mt: 4 }}>
-          <Typography variant="subtitle1" fontWeight={600}>
-            Invite Members
-          </Typography>
-
-          <Box
-            sx={{
-              mt: 1,
-              p: 2,
-              borderRadius: 2,
-              border: "1px solid rgba(255,255,255,0.15)",
-              display: "flex",
-              alignItems: "center",
-              gap: 2,
-            }}
-          >
-            <Typography sx={{ flexGrow: 1 }}>{inviteURL}</Typography>
-
-            <Button
-              variant="contained"
-              onClick={() => navigator.clipboard.writeText(inviteURL)}
-            >
-              Copy Link
-            </Button>
-          </Box>
-        </Box>
-      </>
-    )}
-  </Paper>
-)}
-
+            
+            <TextField
+              label="Icon (emoji)"
+              value={teamFormData.icon}
+              onChange={(e) => setTeamFormData({ ...teamFormData, icon: e.target.value })}
+              fullWidth
+              placeholder="e.g., 🚀, 👥, 💼"
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditTeamDialog(false)}>Cancel</Button>
+          <Button onClick={handleUpdateTeam} variant="contained">
+            Save Changes
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

@@ -23,7 +23,7 @@ api.interceptors.request.use(
 );
 
 // -------------------------
-// RESPONSE INTERCEPTOR - ADD THIS
+// RESPONSE INTERCEPTOR
 // -------------------------
 api.interceptors.response.use(
   (response) => response,
@@ -58,34 +58,39 @@ export const tasksAPI = {
 };
 
 // -------------------------
-// TEAMS CRUD - FIXED ENDPOINTS
+// TEAMS API - COMPLETE
 // -------------------------
 export const teamsAPI = {
+  // Team management
   getTeams: () => api.get("/api/teams/my"),
   createTeam: (data) => api.post("/api/teams", data),
   getTeam: (teamId) => api.get(`/api/teams/${teamId}/details`),
+  updateTeam: (teamId, data) => api.put(`/api/teams/${teamId}`, data),
+  deleteTeam: (teamId) => api.delete(`/api/teams/${teamId}`),
+  
+  // Team joining
   joinTeam: (teamId) => api.post(`/api/teams/${teamId}/join`),
   getInviteLink: (teamId) => api.get(`/api/teams/${teamId}/invite`),
-  getAllMyTeamTasks: () => api.get("/api/teams/my/tasks"), // You might need to create this endpoint
-  updateTeam: (teamId, data) => api.put(`/api/teams/${teamId}/`, data),
-  updateMemberRole: (teamId, userId, role) => api.put(`/api/teams/${teamId}/members/${userId}/role`, { role }),
   leaveTeam: (teamId) => api.post(`/api/teams/${teamId}/leave`),
-   deleteTeam: (teamId) => api.delete(`/api/teams/${teamId}`),
-  removeMember: (teamId, userId) => api.delete(`/api/teams/${teamId}/members/${userId}`),
-
+  
+  // Member management
+  updateMemberRole: (teamId, userId, role) => 
+    api.put(`/api/teams/${teamId}/members/${userId}/role`, { role }),
+  removeMember: (teamId, userId) => 
+    api.delete(`/api/teams/${teamId}/members/${userId}`),
+  
+  // Task-related
+  getAllMyTeamTasks: () => api.get("/api/teams/my/tasks"),
 };
 
 // -------------------------
-// TEAM TASKS CRUD - FIXED ENDPOINTS
+// TEAM TASKS API
 // -------------------------
 export const teamTasksAPI = {
   getTasks: (teamId) => api.get(`/api/team-tasks/${teamId}`),
   getMyTeamTasks: () => api.get("/api/team-tasks/my/all"),
   createTask: (teamId, data) => api.post(`/api/team-tasks/${teamId}`, data),
-    // UPDATE existing task
   updateTask: (taskId, data) => api.put(`/api/team-tasks/${taskId}`, data),
-
-  // DELETE a task
   deleteTask: (taskId) => api.delete(`/api/team-tasks/${taskId}`),
 };
 
