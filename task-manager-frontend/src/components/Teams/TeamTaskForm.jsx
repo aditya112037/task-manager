@@ -6,11 +6,14 @@ import {
   DialogActions,
   TextField,
   Button,
+  Box,
   MenuItem,
-  Box
+  Select,
+  FormControl,
+  InputLabel,
 } from "@mui/material";
 
-export default function TeamTaskForm({ task, onSubmit, onCancel }) {
+export default function TeamTaskForm({ open, task, onCancel, onSubmit }) {
   const [formData, setFormData] = useState({
     title: "",
     description: "",
@@ -26,108 +29,96 @@ export default function TeamTaskForm({ task, onSubmit, onCancel }) {
         description: task.description || "",
         priority: task.priority || "medium",
         status: task.status || "todo",
-        dueDate: task.dueDate
-          ? new Date(task.dueDate).toISOString().split("T")[0]
-          : "",
+        dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : "",
+      });
+    } else {
+      setFormData({
+        title: "",
+        description: "",
+        priority: "medium",
+        status: "todo",
+        dueDate: "",
       });
     }
   }, [task]);
 
-  const handleChange = (e) => {
-    setFormData({
+  const handleSubmit = () => {
+    if (!formData.title.trim()) {
+      alert("Title is required");
+      return;
+    }
+    
+    const submitData = {
       ...formData,
-      [e.target.name]: e.target.value,
-    });
+      dueDate: formData.dueDate ? new Date(formData.dueDate).toISOString() : null,
+    };
+    
+    onSubmit(submitData);
   };
 
   return (
-    <Dialog
-      open={true}
-      onClose={onCancel}
-      fullWidth
-      maxWidth="sm"
-      sx={{ "& .MuiDialog-paper": { borderRadius: 3, p: 1 } }}
-    >
-      <DialogTitle sx={{ fontWeight: 700, fontSize: "1.3rem" }}>
-        {task ? "Edit Team Task" : "Create Team Task"}
+    <Dialog open={open} onClose={onCancel} maxWidth="sm" fullWidth>
+      <DialogTitle>
+        {task ? "Edit Task" : "Create New Task"}
       </DialogTitle>
-
-      <DialogContent dividers>
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+      <DialogContent>
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 2 }}>
           <TextField
-            label="Title *"
-            name="title"
+            label="Title"
+            value={formData.title}
+            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
             fullWidth
             required
-            value={formData.title}
-            onChange={handleChange}
           />
-
+          
           <TextField
             label="Description"
-            name="description"
+            value={formData.description}
+            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+            fullWidth
             multiline
             rows={3}
-            fullWidth
-            value={formData.description}
-            onChange={handleChange}
           />
-
-          <Box sx={{ display: "flex", gap: 2 }}>
-            <TextField
-              select
-              fullWidth
-              name="priority"
-              label="Priority"
+          
+          <FormControl fullWidth>
+            <InputLabel>Priority</InputLabel>
+            <Select
               value={formData.priority}
-              onChange={handleChange}
+              label="Priority"
+              onChange={(e) => setFormData({ ...formData, priority: e.target.value })}
             >
               <MenuItem value="low">Low</MenuItem>
               <MenuItem value="medium">Medium</MenuItem>
               <MenuItem value="high">High</MenuItem>
-            </TextField>
-
-            <TextField
-              select
-              fullWidth
-              name="status"
-              label="Status"
+            </Select>
+          </FormControl>
+          
+          <FormControl fullWidth>
+            <InputLabel>Status</InputLabel>
+            <Select
               value={formData.status}
-              onChange={handleChange}
+              label="Status"
+              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
             >
               <MenuItem value="todo">To Do</MenuItem>
               <MenuItem value="in-progress">In Progress</MenuItem>
               <MenuItem value="completed">Completed</MenuItem>
-            </TextField>
-          </Box>
-
+            </Select>
+          </FormControl>
+          
           <TextField
             label="Due Date"
             type="date"
-            name="dueDate"
+            value={formData.dueDate}
+            onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
             fullWidth
             InputLabelProps={{ shrink: true }}
-            value={formData.dueDate}
-            onChange={handleChange}
           />
         </Box>
       </DialogContent>
-
-      <DialogActions sx={{ p: 2 }}>
-        <Button
-          onClick={onCancel}
-          color="inherit"
-          variant="outlined"
-          sx={{ borderRadius: 2, textTransform: "none" }}
-        >
-          Cancel
-        </Button>
-
-        <Button
-          variant="contained"
-          onClick={() => onSubmit(formData)}
-          sx={{ borderRadius: 2, textTransform: "none" }}
-        >
+      <DialogActions>
+        <Button onClick={onCancel}>Cancel</Button>
+        <Button onClick={handleSubmit} variant="contained">
           {task ? "Update Task" : "Create Task"}
         </Button>
       </DialogActions>
