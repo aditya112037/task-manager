@@ -502,6 +502,7 @@ export default function TeamDetails() {
             <TeamTaskForm
               open={showTaskForm}
               task={editingTask}
+              teamMembers={team.members} // pass the members
               onCancel={() => setShowTaskForm(false)}
               onSubmit={async (formData) => {
                 try {

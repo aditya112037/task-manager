@@ -11,15 +11,19 @@ import {
   Select,
   FormControl,
   InputLabel,
+  InputAdornment,
 } from "@mui/material";
 
-export default function TeamTaskForm({ open, task, onCancel, onSubmit }) {
+export default function TeamTaskForm({ open, task, teamMembers, onCancel, onSubmit }) {
   const [formData, setFormData] = useState({
     title: "",
     description: "",
     priority: "medium",
     status: "todo",
     dueDate: "",
+    assignedTo: "",
+    color: "#4CAF50",
+    icon: "📋",
   });
 
   useEffect(() => {
@@ -30,6 +34,9 @@ export default function TeamTaskForm({ open, task, onCancel, onSubmit }) {
         priority: task.priority || "medium",
         status: task.status || "todo",
         dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : "",
+        assignedTo: task.assignedTo?._id || "",
+        color: task.color || "#4CAF50",
+        icon: task.icon || "📋",
       });
     } else {
       setFormData({
@@ -38,6 +45,9 @@ export default function TeamTaskForm({ open, task, onCancel, onSubmit }) {
         priority: "medium",
         status: "todo",
         dueDate: "",
+        assignedTo: "",
+        color: "#4CAF50",
+        icon: "📋",
       });
     }
   }, [task]);
@@ -51,6 +61,7 @@ export default function TeamTaskForm({ open, task, onCancel, onSubmit }) {
     const submitData = {
       ...formData,
       dueDate: formData.dueDate ? new Date(formData.dueDate).toISOString() : null,
+      assignedTo: formData.assignedTo || null,
     };
     
     onSubmit(submitData);
@@ -106,6 +117,22 @@ export default function TeamTaskForm({ open, task, onCancel, onSubmit }) {
             </Select>
           </FormControl>
           
+          <FormControl fullWidth>
+            <InputLabel>Assigned To</InputLabel>
+            <Select
+              value={formData.assignedTo}
+              label="Assigned To"
+              onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value })}
+            >
+              <MenuItem value="">Unassigned</MenuItem>
+              {teamMembers.map((member) => (
+                <MenuItem key={member.user._id} value={member.user._id}>
+                  {member.user.name} ({member.role})
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          
           <TextField
             label="Due Date"
             type="date"
@@ -114,6 +141,41 @@ export default function TeamTaskForm({ open, task, onCancel, onSubmit }) {
             fullWidth
             InputLabelProps={{ shrink: true }}
           />
+          
+          <Box sx={{ display: "flex", gap: 2 }}>
+            <FormControl sx={{ flex: 1 }}>
+              <TextField
+                label="Color"
+                type="color"
+                value={formData.color}
+                onChange={(e) => setFormData({ ...formData, color: e.target.value })}
+                fullWidth
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <Box
+                        sx={{
+                          width: 20,
+                          height: 20,
+                          borderRadius: '50%',
+                          backgroundColor: formData.color,
+                          border: '1px solid #ccc'
+                        }}
+                      />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </FormControl>
+            
+            <TextField
+              label="Icon"
+              value={formData.icon}
+              onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
+              sx={{ flex: 1 }}
+              helperText="Emoji or short text"
+            />
+          </Box>
         </Box>
       </DialogContent>
       <DialogActions>

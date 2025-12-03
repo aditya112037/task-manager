@@ -16,6 +16,8 @@ import { useTheme } from "@mui/material/styles";
 import EventIcon from "@mui/icons-material/Event";
 import GoogleIcon from "@mui/icons-material/Google";
 
+// ... (imports remain same)
+
 export default function TeamTaskItem({ 
   task, 
   canEdit, 
@@ -47,7 +49,7 @@ export default function TeamTaskItem({
     if (!task.dueDate) return "#";
     
     const startDate = new Date(task.dueDate);
-    const endDate = new Date(startDate.getTime() + 30 * 60 * 1000); // 30 minutes later
+    const endDate = new Date(startDate.getTime() + 30 * 60 * 1000);
 
     const formatForGoogle = (date) => {
       return date.toISOString()
@@ -61,46 +63,54 @@ export default function TeamTaskItem({
       `&dates=${formatForGoogle(startDate)}/${formatForGoogle(endDate)}`;
   };
 
-  // Get ICS URL for Apple Calendar
   const getICSUrl = () => {
     return `${process.env.REACT_APP_API_URL}/api/ics/${task._id}`;
   };
 
   return (
-    <Card sx={{ 
-      mb: 2, 
-      borderRadius: 3, 
-      p: 1,
-      backgroundColor: theme.palette.background.paper,
-      transition: "0.2s",
-      boxShadow:
-        theme.palette.mode === "dark"
-          ? "0 0 10px rgba(0,0,0,0.4)"
-          : "0 4px 15px rgba(0,0,0,0.08)",
-      "&:hover": {
+    <Card 
+      sx={{ 
+        mb: 2, 
+        borderRadius: 3, 
+        p: 1,
+        backgroundColor: theme.palette.background.paper,
+        borderLeft: `5px solid ${task.color || "#4CAF50"}`,
+        transition: "0.2s",
         boxShadow:
           theme.palette.mode === "dark"
-            ? "0 0 14px rgba(0,0,0,0.55)"
-            : "0 6px 20px rgba(0,0,0,0.12)",
-      },
-    }}>
+            ? "0 0 10px rgba(0,0,0,0.4)"
+            : "0 4px 15px rgba(0,0,0,0.08)",
+        "&:hover": {
+          boxShadow:
+            theme.palette.mode === "dark"
+              ? "0 0 14px rgba(0,0,0,0.55)"
+              : "0 6px 20px rgba(0,0,0,0.12)",
+        },
+      }}
+    >
       <CardContent>
-        {/* HEADER with Edit/Delete buttons for admins/managers */}
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: 1 }}>
           <Box sx={{ flex: 1 }}>
             <Typography variant="h6" fontWeight={700} color={theme.palette.text.primary}>
+              <span style={{ marginRight: 8 }}>{task.icon || "📋"}</span>
               {task.title}
             </Typography>
             
-            {/* Show who created the task */}
-            {task.createdBy && (
-              <Typography variant="caption" color="text.secondary">
-                Created by: {typeof task.createdBy === 'object' ? task.createdBy.name : task.createdBy}
-              </Typography>
-            )}
+            {/* Show who created the task and assigned to */}
+            <Stack direction="row" spacing={2} sx={{ mt: 1 }}>
+              {task.createdBy && (
+                <Typography variant="caption" color="text.secondary">
+                  Created by: {typeof task.createdBy === 'object' ? task.createdBy.name : task.createdBy}
+                </Typography>
+              )}
+              {task.assignedTo && (
+                <Typography variant="caption" color="text.secondary">
+                  Assigned to: {typeof task.assignedTo === 'object' ? task.assignedTo.name : task.assignedTo}
+                </Typography>
+              )}
+            </Stack>
           </Box>
 
-          {/* EDIT/DELETE BUTTONS - Only show if user can edit */}
           {canEdit && (
             <Box>
               <Tooltip title="Edit Task">
@@ -134,7 +144,7 @@ export default function TeamTaskItem({
             sx={{ 
               mb: 2, 
               color: theme.palette.text.secondary,
-              whiteSpace: 'pre-line' // Preserve line breaks
+              whiteSpace: 'pre-line'
             }}
           >
             {task.description}

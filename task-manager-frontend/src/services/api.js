@@ -86,12 +86,28 @@ export const teamsAPI = {
 // -------------------------
 // TEAM TASKS API
 // -------------------------
+// In api.js, add these new endpoints:
+
+// -------------------------
+// TEAM TASKS API - UPDATED
+// -------------------------
 export const teamTasksAPI = {
+  // Existing endpoints
   getTasks: (teamId) => api.get(`/api/team-tasks/${teamId}`),
   getMyTeamTasks: () => api.get("/api/team-tasks/my/all"),
   createTask: (teamId, data) => api.post(`/api/team-tasks/${teamId}`, data),
   updateTask: (taskId, data) => api.put(`/api/team-tasks/${taskId}`, data),
   deleteTask: (taskId) => api.delete(`/api/team-tasks/${taskId}`),
+  
+  // NEW: Assignment-specific endpoints
+  getMyAssignedTasks: (teamId) => api.get(`/api/team-tasks/${teamId}/my`),
+  getUserTasks: (teamId, userId) => api.get(`/api/team-tasks/${teamId}/user/${userId}`),
+  
+  // NEW: Bulk operations (for future)
+  bulkUpdateTasks: (teamId, taskIds, data) => 
+    api.put(`/api/team-tasks/${teamId}/bulk`, { taskIds, data }),
+  bulkDeleteTasks: (teamId, taskIds) => 
+    api.delete(`/api/team-tasks/${teamId}/bulk`, { data: { taskIds } }),
 };
 
 export default api;
