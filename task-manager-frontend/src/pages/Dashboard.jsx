@@ -11,9 +11,12 @@ import {
   Button,
   Stack,
   Chip,
+  Grid,
+  Badge,
 } from "@mui/material";
-import { Grid } from "@mui/material";
 import GroupIcon from "@mui/icons-material/Group";
+import AssignmentIcon from "@mui/icons-material/Assignment";
+import TaskIcon from "@mui/icons-material/Task";
 import TaskList from "../components/Task/TaskList";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import { teamTasksAPI, teamsAPI } from "../services/api";
@@ -25,16 +28,22 @@ const Dashboard = () => {
 
   const [tab, setTab] = useState(0);
   const [teamTasks, setTeamTasks] = useState([]);
+  const [assignedTasks, setAssignedTasks] = useState([]); // Tasks assigned to current user
   const [teams, setTeams] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState({
+    teamTasks: true,
+    assignedTasks: true,
+    teams: true,
+  });
   const [error, setError] = useState(null);
-  const [teamTasksByTeam, setTeamTasksByTeam] = useState({}); // Grouped by team
+  const [teamTasksByTeam, setTeamTasksByTeam] = useState({});
 
   const handleTabChange = (_, newValue) => setTab(newValue);
 
   useEffect(() => {
     fetchTeamTasks();
     fetchTeams();
+    fetchAssignedTasks();
   }, []);
 
   const fetchTeams = async () => {
@@ -43,14 +52,15 @@ const Dashboard = () => {
       setTeams(response.data);
     } catch (err) {
       console.error("Error loading teams:", err);
+    } finally {
+      setLoading(prev => ({ ...prev, teams: false }));
     }
   };
 
   const fetchTeamTasks = async () => {
-    setLoading(true);
+    setLoading(prev => ({ ...prev, teamTasks: true }));
     setError(null);
     try {
-      // FIXED: Changed from getAllMyTeamTasks() to getMyTeamTasks()
       const response = await teamTasksAPI.getMyTeamTasks();
       setTeamTasks(response.data);
       
@@ -61,7 +71,43 @@ const Dashboard = () => {
       console.error("Error loading team tasks:", err);
       setError("Failed to load team tasks. Please try again.");
     } finally {
-      setLoading(false);
+      setLoading(prev => ({ ...prev, teamTasks: false }));
+    }
+  };
+
+  // NEW: Fetch tasks specifically assigned to current user
+  const fetchAssignedTasks = async () => {
+    setLoading(prev => ({ ...prev, assignedTasks: true }));
+    try {
+      // Get all teams user is a member of
+      const teamsRes = await teamsAPI.getTeams();
+      const userTeams = teamsRes.data;
+      
+      let allAssignedTasks = [];
+      
+      // Fetch assigned tasks from each team
+      for (const team of userTeams) {
+        try {
+          // Using the new endpoint we created earlier
+          const response = await teamTasksAPI.getMyAssignedTasks(team._id);
+          allAssignedTasks = [...allAssignedTasks, ...response.data];
+        } catch (err) {
+          console.error(`Error fetching assigned tasks for team ${team._id}:`, err);
+        }
+      }
+      
+      // Sort by due date (closest first)
+      allAssignedTasks.sort((a, b) => {
+        if (!a.dueDate) return 1;
+        if (!b.dueDate) return -1;
+        return new Date(a.dueDate) - new Date(b.dueDate);
+      });
+      
+      setAssignedTasks(allAssignedTasks);
+    } catch (err) {
+      console.error("Error loading assigned tasks:", err);
+    } finally {
+      setLoading(prev => ({ ...prev, assignedTasks: false }));
     }
   };
 
@@ -94,8 +140,9 @@ const Dashboard = () => {
   const handleStatusChange = async (taskId, newStatus) => {
     try {
       await teamTasksAPI.updateTask(taskId, { status: newStatus });
-      // Refresh tasks
+      // Refresh all task lists
       fetchTeamTasks();
+      fetchAssignedTasks();
     } catch (err) {
       console.error("Error updating task status:", err);
     }
@@ -107,8 +154,9 @@ const Dashboard = () => {
     
     try {
       await teamTasksAPI.deleteTask(taskId);
-      // Refresh tasks
+      // Refresh all task lists
       fetchTeamTasks();
+      fetchAssignedTasks();
     } catch (err) {
       console.error("Error deleting task:", err);
       alert("Failed to delete task. Please try again.");
@@ -138,6 +186,22 @@ const Dashboard = () => {
   const getTeamById = (teamId) => {
     return teams.find(t => t._id === teamId);
   };
+
+  // Count assigned tasks by status
+  const getAssignedTaskStats = () => {
+    const total = assignedTasks.length;
+    const todo = assignedTasks.filter(t => t.status === "todo").length;
+    const inProgress = assignedTasks.filter(t => t.status === "in-progress").length;
+    const completed = assignedTasks.filter(t => t.status === "completed").length;
+    const overdue = assignedTasks.filter(t => {
+      if (!t.dueDate) return false;
+      return new Date(t.dueDate) < new Date() && t.status !== "completed";
+    }).length;
+    
+    return { total, todo, inProgress, completed, overdue };
+  };
+
+  const assignedStats = getAssignedTaskStats();
 
   return (
     <Box sx={{ pt: 1 }}>
@@ -174,16 +238,51 @@ const Dashboard = () => {
             },
           }}
         >
-          <Tab label="My Tasks" />
-          <Tab label="Team Tasks" />
-          <Tab label="My Teams" />
+          <Tab 
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <TaskIcon fontSize="small" />
+                <span>My Tasks</span>
+              </Box>
+            } 
+          />
+          <Tab 
+            label={
+              <Badge 
+                badgeContent={assignedStats.total} 
+                color="primary" 
+                sx={{ '& .MuiBadge-badge': { fontSize: '0.7rem', height: '18px', minWidth: '18px' } }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <AssignmentIcon fontSize="small" />
+                  <span>Assigned to Me</span>
+                </Box>
+              </Badge>
+            } 
+          />
+          <Tab 
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <GroupIcon fontSize="small" />
+                <span>Team Tasks</span>
+              </Box>
+            } 
+          />
+          <Tab 
+            label={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <GroupIcon fontSize="small" />
+                <span>My Teams</span>
+              </Box>
+            } 
+          />
         </Tabs>
       </Paper>
 
       {/* PERSONAL TASKS */}
       {tab === 0 && <TaskList />}
 
-      {/* TEAM TASKS */}
+      {/* ASSIGNED TO ME - NEW TAB */}
       {tab === 1 && (
         <Box>
           {error && (
@@ -192,7 +291,185 @@ const Dashboard = () => {
             </Alert>
           )}
 
-          {loading ? (
+          {loading.assignedTasks ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+              <CircularProgress />
+            </Box>
+          ) : assignedTasks.length > 0 ? (
+            <Box>
+              {/* Assigned Tasks Summary */}
+              <Paper sx={{ 
+                p: 2, 
+                mb: 3, 
+                bgcolor: 'background.default',
+                borderLeft: `4px solid ${theme.palette.primary.main}`,
+              }}>
+                <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
+                  📋 Tasks Assigned to You
+                </Typography>
+                
+                <Grid container spacing={2} sx={{ mb: 2 }}>
+                  <Grid item xs={6} sm={3}>
+                    <Paper sx={{ 
+                      p: 2, 
+                      textAlign: 'center',
+                      bgcolor: assignedStats.overdue > 0 ? 'error.light' : 'primary.light',
+                      color: assignedStats.overdue > 0 ? 'error.contrastText' : 'primary.contrastText',
+                    }}>
+                      <Typography variant="h5">{assignedStats.total}</Typography>
+                      <Typography variant="body2">Total</Typography>
+                    </Paper>
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Paper sx={{ 
+                      p: 2, 
+                      textAlign: 'center',
+                      bgcolor: 'warning.light',
+                      color: 'warning.contrastText',
+                    }}>
+                      <Typography variant="h5">{assignedStats.todo}</Typography>
+                      <Typography variant="body2">To Do</Typography>
+                    </Paper>
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Paper sx={{ 
+                      p: 2, 
+                      textAlign: 'center',
+                      bgcolor: 'info.light',
+                      color: 'info.contrastText',
+                    }}>
+                      <Typography variant="h5">{assignedStats.inProgress}</Typography>
+                      <Typography variant="body2">In Progress</Typography>
+                    </Paper>
+                  </Grid>
+                  <Grid item xs={6} sm={3}>
+                    <Paper sx={{ 
+                      p: 2, 
+                      textAlign: 'center',
+                      bgcolor: 'success.light',
+                      color: 'success.contrastText',
+                    }}>
+                      <Typography variant="h5">{assignedStats.completed}</Typography>
+                      <Typography variant="body2">Completed</Typography>
+                    </Paper>
+                  </Grid>
+                </Grid>
+
+                {assignedStats.overdue > 0 && (
+                  <Alert severity="error" sx={{ mb: 1 }}>
+                    ⚠️ You have {assignedStats.overdue} overdue task{assignedStats.overdue > 1 ? 's' : ''}!
+                  </Alert>
+                )}
+              </Paper>
+
+              {/* Priority Sections */}
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="h6" fontWeight={600} sx={{ mb: 2, color: 'error.main' }}>
+                  🔥 High Priority ({assignedTasks.filter(t => t.priority === 'high').length})
+                </Typography>
+                {assignedTasks
+                  .filter(task => task.priority === 'high')
+                  .map(task => (
+                    <TeamTaskItem
+                      key={task._id}
+                      task={task}
+                      canEdit={true} // User can edit their own assigned tasks
+                      onEdit={() => handleEditTask(task)}
+                      onDelete={() => handleDeleteTask(task._id)}
+                      onStatusChange={handleStatusChange}
+                    />
+                  ))}
+              </Box>
+
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="h6" fontWeight={600} sx={{ mb: 2, color: 'warning.main' }}>
+                  ⚡ Medium Priority ({assignedTasks.filter(t => t.priority === 'medium').length})
+                </Typography>
+                {assignedTasks
+                  .filter(task => task.priority === 'medium')
+                  .map(task => (
+                    <TeamTaskItem
+                      key={task._id}
+                      task={task}
+                      canEdit={true}
+                      onEdit={() => handleEditTask(task)}
+                      onDelete={() => handleDeleteTask(task._id)}
+                      onStatusChange={handleStatusChange}
+                    />
+                  ))}
+              </Box>
+
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="h6" fontWeight={600} sx={{ mb: 2, color: 'success.main' }}>
+                  🌱 Low Priority ({assignedTasks.filter(t => t.priority === 'low').length})
+                </Typography>
+                {assignedTasks
+                  .filter(task => task.priority === 'low')
+                  .map(task => (
+                    <TeamTaskItem
+                      key={task._id}
+                      task={task}
+                      canEdit={true}
+                      onEdit={() => handleEditTask(task)}
+                      onDelete={() => handleDeleteTask(task._id)}
+                      onStatusChange={handleStatusChange}
+                    />
+                  ))}
+              </Box>
+            </Box>
+          ) : (
+            <Paper
+              elevation={1}
+              sx={{
+                textAlign: "center",
+                p: 4,
+                backgroundColor: theme.palette.background.paper,
+                border: theme.palette.mode === 'dark' ? '1px solid rgba(255,255,255,0.1)' : '1px solid rgba(0,0,0,0.1)',
+              }}
+            >
+              <AssignmentIcon sx={{ fontSize: 60, color: theme.palette.text.secondary, mb: 2 }} />
+              <Typography
+                variant="h6"
+                sx={{
+                  color: theme.palette.text.secondary,
+                  mb: 2,
+                }}
+              >
+                No tasks assigned to you yet
+              </Typography>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: theme.palette.text.secondary,
+                  mb: 3,
+                }}
+              >
+                Team admins will assign tasks to you here. Check back later!
+              </Typography>
+              <Button 
+                variant="contained" 
+                startIcon={<GroupIcon />}
+                onClick={() => {
+                  setTab(2); // Switch to Team Tasks tab
+                }}
+              >
+                Browse Team Tasks
+              </Button>
+            </Paper>
+          )}
+        </Box>
+      )}
+
+      {/* TEAM TASKS */}
+      {tab === 2 && (
+        <Box>
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+
+          {loading.teamTasks ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
               <CircularProgress />
             </Box>
@@ -239,7 +516,7 @@ const Dashboard = () => {
                         <Box
                           sx={{
                             p: 2,
-                            bgcolor: teamData.color + '20', // 20% opacity
+                            bgcolor: teamData.color + '20',
                             borderBottom: `1px solid ${theme.palette.divider}`,
                             display: 'flex',
                             alignItems: 'center',
@@ -274,6 +551,14 @@ const Dashboard = () => {
                                   size="small"
                                   color={userRole === "admin" ? "primary" : "default"}
                                 />
+                                {teamData.tasks.some(t => t.assignedTo?._id === user?._id) && (
+                                  <Chip 
+                                    label={`${teamData.tasks.filter(t => t.assignedTo?._id === user?._id).length} assigned to you`}
+                                    color="primary" 
+                                    variant="outlined"
+                                    size="small"
+                                  />
+                                )}
                               </Stack>
                             </Box>
                           </Box>
@@ -292,7 +577,7 @@ const Dashboard = () => {
                             <TeamTaskItem
                               key={task._id}
                               task={task}
-                              canEdit={isAdminOrManager}
+                              canEdit={isAdminOrManager || task.assignedTo?._id === user?._id}
                               onEdit={() => handleEditTask(task)}
                               onDelete={() => handleDeleteTask(task._id)}
                               onStatusChange={handleStatusChange}
@@ -355,9 +640,9 @@ const Dashboard = () => {
       )}
 
       {/* MY TEAMS TAB */}
-      {tab === 2 && (
+      {tab === 3 && (
         <Box>
-          {loading ? (
+          {loading.teams ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
               <CircularProgress />
             </Box>
@@ -365,6 +650,10 @@ const Dashboard = () => {
             <Grid container spacing={2}>
               {teams.map(team => {
                 const userRole = getUserRoleInTeam(team._id);
+                const assignedTasksCount = assignedTasks.filter(t => 
+                  t.team?._id === team._id || t.team === team._id
+                ).length;
+                
                 return (
                   <Grid item xs={12} sm={6} md={4} key={team._id}>
                     <Paper
@@ -417,9 +706,16 @@ const Dashboard = () => {
                       </Typography>
                       
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Typography variant="body2">
-                          {team.members?.length || 0} members
-                        </Typography>
+                        <Stack direction="row" spacing={1}>
+                          <Typography variant="body2">
+                            👥 {team.members?.length || 0}
+                          </Typography>
+                          {assignedTasksCount > 0 && (
+                            <Typography variant="body2" color="primary">
+                              📋 {assignedTasksCount}
+                            </Typography>
+                          )}
+                        </Stack>
                         <Typography variant="body2" color="primary">
                           View Team →
                         </Typography>
@@ -454,8 +750,5 @@ const Dashboard = () => {
     </Box>
   );
 };
-
-// Import Grid component
-
 
 export default Dashboard;
