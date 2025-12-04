@@ -1,0 +1,240 @@
+// components/Notifications/NotificationCenter.jsx
+import React, { useState, useEffect } from "react";
+import {
+  Badge,
+  IconButton,
+  Popover,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemAvatar,
+  Avatar,
+  Typography,
+  Box,
+  Chip,
+  Button,
+  Divider,
+  useTheme,
+} from "@mui/material";
+import NotificationsIcon from "@mui/icons-material/Notifications";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import WarningIcon from "@mui/icons-material/Warning";
+import ErrorIcon from "@mui/icons-material/Error";
+import InfoIcon from "@mui/icons-material/Info";
+import api from "../../services/api";
+
+const NotificationCenter = () => {
+  const theme = useTheme();
+  const [anchorEl, setAnchorEl] = useState(null);
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(false);
+
+  const open = Boolean(anchorEl);
+
+  const fetchNotifications = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get("/api/notifications");
+      setNotifications(response.data.notifications);
+      setUnreadCount(response.data.unreadCount);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+    // Poll for new notifications every 30 seconds
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleClick = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
+  const markAsRead = async (notificationId) => {
+    try {
+      await api.put(`/api/notifications/${notificationId}/read`);
+      fetchNotifications();
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+    }
+  };
+
+  const markAllAsRead = async () => {
+    try {
+      await api.put("/api/notifications/read-all");
+      fetchNotifications();
+    } catch (error) {
+      console.error("Error marking all as read:", error);
+    }
+  };
+
+  const getNotificationIcon = (type) => {
+    switch (type) {
+      case "task_assigned":
+        return <InfoIcon color="primary" />;
+      case "task_due_soon":
+        return <WarningIcon color="warning" />;
+      case "task_overdue":
+        return <ErrorIcon color="error" />;
+      case "extension_approved":
+        return <CheckCircleIcon color="success" />;
+      default:
+        return <InfoIcon color="action" />;
+    }
+  };
+
+  const formatTime = (dateString) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+  };
+
+  return (
+    <>
+      <IconButton
+        color="inherit"
+        onClick={handleClick}
+        sx={{
+          position: 'relative',
+          '&:hover': {
+            backgroundColor: 'rgba(255, 255, 255, 0.1)',
+          },
+        }}
+      >
+        <Badge badgeContent={unreadCount} color="error">
+          <NotificationsIcon />
+        </Badge>
+      </IconButton>
+
+      <Popover
+        open={open}
+        anchorEl={anchorEl}
+        onClose={handleClose}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'right',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'right',
+        }}
+        PaperProps={{
+          sx: {
+            width: 360,
+            maxHeight: 500,
+            mt: 1,
+            boxShadow: theme.shadows[3],
+            border: `1px solid ${theme.palette.divider}`,
+          },
+        }}
+      >
+        <Box sx={{ p: 2, borderBottom: `1px solid ${theme.palette.divider}` }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6">Notifications</Typography>
+            {unreadCount > 0 && (
+              <Button size="small" onClick={markAllAsRead}>
+                Mark all as read
+              </Button>
+            )}
+          </Box>
+        </Box>
+
+        <List sx={{ p: 0 }}>
+          {loading ? (
+            <ListItem>
+              <ListItemText primary="Loading notifications..." />
+            </ListItem>
+          ) : notifications.length === 0 ? (
+            <ListItem>
+              <ListItemText 
+                primary="No notifications"
+                secondary="You're all caught up!"
+              />
+            </ListItem>
+          ) : (
+            notifications.map((notification) => (
+              <ListItem
+                key={notification._id}
+                sx={{
+                  bgcolor: notification.read ? 'transparent' : 'action.hover',
+                  borderBottom: `1px solid ${theme.palette.divider}`,
+                  '&:hover': {
+                    bgcolor: 'action.selected',
+                  },
+                  cursor: 'pointer',
+                }}
+                onClick={() => markAsRead(notification._id)}
+              >
+                <ListItemAvatar>
+                  <Avatar sx={{ bgcolor: 'transparent' }}>
+                    {getNotificationIcon(notification.type)}
+                  </Avatar>
+                </ListItemAvatar>
+                <ListItemText
+                  primary={
+                    <Typography variant="subtitle2" sx={{ fontWeight: notification.read ? 400 : 600 }}>
+                      {notification.title}
+                    </Typography>
+                  }
+                  secondary={
+                    <>
+                      <Typography variant="body2" color="text.primary">
+                        {notification.message}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {formatTime(notification.createdAt)}
+                      </Typography>
+                    </>
+                  }
+                />
+                {!notification.read && (
+                  <Box
+                    sx={{
+                      width: 8,
+                      height: 8,
+                      borderRadius: '50%',
+                      bgcolor: 'primary.main',
+                      ml: 1,
+                    }}
+                  />
+                )}
+              </ListItem>
+            ))
+          )}
+        </List>
+
+        {notifications.length > 0 && (
+          <Box sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
+            <Button 
+              fullWidth 
+              onClick={() => window.location.href = "/notifications"}
+              variant="outlined"
+            >
+              View All Notifications
+            </Button>
+          </Box>
+        )}
+      </Popover>
+    </>
+  );
+};
+
+export default NotificationCenter;

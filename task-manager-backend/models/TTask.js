@@ -43,39 +43,34 @@ const TTaskSchema = new mongoose.Schema(
       required: true,
     },
 
-    // NEW: Assigned to specific team member
     assignedTo: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null,
     },
 
-    // NEW: UI enhancements
     color: {
       type: String,
-      default: "#4CAF50", // Green
+      default: "#4CAF50",
     },
 
     icon: {
       type: String,
-      default: "📋", // Clipboard emoji
+      default: "📋",
     },
 
-    // NEW: Subtasks reference (for Goal 2)
     subtasks: [{
       type: mongoose.Schema.Types.ObjectId,
       ref: "SubTask",
       default: [],
     }],
 
-    // NEW: Task type/category
     category: {
       type: String,
       enum: ["general", "bug", "feature", "improvement", "meeting", "other"],
       default: "general",
     },
 
-    // NEW: Points/estimate (like story points)
     estimate: {
       type: Number,
       min: 0,
@@ -83,11 +78,29 @@ const TTaskSchema = new mongoose.Schema(
       default: 1,
     },
 
-    // NEW: Tags for better organization
     tags: [{
       type: String,
       trim: true,
     }],
+
+    // NEW FIELDS FOR NOTIFICATIONS AND EXTENSIONS
+    extensionRequest: {
+      requested: { type: Boolean, default: false },
+      reason: String,
+      requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      requestedAt: Date,
+      status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending" },
+      requestedDueDate: Date,
+    },
+
+    lastNotified: Date,
+    notificationCount: { type: Number, default: 0 },
+
+    completedAt: Date,
+    completedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+
+    // For filtering and organization
+    isPinned: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
@@ -96,5 +109,7 @@ const TTaskSchema = new mongoose.Schema(
 TTaskSchema.index({ team: 1, assignedTo: 1 });
 TTaskSchema.index({ team: 1, status: 1 });
 TTaskSchema.index({ team: 1, dueDate: 1 });
+TTaskSchema.index({ assignedTo: 1, dueDate: 1 });
+TTaskSchema.index({ "extensionRequest.status": 1 });
 
 module.exports = mongoose.model("TTask", TTaskSchema);

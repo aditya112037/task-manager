@@ -92,6 +92,15 @@ export const teamsAPI = {
 // TEAM TASKS API - UPDATED
 // -------------------------
 export const teamTasksAPI = {
+  requestExtension: (taskId, reason) => 
+      api.post(`/api/team-tasks/${taskId}/request-extension`, { reason }),
+  quickComplete: (taskId) => 
+    api.post(`/api/team-tasks/${taskId}/quick-complete`),
+  approveExtension: (taskId) => 
+    api.put(`/api/team-tasks/${taskId}/extension/approve`),
+  rejectExtension: (taskId) => 
+    api.put(`/api/team-tasks/${taskId}/extension/reject`),
+
   // Existing endpoints
   getTasks: (teamId) => api.get(`/api/team-tasks/${teamId}`),
   getMyTeamTasks: () => api.get("/api/team-tasks/my/all"),
@@ -109,5 +118,15 @@ export const teamTasksAPI = {
   bulkDeleteTasks: (teamId, taskIds) => 
     api.delete(`/api/team-tasks/${teamId}/bulk`, { data: { taskIds } }),
 };
+
+export const notificationsAPI = {
+  getNotifications: () => api.get("/api/notifications"),
+  markAsRead: (notificationId) => api.put(`/api/notifications/${notificationId}/read`),
+  markAllAsRead: () => api.put("/api/notifications/read-all"),
+  deleteNotification: (notificationId) => api.delete(`/api/notifications/${notificationId}`),
+  clearAll: () => api.delete("/api/notifications"),
+};
+
+
 
 export default api;
