@@ -1,7 +1,7 @@
 // utils/notifications.js
 const Notification = require("../models/Notification");
 const TTask = require("../models/TTask");
-const Team = require("../models/Team");
+const Team = require("../models/team");
 
 class NotificationService {
   // Create notification for assigned task

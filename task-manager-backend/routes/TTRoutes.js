@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
-const Team = require("../models/Team");
+// FIX: Changed from require("../models/Team") to require("../models/team")
+const Team = require("../models/team");
 const TTask = require("../models/TTask");
 const Notification = require("../models/Notification");
 const { protect } = require("../middleware/auth");
