@@ -131,12 +131,13 @@ export const teamTasksAPI = {
 
     getPendingExtensions: (teamId) => 
     api.get(`/api/team-tasks/${teamId}/extensions/pending`),
-  
-  approveExtension: (taskId) => 
-    api.put(`/api/team-tasks/${taskId}/extension/approve`),
-  
-  rejectExtension: (taskId) => 
-    api.put(`/api/team-tasks/${taskId}/extension/reject`),
+// In api.js, change just these two functions:
+
+approveExtension: (taskId) => 
+  api.put(`/api/team-tasks/${taskId}/extension/approve`, { reason: "Extension approved" }),
+
+rejectExtension: (taskId) => 
+  api.put(`/api/team-tasks/${taskId}/extension/reject`, { reason: "Extension rejected" }),
   
   // NEW: Quick Actions
   quickComplete: (taskId) => 
