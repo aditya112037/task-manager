@@ -65,6 +65,9 @@ export default function TeamDetails() {
 
   const canEditTasks = myRole === "admin" || myRole === "manager";
   const isAdmin = myRole === "admin";
+  const pendingExtensionsCount = team?.pendingExtensions?.length || 0;
+// or however you calculate it
+
 
   // -------- FETCH TEAM --------
   const fetchTeam = async () => {
@@ -481,7 +484,7 @@ export default function TeamDetails() {
                   key={task._id}
                   task={task}
                   canEdit={canEditTasks}
-                  
+
                   onEdit={() => {
                     setEditingTask(task);
                     setShowTaskForm(true);
