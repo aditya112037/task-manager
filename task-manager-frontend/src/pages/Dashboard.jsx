@@ -7,7 +7,6 @@ import {
   CircularProgress,
   Paper,
   useTheme,
-  Alert,
   Button,
   Stack,
   Chip,
@@ -15,6 +14,7 @@ import {
   Badge,
   Snackbar,
 } from "@mui/material";
+import { Alert } from "@mui/material";
 import GroupIcon from "@mui/icons-material/Group";
 import AssignmentIcon from "@mui/icons-material/Assignment";
 import TaskIcon from "@mui/icons-material/Task";
@@ -813,6 +813,6 @@ const Dashboard = () => {
 };
 
 // Import Alert component
-import { Alert } from "@mui/material";
+
 
 export default Dashboard;
