@@ -13,14 +13,14 @@ import {
   Grid,
   Badge,
   Snackbar,
+  Alert,
 } from "@mui/material";
-import { Alert } from "@mui/material";
 import GroupIcon from "@mui/icons-material/Group";
 import AssignmentIcon from "@mui/icons-material/Assignment";
 import TaskIcon from "@mui/icons-material/Task";
 import TaskList from "../components/Task/TaskList";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
-import { teamTasksAPI, teamsAPI, notificationsAPI } from "../services/api";
+import { teamTasksAPI, teamsAPI } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 
 const Dashboard = () => {
@@ -169,43 +169,43 @@ const Dashboard = () => {
     }
   };
 
-  // NEW: Handle extension request
-const handleRequestExtension = async (taskId, reason, newDueDate) => {
-  try {
-    console.log("Sending extension request:", { taskId, reason, newDueDate });
-    
-    // Convert to ISO string for backend
-    const dateToSend = new Date(newDueDate).toISOString();
-    
-    const response = await teamTasksAPI.requestExtension(taskId, reason, dateToSend);
-    console.log("Extension response:", response.data);
-    
-    await fetchTeamTasks();
-    await fetchTeam();
-    
-    setSnackbar({
-      open: true,
-      message: "Extension request submitted successfully",
-      severity: "success",
-    });
-  } catch (err) {
-    console.error("Full extension error:", {
-      message: err.message,
-      response: err.response?.data,
-      status: err.response?.status,
-      url: err.config?.url,
-      method: err.config?.method,
-    });
-    
-    setSnackbar({
-      open: true,
-      message: err.response?.data?.message || "Failed to submit extension request",
-      severity: "error",
-    });
-  }
-};
+  // Handle extension request - FIXED
+  const handleRequestExtension = async (taskId, reason, newDueDate) => {
+    try {
+      console.log("Sending extension request:", { taskId, reason, newDueDate });
+      
+      // Convert to ISO string for backend
+      const dateToSend = new Date(newDueDate).toISOString();
+      
+      const response = await teamTasksAPI.requestExtension(taskId, reason, dateToSend);
+      console.log("Extension response:", response.data);
+      
+      await fetchTeamTasks();
+      await fetchTeams(); // FIXED: Changed from fetchTeam() to fetchTeams()
+      
+      setSnackbar({
+        open: true,
+        message: "Extension request submitted successfully",
+        severity: "success",
+      });
+    } catch (err) {
+      console.error("Full extension error:", {
+        message: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+        url: err.config?.url,
+        method: err.config?.method,
+      });
+      
+      setSnackbar({
+        open: true,
+        message: err.response?.data?.message || "Failed to submit extension request",
+        severity: "error",
+      });
+    }
+  };
 
-  // NEW: Handle quick complete
+  // Handle quick complete
   const handleQuickComplete = async (taskId) => {
     try {
       await teamTasksAPI.quickComplete(taskId);
@@ -830,8 +830,5 @@ const handleRequestExtension = async (taskId, reason, newDueDate) => {
     </Box>
   );
 };
-
-// Import Alert component
-
 
 export default Dashboard;
