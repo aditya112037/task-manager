@@ -480,42 +480,85 @@ export default function TeamDetails() {
           ) : (
             <Stack spacing={2}>
               {teamTasks.map((task) => (
-                <TeamTaskItem
-                  key={task._id}
-                  task={task}
-                  canEdit={canEditTasks}
+<TeamTaskItem
+  key={task._id}
+  task={task}
+  canEdit={canEditTasks}
+  isAdminOrManager={canEditTasks}  // allow admin & manager to approve/reject
 
-                  onEdit={() => {
-                    setEditingTask(task);
-                    setShowTaskForm(true);
-                  }}
-                  onDelete={async () => {
-                    try {
-                      await teamTasksAPI.deleteTask(task._id);
-                      await fetchTeamTasks();
-                      setSnackbar({
-                        open: true,
-                        message: "Task deleted",
-                        severity: "success",
-                      });
-                    } catch (err) {
-                      console.error("Delete task error:", err);
-                      setSnackbar({
-                        open: true,
-                        message: "Failed to delete task",
-                        severity: "error",
-                      });
-                    }
-                  }}
-                  onStatusChange={async (taskId, newStatus) => {
-                    try {
-                      await teamTasksAPI.updateTask(taskId, { status: newStatus });
-                      await fetchTeamTasks();
-                    } catch (err) {
-                      console.error("Status update error:", err);
-                    }
-                  }}
-                />
+  onEdit={() => {
+    setEditingTask(task);
+    setShowTaskForm(true);
+  }}
+
+  onDelete={async () => {
+    try {
+      await teamTasksAPI.deleteTask(task._id);
+      await fetchTeamTasks();
+      setSnackbar({
+        open: true,
+        message: "Task deleted",
+        severity: "success",
+      });
+    } catch (err) {
+      console.error("Delete task error:", err);
+      setSnackbar({
+        open: true,
+        message: "Failed to delete task",
+        severity: "error",
+      });
+    }
+  }}
+
+  onStatusChange={async (taskId, newStatus) => {
+    try {
+      await teamTasksAPI.updateTask(taskId, { status: newStatus });
+      await fetchTeamTasks();
+    } catch (err) {
+      console.error("Status update error:", err);
+    }
+  }}
+
+  // NEW HANDLERS FOR EXTENSION APPROVAL
+  onApproveExtension={async (taskId) => {
+    try {
+      await teamTasksAPI.approveExtension(taskId);
+      await fetchTeamTasks();
+      setSnackbar({
+        open: true,
+        message: "Extension approved",
+        severity: "success",
+      });
+    } catch (err) {
+      console.error("Approve extension error:", err);
+      setSnackbar({
+        open: true,
+        message: "Failed to approve extension",
+        severity: "error",
+      });
+    }
+  }}
+
+  onRejectExtension={async (taskId) => {
+    try {
+      await teamTasksAPI.rejectExtension(taskId);
+      await fetchTeamTasks();
+      setSnackbar({
+        open: true,
+        message: "Extension rejected",
+        severity: "info",
+      });
+    } catch (err) {
+      console.error("Reject extension error:", err);
+      setSnackbar({
+        open: true,
+        message: "Failed to reject extension",
+        severity: "error",
+      });
+    }
+  }}
+/>
+
               ))}
             </Stack>
           )}
