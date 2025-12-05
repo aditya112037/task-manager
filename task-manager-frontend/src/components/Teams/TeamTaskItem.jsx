@@ -18,11 +18,12 @@ import {
   DialogActions,
   TextField,
 } from "@mui/material";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import CancelIcon from "@mui/icons-material/Cancel";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import EventBusyIcon from "@mui/icons-material/EventBusy";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import { useTheme } from "@mui/material/styles";
@@ -36,7 +37,10 @@ export default function TeamTaskItem({
   onDelete, 
   onStatusChange,
   onRequestExtension,
-  onQuickComplete
+  onQuickComplete,
+  isAdminOrManager,    // <-- ADD THIS
+  onApproveExtension,  // <-- ADD THIS
+  onRejectExtension    // <-- ADD THIS
 }) {
   const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState(null);
@@ -323,6 +327,41 @@ export default function TeamTaskItem({
             {task.description}
           </Typography>
         )}
+        {/* ADMIN APPROVAL SECTION FOR EXTENSIONS */}
+{task.extensionRequest?.status === "pending" && isAdminOrManager && (
+  <Box sx={{ mt: 2, p: 2, bgcolor: "warning.light", borderRadius: 2 }}>
+    <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
+      ⏰ Extension Request Pending
+    </Typography>
+
+    <Typography variant="body2" sx={{ mb: 2 }}>
+      Reason: {task.extensionRequest.reason}
+    </Typography>
+
+    <Stack direction="row" spacing={1}>
+      <Button
+        size="small"
+        variant="contained"
+        color="success"
+        startIcon={<CheckCircleIcon />}
+        onClick={() => onApproveExtension && onApproveExtension(task._id)}
+      >
+        Approve
+      </Button>
+
+      <Button
+        size="small"
+        variant="outlined"
+        color="error"
+        startIcon={<CancelIcon />}
+        onClick={() => onRejectExtension && onRejectExtension(task._id)}
+      >
+        Reject
+      </Button>
+    </Stack>
+  </Box>
+)}
+
 
         <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
           <Chip 

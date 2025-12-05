@@ -128,6 +128,9 @@ export const teamTasksAPI = {
   // NEW: Extension Management
   requestExtension: (taskId, data) => 
     api.post(`/api/team-tasks/${taskId}/request-extension`, data),
+
+    getPendingExtensions: (teamId) => 
+    api.get(`/api/team-tasks/${teamId}/extensions/pending`),
   
   approveExtension: (taskId) => 
     api.put(`/api/team-tasks/${taskId}/extension/approve`),

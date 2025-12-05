@@ -31,6 +31,10 @@ import { useParams } from "react-router-dom";
 import { teamsAPI, teamTasksAPI } from "../services/api";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import TeamTaskForm from "../components/Teams/TeamTaskForm";
+import Badge from "@mui/material/Badge";
+import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import ExtensionRequests from "../components/Teams/ExtensionRequests";
+
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 
@@ -58,7 +62,7 @@ export default function TeamDetails() {
   const myRole = team?.members?.find(m => 
     m.user?._id === user?._id || m.user === user?._id
   )?.role;
-  
+
   const canEditTasks = myRole === "admin" || myRole === "manager";
   const isAdmin = myRole === "admin";
 
@@ -289,11 +293,25 @@ export default function TeamDetails() {
         <Divider sx={{ my: 2 }} />
 
         <Tabs value={tab} onChange={(e, v) => setTab(v)}>
-          <Tab label="Overview" />
-          <Tab label="Members" />
-          <Tab label="Tasks" />
-          <Tab label="Settings" />
-        </Tabs>
+  <Tab label="Overview" />
+  <Tab label="Members" />
+  <Tab label="Tasks" />
+
+  {/* NEW EXTENSIONS TAB */}
+  <Tab
+    label={
+      <Badge badgeContent={pendingExtensionsCount} color="error">
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <AccessTimeIcon fontSize="small" />
+          <span>Extensions</span>
+        </Box>
+      </Badge>
+    }
+  />
+
+  <Tab label="Settings" />
+</Tabs>
+
       </Paper>
 
       {/* OVERVIEW TAB */}
@@ -463,6 +481,7 @@ export default function TeamDetails() {
                   key={task._id}
                   task={task}
                   canEdit={canEditTasks}
+                  
                   onEdit={() => {
                     setEditingTask(task);
                     setShowTaskForm(true);
@@ -533,8 +552,20 @@ export default function TeamDetails() {
         </Paper>
       )}
 
+{/* EXTENSIONS TAB */}
+{tab === 3 && (
+  <Paper sx={{ p: 3, borderRadius: 3, mt: 2 }}>
+    <ExtensionRequests 
+      teamId={teamId}
+      isAdminOrManager={isAdmin}
+    />
+  </Paper>
+)}
+
+
+
       {/* SETTINGS TAB */}
-      {tab === 3 && (
+      {tab === 4 && (
         <Paper sx={{ p: 3, borderRadius: 3 }}>
           <Typography variant="h6" fontWeight={700} sx={{ mb: 3 }}>
             Team Settings

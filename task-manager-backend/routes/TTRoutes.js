@@ -632,6 +632,45 @@ router.post("/:taskId/quick-complete", protect, async (req, res) => {
   }
 });
 
+// Add to routes/TTRoutes.js
+
+// ----------------------------------------------------
+// GET PENDING EXTENSION REQUESTS (Admin/Manager only)
+// ----------------------------------------------------
+router.get("/:teamId/extensions/pending", protect, async (req, res) => {
+  try {
+    const team = await Team.findById(req.params.teamId);
+    if (!team) return res.status(404).json({ message: "Team not found" });
+
+    // Check if user is admin or manager
+    const member = team.members.find(
+      m => String(m.user) === String(req.user._id)
+    );
+
+    if (!member || !["admin", "manager"].includes(member.role)) {
+      return res.status(403).json({ 
+        message: "Only admin or manager can view extension requests" 
+      });
+    }
+
+    // Find tasks with pending extension requests
+    const pendingExtensions = await TTask.find({
+      team: req.params.teamId,
+      "extensionRequest.requested": true,
+      "extensionRequest.status": "pending"
+    })
+    .populate("createdBy", "name email photo")
+    .populate("assignedTo", "name email photo")
+    .populate("team", "name color icon")
+    .sort({ "extensionRequest.requestedAt": -1 });
+
+    res.json(pendingExtensions);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 // ----------------------------------------------------
 // NEW: GET TASKS ASSIGNED TO SPECIFIC USER (Admin/Manager only)
 // ----------------------------------------------------
