@@ -38,12 +38,16 @@ api.interceptors.response.use(
 );
 
 // -------------------------
-// AUTH API
+// AUTH API - INCLUDING GOOGLE
 // -------------------------
 export const authAPI = {
   register: (data) => api.post("/api/auth/register", data),
   login: (data) => api.post("/api/auth/login", data),
   getProfile: () => api.get("/api/auth/profile"),
+  // Google OAuth
+  googleLogin: () => window.open(`${process.env.REACT_APP_API_URL}/api/auth/google`, "_self"),
+  googleCallback: (code) => api.get(`/api/auth/google/callback?code=${code}`),
+  googleGetUser: () => api.get("/api/auth/google/user"),
 };
 
 // -------------------------
@@ -79,7 +83,7 @@ export const teamsAPI = {
 };
 
 // -------------------------
-// TEAM TASKS API - COMPLETELY FIXED
+// TEAM TASKS API
 // -------------------------
 export const teamTasksAPI = {
   // GET endpoints
@@ -118,7 +122,7 @@ export const teamTasksAPI = {
   updateTask: (taskId, data) => api.put(`/api/team-tasks/${taskId}`, data),
   deleteTask: (taskId) => api.delete(`/api/team-tasks/${taskId}`),
   
-  // EXTENSION MANAGEMENT - FIXED
+  // EXTENSION MANAGEMENT
   requestExtension: (taskId, reason, requestedDueDate) => 
     api.post(`/api/team-tasks/${taskId}/request-extension`, {
       reason,
