@@ -22,6 +22,7 @@ import {
   TextField,
   Snackbar,
   Alert,
+  CircularProgress,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -66,10 +67,6 @@ export default function TeamDetails() {
   const canEditTasks = myRole === "admin" || myRole === "manager";
   const isAdmin = myRole === "admin";
   const pendingExtensionsCount = team?.pendingExtensions?.length || 0;
-// or however you calculate it
-
-
-
 
   // -------- FETCH TEAM --------
   const fetchTeam = async () => {
@@ -105,6 +102,70 @@ export default function TeamDetails() {
       console.error("Task load error:", err);
     } finally {
       setLoadingTasks(false);
+    }
+  };
+
+  // -------- HANDLE EXTENSION APPROVAL/REJECTION --------
+  const handleApproveExtension = async (taskId) => {
+    try {
+      const reason = prompt("Enter approval reason (optional):", "Extension approved");
+      await teamTasksAPI.approveExtension(taskId, reason || "Extension approved");
+      await fetchTeamTasks();
+      await fetchTeam(); // Also refresh team to update pending extensions count
+      setSnackbar({
+        open: true,
+        message: "Extension approved",
+        severity: "success",
+      });
+    } catch (err) {
+      console.error("Approve extension error:", err);
+      setSnackbar({
+        open: true,
+        message: err.response?.data?.message || "Failed to approve extension",
+        severity: "error",
+      });
+    }
+  };
+
+  const handleRejectExtension = async (taskId) => {
+    try {
+      const reason = prompt("Enter rejection reason (optional):", "Extension rejected");
+      await teamTasksAPI.rejectExtension(taskId, reason || "Extension rejected");
+      await fetchTeamTasks();
+      await fetchTeam(); // Also refresh team to update pending extensions count
+      setSnackbar({
+        open: true,
+        message: "Extension rejected",
+        severity: "info",
+      });
+    } catch (err) {
+      console.error("Reject extension error:", err);
+      setSnackbar({
+        open: true,
+        message: err.response?.data?.message || "Failed to reject extension",
+        severity: "error",
+      });
+    }
+  };
+
+  // -------- HANDLE REQUEST EXTENSION --------
+  const handleRequestExtension = async (taskId, reason, newDueDate) => {
+    try {
+      await teamTasksAPI.requestExtension(taskId, reason, newDueDate);
+      await fetchTeamTasks();
+      await fetchTeam(); // Refresh team data to update pending extensions
+      setSnackbar({
+        open: true,
+        message: "Extension request submitted",
+        severity: "success",
+      });
+    } catch (err) {
+      console.error("Extension request error:", err);
+      setSnackbar({
+        open: true,
+        message: err.response?.data?.message || "Failed to submit extension request",
+        severity: "error",
+      });
     }
   };
 
@@ -231,8 +292,20 @@ export default function TeamDetails() {
     }
   };
 
-  if (loadingTeam) return <Typography>Loading team...</Typography>;
-  if (!team) return <Typography>Team not found.</Typography>;
+  if (loadingTeam) return (
+    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+      <CircularProgress />
+    </Box>
+  );
+  
+  if (!team) return (
+    <Box sx={{ p: 3 }}>
+      <Typography variant="h6" color="error">Team not found or you don't have access.</Typography>
+      <Button variant="contained" onClick={() => navigate("/teams")} sx={{ mt: 2 }}>
+        Back to Teams
+      </Button>
+    </Box>
+  );
 
   const inviteURL = `${window.location.origin}/join/${team._id}`;
 
@@ -298,25 +371,24 @@ export default function TeamDetails() {
         <Divider sx={{ my: 2 }} />
 
         <Tabs value={tab} onChange={(e, v) => setTab(v)}>
-  <Tab label="Overview" />
-  <Tab label="Members" />
-  <Tab label="Tasks" />
+          <Tab label="Overview" />
+          <Tab label="Members" />
+          <Tab label="Tasks" />
 
-  {/* NEW EXTENSIONS TAB */}
-  <Tab
-    label={
-      <Badge badgeContent={pendingExtensionsCount} color="error">
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <AccessTimeIcon fontSize="small" />
-          <span>Extensions</span>
-        </Box>
-      </Badge>
-    }
-  />
+          {/* EXTENSIONS TAB */}
+          <Tab
+            label={
+              <Badge badgeContent={pendingExtensionsCount} color="error">
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <AccessTimeIcon fontSize="small" />
+                  <span>Extensions</span>
+                </Box>
+              </Badge>
+            }
+          />
 
-  <Tab label="Settings" />
-</Tabs>
-
+          <Tab label="Settings" />
+        </Tabs>
       </Paper>
 
       {/* OVERVIEW TAB */}
@@ -442,6 +514,8 @@ export default function TeamDetails() {
                         startIcon={<ExitToAppIcon />}
                         color="error"
                         onClick={handleLeaveTeam}
+                        variant="outlined"
+                        size="small"
                       >
                         Leave
                       </Button>
@@ -476,95 +550,79 @@ export default function TeamDetails() {
           </Box>
 
           {loadingTasks ? (
-            <Typography>Loading tasks...</Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+              <CircularProgress />
+            </Box>
           ) : teamTasks.length === 0 ? (
-            <Typography color="text.secondary">No team tasks yet.</Typography>
+            <Typography color="text.secondary" sx={{ textAlign: 'center', p: 3 }}>
+              No team tasks yet. Create your first task!
+            </Typography>
           ) : (
             <Stack spacing={2}>
               {teamTasks.map((task) => (
-<TeamTaskItem
-  key={task._id}
-  task={task}
-  canEdit={canEditTasks}
-  isAdminOrManager={canEditTasks}  // allow admin & manager to approve/reject
-
-  onEdit={() => {
-    setEditingTask(task);
-    setShowTaskForm(true);
-  }}
-
-  onDelete={async () => {
-    try {
-      await teamTasksAPI.deleteTask(task._id);
-      await fetchTeamTasks();
-      setSnackbar({
-        open: true,
-        message: "Task deleted",
-        severity: "success",
-      });
-    } catch (err) {
-      console.error("Delete task error:", err);
-      setSnackbar({
-        open: true,
-        message: "Failed to delete task",
-        severity: "error",
-      });
-    }
-  }}
-
-  onStatusChange={async (taskId, newStatus) => {
-    try {
-      await teamTasksAPI.updateTask(taskId, { status: newStatus });
-      await fetchTeamTasks();
-    } catch (err) {
-      console.error("Status update error:", err);
-    }
-  }}
-
-  // NEW HANDLERS FOR EXTENSION APPROVAL
-onApproveExtension={async (taskId) => {
-  try {
-    // Ask for a reason or use default
-    const reason = prompt("Enter approval reason (optional):", "Extension approved");
-    await teamTasksAPI.approveExtension(taskId, reason || "Extension approved");
-    await fetchTeamTasks();
-    setSnackbar({
-      open: true,
-      message: "Extension approved",
-      severity: "success",
-    });
-  } catch (err) {
-    console.error("Approve extension error:", err);
-    setSnackbar({
-      open: true,
-      message: err.response?.data?.message || "Failed to approve extension",
-      severity: "error",
-    });
-  }
-}}
-
-onRejectExtension={async (taskId) => {
-  try {
-    // Ask for a reason or use default
-    const reason = prompt("Enter rejection reason (optional):", "Extension rejected");
-    await teamTasksAPI.rejectExtension(taskId, reason || "Extension rejected");
-    await fetchTeamTasks();
-    setSnackbar({
-      open: true,
-      message: "Extension rejected",
-      severity: "info",
-    });
-  } catch (err) {
-    console.error("Reject extension error:", err);
-    setSnackbar({
-      open: true,
-      message: err.response?.data?.message || "Failed to reject extension",
-      severity: "error",
-    });
-  }
-}}
-/>
-
+                <TeamTaskItem
+                  key={task._id}
+                  task={task}
+                  canEdit={canEditTasks}
+                  isAdminOrManager={canEditTasks}
+                  currentUserId={user?._id}
+                  onEdit={() => {
+                    setEditingTask(task);
+                    setShowTaskForm(true);
+                  }}
+                  onDelete={async () => {
+                    try {
+                      await teamTasksAPI.deleteTask(task._id);
+                      await fetchTeamTasks();
+                      setSnackbar({
+                        open: true,
+                        message: "Task deleted",
+                        severity: "success",
+                      });
+                    } catch (err) {
+                      console.error("Delete task error:", err);
+                      setSnackbar({
+                        open: true,
+                        message: "Failed to delete task",
+                        severity: "error",
+                      });
+                    }
+                  }}
+                  onStatusChange={async (taskId, newStatus) => {
+                    try {
+                      await teamTasksAPI.updateTask(taskId, { status: newStatus });
+                      await fetchTeamTasks();
+                    } catch (err) {
+                      console.error("Status update error:", err);
+                      setSnackbar({
+                        open: true,
+                        message: "Failed to update task status",
+                        severity: "error",
+                      });
+                    }
+                  }}
+                  onRequestExtension={handleRequestExtension}
+                  onQuickComplete={async (taskId) => {
+                    try {
+                      await teamTasksAPI.updateTask(taskId, { status: "completed" });
+                      await fetchTeamTasks();
+                      setSnackbar({
+                        open: true,
+                        message: "Task marked as complete",
+                        severity: "success",
+                      });
+                    } catch (err) {
+                      console.error("Quick complete error:", err);
+                      setSnackbar({
+                        open: true,
+                        message: "Failed to complete task",
+                        severity: "error",
+                      });
+                    }
+                  }}
+                  onApproveExtension={handleApproveExtension}
+                  onRejectExtension={handleRejectExtension}
+                />
               ))}
             </Stack>
           )}
@@ -573,8 +631,11 @@ onRejectExtension={async (taskId) => {
             <TeamTaskForm
               open={showTaskForm}
               task={editingTask}
-              teamMembers={team.members} // pass the members
-              onCancel={() => setShowTaskForm(false)}
+              teamMembers={team.members}
+              onCancel={() => {
+                setShowTaskForm(false);
+                setEditingTask(null);
+              }}
               onSubmit={async (formData) => {
                 try {
                   if (editingTask) {
@@ -594,7 +655,7 @@ onRejectExtension={async (taskId) => {
                   console.error("Task save error:", err);
                   setSnackbar({
                     open: true,
-                    message: "Failed to save task",
+                    message: err.response?.data?.message || "Failed to save task",
                     severity: "error",
                   });
                 }
@@ -604,17 +665,21 @@ onRejectExtension={async (taskId) => {
         </Paper>
       )}
 
-{/* EXTENSIONS TAB */}
-{tab === 3 && (
-  <Paper sx={{ p: 3, borderRadius: 3, mt: 2 }}>
-    <ExtensionRequests 
-      teamId={teamId}
-      isAdminOrManager={isAdmin}
-    />
-  </Paper>
-)}
-
-
+      {/* EXTENSIONS TAB */}
+      {tab === 3 && (
+        <Paper sx={{ p: 3, borderRadius: 3 }}>
+          <ExtensionRequests 
+            teamId={teamId}
+            isAdminOrManager={canEditTasks}
+            onApprove={handleApproveExtension}
+            onReject={handleRejectExtension}
+            refreshData={() => {
+              fetchTeam();
+              fetchTeamTasks();
+            }}
+          />
+        </Paper>
+      )}
 
       {/* SETTINGS TAB */}
       {tab === 4 && (
@@ -728,7 +793,7 @@ onRejectExtension={async (taskId) => {
                 style={{
                   width: "100%",
                   height: "40px",
-                  border: "none",
+                  border: "1px solid #ccc",
                   borderRadius: "8px",
                   cursor: "pointer",
                 }}
@@ -741,12 +806,17 @@ onRejectExtension={async (taskId) => {
               onChange={(e) => setTeamFormData({ ...teamFormData, icon: e.target.value })}
               fullWidth
               placeholder="e.g., 🚀, 👥, 💼"
+              helperText="Enter a single emoji"
             />
           </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setEditTeamDialog(false)}>Cancel</Button>
-          <Button onClick={handleUpdateTeam} variant="contained">
+          <Button 
+            onClick={handleUpdateTeam} 
+            variant="contained"
+            disabled={!teamFormData.name?.trim()}
+          >
             Save Changes
           </Button>
         </DialogActions>

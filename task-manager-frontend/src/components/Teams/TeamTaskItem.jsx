@@ -40,7 +40,8 @@ export default function TeamTaskItem({
   onQuickComplete,
   isAdminOrManager,    // <-- ADD THIS
   onApproveExtension,  // <-- ADD THIS
-  onRejectExtension    // <-- ADD THIS
+  onRejectExtension,   // <-- ADD THIS
+  currentUserId        // <-- ADD THIS - current user ID should be passed as prop
 }) {
   const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState(null);
@@ -59,6 +60,9 @@ export default function TeamTaskItem({
     "in-progress": "info",
     "completed": "success",
   };
+
+  // Check if user is assigned to this task
+  const isAssignedToMe = task.assignedTo?._id === currentUserId;
 
   // Calculate due date status
   const getDueDateStatus = () => {
@@ -139,12 +143,22 @@ export default function TeamTaskItem({
       const newDueDate = new Date(currentDueDate);
       newDueDate.setDate(newDueDate.getDate() + 3);
       setRequestedDueDate(newDueDate.toISOString().split('T')[0]);
+    } else {
+      // If no due date, set to 3 days from now
+      const newDueDate = new Date();
+      newDueDate.setDate(newDueDate.getDate() + 3);
+      setRequestedDueDate(newDueDate.toISOString().split('T')[0]);
     }
   };
 
   const submitExtensionRequest = () => {
     if (!extensionReason.trim()) {
       alert("Please provide a reason for the extension");
+      return;
+    }
+    
+    if (!requestedDueDate) {
+      alert("Please select a new due date");
       return;
     }
     
@@ -185,11 +199,10 @@ export default function TeamTaskItem({
   };
 
   const getICSUrl = () => {
-    return `${process.env.REACT_APP_API_URL}/api/ics/${task._id}`;
+    // Fixed: Added proper URL construction
+    const baseUrl = process.env.REACT_APP_API_URL || window.location.origin;
+    return `${baseUrl}/api/ics/${task._id}`;
   };
-
-  // Check if user is assigned to this task
-  const isAssignedToMe = task.assignedTo?._id === task.currentUserId;
 
   return (
     <Card sx={{ 
@@ -197,7 +210,7 @@ export default function TeamTaskItem({
       borderRadius: 3, 
       p: 1,
       backgroundColor: theme.palette.background.paper,
-      borderLeft: `5px solid ${task.color || "#4CAF50"}`,
+      borderLeft: `5px solid ${task.color || theme.palette.primary.main}`,
       transition: "0.2s",
       boxShadow: theme.palette.mode === "dark"
         ? "0 0 10px rgba(0,0,0,0.4)"
@@ -232,8 +245,7 @@ export default function TeamTaskItem({
           sx={{ 
             mb: 2, 
             borderRadius: 2,
-            bgcolor: 'warning.light',
-            color: 'warning.contrastText',
+            '& .MuiAlert-icon': { fontSize: 20 }
           }}
         >
           <Typography variant="body2" fontWeight={600}>
@@ -251,7 +263,7 @@ export default function TeamTaskItem({
             </Typography>
             
             {/* Extension Request Status */}
-            {task.extensionRequest?.requested && (
+            {task.extensionRequest?.status && (
               <Chip
                 label={`Extension ${task.extensionRequest.status}`}
                 size="small"
@@ -293,7 +305,7 @@ export default function TeamTaskItem({
                 <Tooltip title="Edit">
                   <IconButton 
                     color="primary" 
-                    onClick={() => onEdit(task)}
+                    onClick={() => onEdit && onEdit(task)}
                     size="small"
                     sx={{ mr: 1 }}
                   >
@@ -304,7 +316,7 @@ export default function TeamTaskItem({
                 <Tooltip title="Delete">
                   <IconButton 
                     color="error" 
-                    onClick={() => onDelete(task._id)}
+                    onClick={() => onDelete && onDelete(task._id)}
                     size="small"
                   >
                     <DeleteIcon fontSize="small" />
@@ -327,52 +339,58 @@ export default function TeamTaskItem({
             {task.description}
           </Typography>
         )}
+
         {/* ADMIN APPROVAL SECTION FOR EXTENSIONS */}
-{task.extensionRequest?.status === "pending" && isAdminOrManager && (
-  <Box sx={{ mt: 2, p: 2, bgcolor: "warning.light", borderRadius: 2 }}>
-    <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
-      ⏰ Extension Request Pending
-    </Typography>
+        {task.extensionRequest?.status === "pending" && isAdminOrManager && (
+          <Box sx={{ mt: 2, p: 2, bgcolor: "action.hover", borderRadius: 2, border: `1px solid ${theme.palette.warning.main}` }}>
+            <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1, color: theme.palette.warning.dark }}>
+              ⏰ Extension Request Pending
+            </Typography>
 
-    <Typography variant="body2" sx={{ mb: 2 }}>
-      Reason: {task.extensionRequest.reason}
-    </Typography>
+            <Typography variant="body2" sx={{ mb: 2 }}>
+              <strong>Reason:</strong> {task.extensionRequest.reason}
+            </Typography>
 
-    <Stack direction="row" spacing={1}>
-      <Button
-        size="small"
-        variant="contained"
-        color="success"
-        startIcon={<CheckCircleIcon />}
-        onClick={() => onApproveExtension && onApproveExtension(task._id)}
-      >
-        Approve
-      </Button>
+            {task.extensionRequest.requestedDueDate && (
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                <strong>Requested Due Date:</strong> {formatDate(task.extensionRequest.requestedDueDate)}
+              </Typography>
+            )}
 
-      <Button
-        size="small"
-        variant="outlined"
-        color="error"
-        startIcon={<CancelIcon />}
-        onClick={() => onRejectExtension && onRejectExtension(task._id)}
-      >
-        Reject
-      </Button>
-    </Stack>
-  </Box>
-)}
+            <Stack direction="row" spacing={1}>
+              <Button
+                size="small"
+                variant="contained"
+                color="success"
+                startIcon={<CheckCircleIcon />}
+                onClick={() => onApproveExtension && onApproveExtension(task._id)}
+              >
+                Approve
+              </Button>
 
+              <Button
+                size="small"
+                variant="outlined"
+                color="error"
+                startIcon={<CancelIcon />}
+                onClick={() => onRejectExtension && onRejectExtension(task._id)}
+              >
+                Reject
+              </Button>
+            </Stack>
+          </Box>
+        )}
 
         <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
           <Chip 
             label={task.priority} 
-            color={priorityColors[task.priority]} 
+            color={priorityColors[task.priority] || "default"} 
             size="small" 
             sx={{ textTransform: "capitalize" }}
           />
           <Chip 
-            label={task.status.replace("-", " ")} 
-            color={statusColors[task.status]} 
+            label={task.status?.replace("-", " ") || "todo"} 
+            color={statusColors[task.status] || "default"} 
             size="small" 
             sx={{ textTransform: "capitalize" }}
           />
@@ -388,13 +406,13 @@ export default function TeamTaskItem({
             }}
           />
           
-          {task.team && typeof task.team === 'object' && (
+          {task.team && typeof task.team === 'object' && task.team.name && (
             <Chip 
               label={`👥 ${task.team.name}`} 
               variant="outlined"
               size="small"
               sx={{
-                bgcolor: task.team.color || 'primary.main',
+                bgcolor: task.team.color || theme.palette.primary.main,
                 color: 'white',
               }}
             />
@@ -413,7 +431,7 @@ export default function TeamTaskItem({
               flex: 1,
             }}
             onClick={() => {
-              window.location.href = getICSUrl();
+              window.open(getICSUrl(), '_blank');
             }}
           >
             Add to Calendar
@@ -448,7 +466,7 @@ export default function TeamTaskItem({
               clickable 
               variant={task.status === "todo" ? "filled" : "outlined"}
               color={task.status === "todo" ? "primary" : "default"} 
-              onClick={() => onStatusChange(task._id, "todo")}
+              onClick={() => onStatusChange && onStatusChange(task._id, "todo")}
               size="small"
             />
             <Chip 
@@ -456,7 +474,7 @@ export default function TeamTaskItem({
               clickable 
               variant={task.status === "in-progress" ? "filled" : "outlined"}
               color={task.status === "in-progress" ? "info" : "default"} 
-              onClick={() => onStatusChange(task._id, "in-progress")}
+              onClick={() => onStatusChange && onStatusChange(task._id, "in-progress")}
               size="small"
             />
             <Chip 
@@ -464,7 +482,7 @@ export default function TeamTaskItem({
               clickable 
               variant={task.status === "completed" ? "filled" : "outlined"}
               color={task.status === "completed" ? "success" : "default"} 
-              onClick={() => onStatusChange(task._id, "completed")}
+              onClick={() => onStatusChange && onStatusChange(task._id, "completed")}
               size="small"
             />
           </Stack>
@@ -493,7 +511,7 @@ export default function TeamTaskItem({
         open={Boolean(anchorEl)}
         onClose={handleMenuClose}
       >
-        {isAssignedToMe && !task.extensionRequest?.requested && (
+        {isAssignedToMe && !task.extensionRequest?.requested && task.status !== "completed" && (
           <MenuItem onClick={handleExtensionRequest}>
             <ScheduleIcon fontSize="small" sx={{ mr: 1 }} />
             Request Extension
@@ -520,7 +538,7 @@ export default function TeamTaskItem({
         )}
         
         {canEdit && (
-          <MenuItem onClick={() => { onEdit(task); handleMenuClose(); }}>
+          <MenuItem onClick={() => { onEdit && onEdit(task); handleMenuClose(); }}>
             <EditIcon fontSize="small" sx={{ mr: 1 }} />
             Edit Task
           </MenuItem>
@@ -528,35 +546,43 @@ export default function TeamTaskItem({
       </Menu>
 
       {/* Extension Request Dialog */}
-      <Dialog open={extensionDialogOpen} onClose={() => setExtensionDialogOpen(false)}>
+      <Dialog open={extensionDialogOpen} onClose={() => setExtensionDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Request Extension</DialogTitle>
         <DialogContent>
-          <Box sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 300 }}>
+          <Box sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
             <TextField
-              label="Reason for extension"
+              label="Reason for extension *"
               multiline
               rows={3}
               value={extensionReason}
               onChange={(e) => setExtensionReason(e.target.value)}
               fullWidth
               required
+              error={!extensionReason.trim()}
+              helperText={!extensionReason.trim() ? "Please provide a reason" : ""}
             />
             
-            {task.dueDate && (
-              <TextField
-                label="New Due Date"
-                type="date"
-                value={requestedDueDate}
-                onChange={(e) => setRequestedDueDate(e.target.value)}
-                fullWidth
-                InputLabelProps={{ shrink: true }}
-              />
-            )}
+            <TextField
+              label="New Due Date *"
+              type="date"
+              value={requestedDueDate}
+              onChange={(e) => setRequestedDueDate(e.target.value)}
+              fullWidth
+              InputLabelProps={{ shrink: true }}
+              required
+              error={!requestedDueDate}
+              helperText={!requestedDueDate ? "Please select a new due date" : ""}
+            />
           </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setExtensionDialogOpen(false)}>Cancel</Button>
-          <Button onClick={submitExtensionRequest} variant="contained" color="primary">
+          <Button 
+            onClick={submitExtensionRequest} 
+            variant="contained" 
+            color="primary"
+            disabled={!extensionReason.trim() || !requestedDueDate}
+          >
             Submit Request
           </Button>
         </DialogActions>
