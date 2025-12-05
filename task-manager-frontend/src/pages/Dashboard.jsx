@@ -13,13 +13,14 @@ import {
   Chip,
   Grid,
   Badge,
+  Snackbar,
 } from "@mui/material";
 import GroupIcon from "@mui/icons-material/Group";
 import AssignmentIcon from "@mui/icons-material/Assignment";
 import TaskIcon from "@mui/icons-material/Task";
 import TaskList from "../components/Task/TaskList";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
-import { teamTasksAPI, teamsAPI } from "../services/api";
+import { teamTasksAPI, teamsAPI, notificationsAPI } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 
 const Dashboard = () => {
@@ -28,7 +29,7 @@ const Dashboard = () => {
 
   const [tab, setTab] = useState(0);
   const [teamTasks, setTeamTasks] = useState([]);
-  const [assignedTasks, setAssignedTasks] = useState([]); // Tasks assigned to current user
+  const [assignedTasks, setAssignedTasks] = useState([]);
   const [teams, setTeams] = useState([]);
   const [loading, setLoading] = useState({
     teamTasks: true,
@@ -37,6 +38,11 @@ const Dashboard = () => {
   });
   const [error, setError] = useState(null);
   const [teamTasksByTeam, setTeamTasksByTeam] = useState({});
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: "",
+    severity: "success",
+  });
 
   const handleTabChange = (_, newValue) => setTab(newValue);
 
@@ -64,7 +70,6 @@ const Dashboard = () => {
       const response = await teamTasksAPI.getMyTeamTasks();
       setTeamTasks(response.data);
       
-      // Group tasks by team for better organization
       const grouped = groupTasksByTeam(response.data);
       setTeamTasksByTeam(grouped);
     } catch (err) {
@@ -75,20 +80,16 @@ const Dashboard = () => {
     }
   };
 
-  // NEW: Fetch tasks specifically assigned to current user
   const fetchAssignedTasks = async () => {
     setLoading(prev => ({ ...prev, assignedTasks: true }));
     try {
-      // Get all teams user is a member of
       const teamsRes = await teamsAPI.getTeams();
       const userTeams = teamsRes.data;
       
       let allAssignedTasks = [];
       
-      // Fetch assigned tasks from each team
       for (const team of userTeams) {
         try {
-          // Using the new endpoint we created earlier
           const response = await teamTasksAPI.getMyAssignedTasks(team._id);
           allAssignedTasks = [...allAssignedTasks, ...response.data];
         } catch (err) {
@@ -96,7 +97,6 @@ const Dashboard = () => {
         }
       }
       
-      // Sort by due date (closest first)
       allAssignedTasks.sort((a, b) => {
         if (!a.dueDate) return 1;
         if (!b.dueDate) return -1;
@@ -140,7 +140,6 @@ const Dashboard = () => {
   const handleStatusChange = async (taskId, newStatus) => {
     try {
       await teamTasksAPI.updateTask(taskId, { status: newStatus });
-      // Refresh all task lists
       fetchTeamTasks();
       fetchAssignedTasks();
     } catch (err) {
@@ -154,21 +153,59 @@ const Dashboard = () => {
     
     try {
       await teamTasksAPI.deleteTask(taskId);
-      // Refresh all task lists
       fetchTeamTasks();
       fetchAssignedTasks();
+      showSnackbar("Task deleted successfully", "success");
     } catch (err) {
       console.error("Error deleting task:", err);
-      alert("Failed to delete task. Please try again.");
+      showSnackbar("Failed to delete task", "error");
     }
   };
 
   // Handle task edit
   const handleEditTask = (task) => {
-    // Navigate to team page to edit the task
     if (task.team && task.team._id) {
       window.location.href = `/teams/${task.team._id}`;
     }
+  };
+
+  // NEW: Handle extension request
+  const handleRequestExtension = async (taskId, reason, requestedDueDate) => {
+    try {
+      await teamTasksAPI.requestExtension(taskId, { 
+        reason, 
+        requestedDueDate 
+      });
+      
+      fetchTeamTasks();
+      fetchAssignedTasks();
+      showSnackbar("Extension request submitted successfully", "success");
+    } catch (err) {
+      console.error("Error requesting extension:", err);
+      showSnackbar(err.response?.data?.message || "Failed to request extension", "error");
+    }
+  };
+
+  // NEW: Handle quick complete
+  const handleQuickComplete = async (taskId) => {
+    try {
+      await teamTasksAPI.quickComplete(taskId);
+      fetchTeamTasks();
+      fetchAssignedTasks();
+      showSnackbar("Task marked as complete!", "success");
+    } catch (err) {
+      console.error("Error completing task:", err);
+      showSnackbar(err.response?.data?.message || "Failed to complete task", "error");
+    }
+  };
+
+  // Helper function for snackbar
+  const showSnackbar = (message, severity = "success") => {
+    setSnackbar({
+      open: true,
+      message,
+      severity,
+    });
   };
 
   // Calculate user's role in a team
@@ -205,6 +242,22 @@ const Dashboard = () => {
 
   return (
     <Box sx={{ pt: 1 }}>
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert 
+          severity={snackbar.severity} 
+          sx={{ width: "100%" }}
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+
       <Typography
         variant="h4"
         fontWeight="bold"
@@ -373,10 +426,12 @@ const Dashboard = () => {
                     <TeamTaskItem
                       key={task._id}
                       task={task}
-                      canEdit={true} // User can edit their own assigned tasks
+                      canEdit={true}
                       onEdit={() => handleEditTask(task)}
                       onDelete={() => handleDeleteTask(task._id)}
                       onStatusChange={handleStatusChange}
+                      onRequestExtension={handleRequestExtension}
+                      onQuickComplete={handleQuickComplete}
                     />
                   ))}
               </Box>
@@ -395,6 +450,8 @@ const Dashboard = () => {
                       onEdit={() => handleEditTask(task)}
                       onDelete={() => handleDeleteTask(task._id)}
                       onStatusChange={handleStatusChange}
+                      onRequestExtension={handleRequestExtension}
+                      onQuickComplete={handleQuickComplete}
                     />
                   ))}
               </Box>
@@ -413,6 +470,8 @@ const Dashboard = () => {
                       onEdit={() => handleEditTask(task)}
                       onDelete={() => handleDeleteTask(task._id)}
                       onStatusChange={handleStatusChange}
+                      onRequestExtension={handleRequestExtension}
+                      onQuickComplete={handleQuickComplete}
                     />
                   ))}
               </Box>
@@ -450,7 +509,7 @@ const Dashboard = () => {
                 variant="contained" 
                 startIcon={<GroupIcon />}
                 onClick={() => {
-                  setTab(2); // Switch to Team Tasks tab
+                  setTab(2);
                 }}
               >
                 Browse Team Tasks
@@ -581,6 +640,8 @@ const Dashboard = () => {
                               onEdit={() => handleEditTask(task)}
                               onDelete={() => handleDeleteTask(task._id)}
                               onStatusChange={handleStatusChange}
+                              onRequestExtension={handleRequestExtension}
+                              onQuickComplete={handleQuickComplete}
                             />
                           ))}
                         </Box>
@@ -750,5 +811,8 @@ const Dashboard = () => {
     </Box>
   );
 };
+
+// Import Alert component
+import { Alert } from "@mui/material";
 
 export default Dashboard;

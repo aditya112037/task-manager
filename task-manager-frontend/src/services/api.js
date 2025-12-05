@@ -58,7 +58,7 @@ export const tasksAPI = {
 };
 
 // -------------------------
-// TEAMS API - COMPLETE
+// TEAMS API
 // -------------------------
 export const teamsAPI = {
   // Team management
@@ -84,41 +84,65 @@ export const teamsAPI = {
 };
 
 // -------------------------
-// TEAM TASKS API
-// -------------------------
-// In api.js, add these new endpoints:
-
-// -------------------------
-// TEAM TASKS API - UPDATED
+// TEAM TASKS API - UPDATED WITH NEW ENDPOINTS
 // -------------------------
 export const teamTasksAPI = {
-  requestExtension: (taskId, reason) => 
-      api.post(`/api/team-tasks/${taskId}/request-extension`, { reason }),
-  quickComplete: (taskId) => 
-    api.post(`/api/team-tasks/${taskId}/quick-complete`),
-  approveExtension: (taskId) => 
-    api.put(`/api/team-tasks/${taskId}/extension/approve`),
-  rejectExtension: (taskId) => 
-    api.put(`/api/team-tasks/${taskId}/extension/reject`),
-
-  // Existing endpoints
-  getTasks: (teamId) => api.get(`/api/team-tasks/${teamId}`),
-  getMyTeamTasks: () => api.get("/api/team-tasks/my/all"),
+  // GET endpoints
+  getTasks: (teamId, filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.priority) params.append('priority', filters.priority);
+    if (filters.status) params.append('status', filters.status);
+    if (filters.assignedTo) params.append('assignedTo', filters.assignedTo);
+    if (filters.dateFilter) params.append('dateFilter', filters.dateFilter);
+    
+    return api.get(`/api/team-tasks/${teamId}?${params.toString()}`);
+  },
+  
+  getMyTeamTasks: (filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.priority) params.append('priority', filters.priority);
+    if (filters.status) params.append('status', filters.status);
+    if (filters.teamId) params.append('teamId', filters.teamId);
+    if (filters.assignedTo) params.append('assignedTo', filters.assignedTo);
+    
+    return api.get(`/api/team-tasks/my/all?${params.toString()}`);
+  },
+  
+  getMyAssignedTasks: (teamId, filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.status) params.append('status', filters.status);
+    if (filters.priority) params.append('priority', filters.priority);
+    if (filters.dateFilter) params.append('dateFilter', filters.dateFilter);
+    
+    return api.get(`/api/team-tasks/${teamId}/my?${params.toString()}`);
+  },
+  
+  getUserTasks: (teamId, userId) => 
+    api.get(`/api/team-tasks/${teamId}/user/${userId}`),
+  
+  // CRUD endpoints
   createTask: (teamId, data) => api.post(`/api/team-tasks/${teamId}`, data),
   updateTask: (taskId, data) => api.put(`/api/team-tasks/${taskId}`, data),
   deleteTask: (taskId) => api.delete(`/api/team-tasks/${taskId}`),
   
-  // NEW: Assignment-specific endpoints
-  getMyAssignedTasks: (teamId) => api.get(`/api/team-tasks/${teamId}/my`),
-  getUserTasks: (teamId, userId) => api.get(`/api/team-tasks/${teamId}/user/${userId}`),
+  // NEW: Extension Management
+  requestExtension: (taskId, data) => 
+    api.post(`/api/team-tasks/${taskId}/request-extension`, data),
   
-  // NEW: Bulk operations (for future)
-  bulkUpdateTasks: (teamId, taskIds, data) => 
-    api.put(`/api/team-tasks/${teamId}/bulk`, { taskIds, data }),
-  bulkDeleteTasks: (teamId, taskIds) => 
-    api.delete(`/api/team-tasks/${teamId}/bulk`, { data: { taskIds } }),
+  approveExtension: (taskId) => 
+    api.put(`/api/team-tasks/${taskId}/extension/approve`),
+  
+  rejectExtension: (taskId) => 
+    api.put(`/api/team-tasks/${taskId}/extension/reject`),
+  
+  // NEW: Quick Actions
+  quickComplete: (taskId) => 
+    api.post(`/api/team-tasks/${taskId}/quick-complete`),
 };
 
+// -------------------------
+// NOTIFICATIONS API
+// -------------------------
 export const notificationsAPI = {
   getNotifications: () => api.get("/api/notifications"),
   markAsRead: (notificationId) => api.put(`/api/notifications/${notificationId}/read`),
@@ -126,7 +150,5 @@ export const notificationsAPI = {
   deleteNotification: (notificationId) => api.delete(`/api/notifications/${notificationId}`),
   clearAll: () => api.delete("/api/notifications"),
 };
-
-
 
 export default api;
