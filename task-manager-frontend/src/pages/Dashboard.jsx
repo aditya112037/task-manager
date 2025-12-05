@@ -170,21 +170,40 @@ const Dashboard = () => {
   };
 
   // NEW: Handle extension request
-  const handleRequestExtension = async (taskId, reason, requestedDueDate) => {
-    try {
-      await teamTasksAPI.requestExtension(taskId, { 
-        reason, 
-        requestedDueDate 
-      });
-      
-      fetchTeamTasks();
-      fetchAssignedTasks();
-      showSnackbar("Extension request submitted successfully", "success");
-    } catch (err) {
-      console.error("Error requesting extension:", err);
-      showSnackbar(err.response?.data?.message || "Failed to request extension", "error");
-    }
-  };
+const handleRequestExtension = async (taskId, reason, newDueDate) => {
+  try {
+    console.log("Sending extension request:", { taskId, reason, newDueDate });
+    
+    // Convert to ISO string for backend
+    const dateToSend = new Date(newDueDate).toISOString();
+    
+    const response = await teamTasksAPI.requestExtension(taskId, reason, dateToSend);
+    console.log("Extension response:", response.data);
+    
+    await fetchTeamTasks();
+    await fetchTeam();
+    
+    setSnackbar({
+      open: true,
+      message: "Extension request submitted successfully",
+      severity: "success",
+    });
+  } catch (err) {
+    console.error("Full extension error:", {
+      message: err.message,
+      response: err.response?.data,
+      status: err.response?.status,
+      url: err.config?.url,
+      method: err.config?.method,
+    });
+    
+    setSnackbar({
+      open: true,
+      message: err.response?.data?.message || "Failed to submit extension request",
+      severity: "error",
+    });
+  }
+};
 
   // NEW: Handle quick complete
   const handleQuickComplete = async (taskId) => {

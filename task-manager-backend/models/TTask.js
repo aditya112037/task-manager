@@ -83,24 +83,69 @@ const TTaskSchema = new mongoose.Schema(
       trim: true,
     }],
 
-    // NEW FIELDS FOR NOTIFICATIONS AND EXTENSIONS
+    // EXTENSION REQUEST - FIXED STRUCTURE
     extensionRequest: {
-      requested: { type: Boolean, default: false },
-      reason: String,
-      requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-      requestedAt: Date,
-      status: { type: String, enum: ["pending", "approved", "rejected"], default: "pending" },
-      requestedDueDate: Date,
+      requested: { 
+        type: Boolean, 
+        default: false 
+      },
+      reason: { 
+        type: String 
+      },
+      requestedBy: { 
+        type: mongoose.Schema.Types.ObjectId, 
+        ref: "User" 
+      },
+      requestedAt: { 
+        type: Date 
+      },
+      status: { 
+        type: String, 
+        enum: ["pending", "approved", "rejected"], 
+        default: "pending" 
+      },
+      requestedDueDate: { 
+        type: Date 
+      },
+      approvedBy: { 
+        type: mongoose.Schema.Types.ObjectId, 
+        ref: "User" 
+      },
+      approvedAt: { 
+        type: Date 
+      },
+      rejectedBy: { 
+        type: mongoose.Schema.Types.ObjectId, 
+        ref: "User" 
+      },
+      rejectedAt: { 
+        type: Date 
+      },
+      rejectionReason: { 
+        type: String 
+      }
     },
 
-    lastNotified: Date,
-    notificationCount: { type: Number, default: 0 },
+    lastNotified: { 
+      type: Date 
+    },
+    notificationCount: { 
+      type: Number, 
+      default: 0 
+    },
 
-    completedAt: Date,
-    completedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    completedAt: { 
+      type: Date 
+    },
+    completedBy: { 
+      type: mongoose.Schema.Types.ObjectId, 
+      ref: "User" 
+    },
 
-    // For filtering and organization
-    isPinned: { type: Boolean, default: false },
+    isPinned: { 
+      type: Boolean, 
+      default: false 
+    },
   },
   { timestamps: true }
 );
@@ -111,5 +156,6 @@ TTaskSchema.index({ team: 1, status: 1 });
 TTaskSchema.index({ team: 1, dueDate: 1 });
 TTaskSchema.index({ assignedTo: 1, dueDate: 1 });
 TTaskSchema.index({ "extensionRequest.status": 1 });
+TTaskSchema.index({ team: 1, "extensionRequest.status": 1 });
 
 module.exports = mongoose.model("TTask", TTaskSchema);

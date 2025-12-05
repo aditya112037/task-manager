@@ -4,12 +4,12 @@ import axios from "axios";
 // BASE API INSTANCE
 // -------------------------
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL,
+  baseURL: process.env.REACT_APP_API_URL || "http://localhost:5000",
   withCredentials: true,
 });
 
 // -------------------------
-// TOKEN ATTACH - FIXED
+// TOKEN ATTACH
 // -------------------------
 api.interceptors.request.use(
   (config) => {
@@ -29,7 +29,6 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid
       localStorage.removeItem("token");
       localStorage.removeItem("user");
       window.location.href = "/login";
@@ -61,86 +60,78 @@ export const tasksAPI = {
 // TEAMS API
 // -------------------------
 export const teamsAPI = {
-  // Team management
   getTeams: () => api.get("/api/teams/my"),
   createTeam: (data) => api.post("/api/teams", data),
   getTeam: (teamId) => api.get(`/api/teams/${teamId}/details`),
   updateTeam: (teamId, data) => api.put(`/api/teams/${teamId}`, data),
   deleteTeam: (teamId) => api.delete(`/api/teams/${teamId}`),
   
-  // Team joining
   joinTeam: (teamId) => api.post(`/api/teams/${teamId}/join`),
   getInviteLink: (teamId) => api.get(`/api/teams/${teamId}/invite`),
   leaveTeam: (teamId) => api.post(`/api/teams/${teamId}/leave`),
   
-  // Member management
   updateMemberRole: (teamId, userId, role) => 
     api.put(`/api/teams/${teamId}/members/${userId}/role`, { role }),
   removeMember: (teamId, userId) => 
     api.delete(`/api/teams/${teamId}/members/${userId}`),
   
-  // Task-related
   getAllMyTeamTasks: () => api.get("/api/teams/my/tasks"),
 };
 
 // -------------------------
-// TEAM TASKS API - UPDATED WITH NEW ENDPOINTS
+// TEAM TASKS API - COMPLETELY FIXED
 // -------------------------
 export const teamTasksAPI = {
   // GET endpoints
   getTasks: (teamId, filters = {}) => {
     const params = new URLSearchParams();
-    if (filters.priority) params.append('priority', filters.priority);
-    if (filters.status) params.append('status', filters.status);
-    if (filters.assignedTo) params.append('assignedTo', filters.assignedTo);
-    if (filters.dateFilter) params.append('dateFilter', filters.dateFilter);
-    
+    Object.keys(filters).forEach(key => {
+      if (filters[key]) params.append(key, filters[key]);
+    });
     return api.get(`/api/team-tasks/${teamId}?${params.toString()}`);
   },
   
   getMyTeamTasks: (filters = {}) => {
     const params = new URLSearchParams();
-    if (filters.priority) params.append('priority', filters.priority);
-    if (filters.status) params.append('status', filters.status);
-    if (filters.teamId) params.append('teamId', filters.teamId);
-    if (filters.assignedTo) params.append('assignedTo', filters.assignedTo);
-    
+    Object.keys(filters).forEach(key => {
+      if (filters[key]) params.append(key, filters[key]);
+    });
     return api.get(`/api/team-tasks/my/all?${params.toString()}`);
   },
   
   getMyAssignedTasks: (teamId, filters = {}) => {
     const params = new URLSearchParams();
-    if (filters.status) params.append('status', filters.status);
-    if (filters.priority) params.append('priority', filters.priority);
-    if (filters.dateFilter) params.append('dateFilter', filters.dateFilter);
-    
+    Object.keys(filters).forEach(key => {
+      if (filters[key]) params.append(key, filters[key]);
+    });
     return api.get(`/api/team-tasks/${teamId}/my?${params.toString()}`);
   },
   
   getUserTasks: (teamId, userId) => 
     api.get(`/api/team-tasks/${teamId}/user/${userId}`),
   
+  getPendingExtensions: (teamId) => 
+    api.get(`/api/team-tasks/${teamId}/extensions/pending`),
+  
   // CRUD endpoints
   createTask: (teamId, data) => api.post(`/api/team-tasks/${teamId}`, data),
   updateTask: (taskId, data) => api.put(`/api/team-tasks/${taskId}`, data),
   deleteTask: (taskId) => api.delete(`/api/team-tasks/${taskId}`),
   
-  // NEW: Extension Management
-  requestExtension: (taskId, data) => 
-    api.post(`/api/team-tasks/${taskId}/request-extension`, data),
-
-    getPendingExtensions: (teamId) => 
-    api.get(`/api/team-tasks/${teamId}/extensions/pending`),
-// In api.js, change just these two functions:
-
-approveExtension: (taskId, reason = "Extension approved") => 
-  api.put(`/api/team-tasks/${taskId}/extension/approve`, { reason }),
-
-// FIXED: Add request body with reason  
-rejectExtension: (taskId, reason = "Extension rejected") => 
-  api.put(`/api/team-tasks/${taskId}/extension/reject`, { reason }),
+  // EXTENSION MANAGEMENT - FIXED
+  requestExtension: (taskId, reason, requestedDueDate) => 
+    api.post(`/api/team-tasks/${taskId}/request-extension`, {
+      reason,
+      requestedDueDate
+    }),
   
-  // NEW: Quick Actions
+  approveExtension: (taskId, reason = "Extension approved") => 
+    api.put(`/api/team-tasks/${taskId}/extension/approve`, { reason }),
+  
+  rejectExtension: (taskId, reason = "Extension rejected") => 
+    api.put(`/api/team-tasks/${taskId}/extension/reject`, { reason }),
+  
+  // QUICK ACTIONS
   quickComplete: (taskId) => 
     api.post(`/api/team-tasks/${taskId}/quick-complete`),
 };
