@@ -69,6 +69,8 @@ export default function TeamDetails() {
 // or however you calculate it
 
 
+
+
   // -------- FETCH TEAM --------
   const fetchTeam = async () => {
     setLoadingTeam(true);
@@ -520,43 +522,47 @@ export default function TeamDetails() {
   }}
 
   // NEW HANDLERS FOR EXTENSION APPROVAL
-  onApproveExtension={async (taskId) => {
-    try {
-      await teamTasksAPI.approveExtension(taskId);
-      await fetchTeamTasks();
-      setSnackbar({
-        open: true,
-        message: "Extension approved",
-        severity: "success",
-      });
-    } catch (err) {
-      console.error("Approve extension error:", err);
-      setSnackbar({
-        open: true,
-        message: "Failed to approve extension",
-        severity: "error",
-      });
-    }
-  }}
+onApproveExtension={async (taskId) => {
+  try {
+    // Ask for a reason or use default
+    const reason = prompt("Enter approval reason (optional):", "Extension approved");
+    await teamTasksAPI.approveExtension(taskId, reason || "Extension approved");
+    await fetchTeamTasks();
+    setSnackbar({
+      open: true,
+      message: "Extension approved",
+      severity: "success",
+    });
+  } catch (err) {
+    console.error("Approve extension error:", err);
+    setSnackbar({
+      open: true,
+      message: err.response?.data?.message || "Failed to approve extension",
+      severity: "error",
+    });
+  }
+}}
 
-  onRejectExtension={async (taskId) => {
-    try {
-      await teamTasksAPI.rejectExtension(taskId);
-      await fetchTeamTasks();
-      setSnackbar({
-        open: true,
-        message: "Extension rejected",
-        severity: "info",
-      });
-    } catch (err) {
-      console.error("Reject extension error:", err);
-      setSnackbar({
-        open: true,
-        message: "Failed to reject extension",
-        severity: "error",
-      });
-    }
-  }}
+onRejectExtension={async (taskId) => {
+  try {
+    // Ask for a reason or use default
+    const reason = prompt("Enter rejection reason (optional):", "Extension rejected");
+    await teamTasksAPI.rejectExtension(taskId, reason || "Extension rejected");
+    await fetchTeamTasks();
+    setSnackbar({
+      open: true,
+      message: "Extension rejected",
+      severity: "info",
+    });
+  } catch (err) {
+    console.error("Reject extension error:", err);
+    setSnackbar({
+      open: true,
+      message: err.response?.data?.message || "Failed to reject extension",
+      severity: "error",
+    });
+  }
+}}
 />
 
               ))}
