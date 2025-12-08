@@ -37,6 +37,22 @@ const TTaskSchema = new mongoose.Schema(
       type: Date,
     },
 
+    // 🔥 Extension Request System
+    extensionRequest: {
+      requested: { type: Boolean, default: false },
+      requestedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      reason: { type: String, trim: true },
+      requestedDueDate: { type: Date },
+      requestedAt: { type: Date },
+      status: {
+        type: String,
+        enum: ["pending", "approved", "rejected", null],
+        default: null,
+      },
+      reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      reviewedAt: { type: Date },
+    },
+
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -59,60 +75,24 @@ const TTaskSchema = new mongoose.Schema(
       default: "📋",
     },
 
-    subtasks: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "SubTask",
-      default: [],
-    }],
+    lastNotified: { type: Date },
+    notificationCount: { type: Number, default: 0 },
 
-    category: {
-      type: String,
-      enum: ["general", "bug", "feature", "improvement", "meeting", "other"],
-      default: "general",
-    },
+    completedAt: { type: Date },
+    completedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
 
-    estimate: {
-      type: Number,
-      min: 0,
-      max: 100,
-      default: 1,
-    },
-
-    tags: [{
-      type: String,
-      trim: true,
-    }],
-
-
-    lastNotified: { 
-      type: Date 
-    },
-    notificationCount: { 
-      type: Number, 
-      default: 0 
-    },
-
-    completedAt: { 
-      type: Date 
-    },
-    completedBy: { 
-      type: mongoose.Schema.Types.ObjectId, 
-      ref: "User" 
-    },
-
-    isPinned: { 
-      type: Boolean, 
-      default: false 
-    },
+    isPinned: { type: Boolean, default: false },
   },
   { timestamps: true }
 );
 
-// Index for faster queries
+// INDEXES
 TTaskSchema.index({ team: 1, assignedTo: 1 });
 TTaskSchema.index({ team: 1, status: 1 });
 TTaskSchema.index({ team: 1, dueDate: 1 });
 TTaskSchema.index({ assignedTo: 1, dueDate: 1 });
+
+// 🔥 Required for extension requests
 TTaskSchema.index({ "extensionRequest.status": 1 });
 TTaskSchema.index({ team: 1, "extensionRequest.status": 1 });
 

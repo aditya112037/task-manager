@@ -454,12 +454,6 @@ router.get("/:teamId/my", protect, async (req, res) => {
   }
 });
 
-// ----------------------------------------------------
-
-
-// ----------------------------------------------------
-// NEW: APPROVE/REJECT EXTENSION (Admin/Manager only)
-// ----------------------------------------------------
 
 // ----------------------------------------------------
 // NEW: QUICK COMPLETE TASK
@@ -518,44 +512,152 @@ router.post("/:taskId/quick-complete", protect, async (req, res) => {
   }
 });
 
-// Add to routes/TTRoutes.js
-
 // ----------------------------------------------------
-// GET PENDING EXTENSION REQUESTS (Admin/Manager only)
+// REQUEST EXTENSION (Assigned Member Only)
 // ----------------------------------------------------
-router.get("/:teamId/extensions/pending", protect, async (req, res) => {
+router.post("/:taskId/request-extension", protect, async (req, res) => {
   try {
-    const team = await Team.findById(req.params.teamId);
-    if (!team) return res.status(404).json({ message: "Team not found" });
+    const { reason, requestedDueDate } = req.body;
 
-    // Check if user is admin or manager
-    const member = team.members.find(
-      m => String(m.user) === String(req.user._id)
+    const task = await TTask.findById(req.params.taskId);
+    if (!task) return res.status(404).json({ message: "Task not found" });
+
+    if (!task.assignedTo || String(task.assignedTo) !== String(req.user._id)) {
+      return res.status(403).json({ message: "Only assigned user can request extension" });
+    }
+
+    task.extensionRequest = {
+      requested: true,
+      requestedBy: req.user._id,
+      reason,
+      requestedDueDate,
+      requestedAt: new Date(),
+      status: "pending",
+    };
+
+    await task.save();
+
+    // Notify admins/managers
+    const team = await Team.findById(task.team).populate("members.user");
+    const approvers = team.members.filter(m =>
+      ["admin", "manager"].includes(m.role)
     );
 
-    if (!member || !["admin", "manager"].includes(member.role)) {
-      return res.status(403).json({ 
-        message: "Only admin or manager can view extension requests" 
+    for (const m of approvers) {
+      await Notification.create({
+        user: m.user._id,
+        type: "extension_requested",
+        title: "Extension Requested",
+        message: `${req.user.name} requested an extension for task "${task.title}".`,
+        relatedTask: task._id,
+        relatedTeam: team._id,
+        metadata: { reason, requestedDueDate },
       });
     }
 
-    // Find tasks with pending extension requests
-    const pendingExtensions = await TTask.find({
-      team: req.params.teamId,
-      "extensionRequest.requested": true,
-      "extensionRequest.status": "pending"
-    })
-    .populate("createdBy", "name email photo")
-    .populate("assignedTo", "name email photo")
-    .populate("team", "name color icon")
-    .sort({ "extensionRequest.requestedAt": -1 });
-
-    res.json(pendingExtensions);
+    res.json({ message: "Extension request submitted", task });
   } catch (err) {
-    console.error(err);
+    console.error("REQUEST EXTENSION ERROR:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
+
+
+// ----------------------------------------------------
+// APPROVE EXTENSION REQUEST (Admin / Manager)
+// ----------------------------------------------------
+router.post("/:taskId/extension/approve", protect, async (req, res) => {
+  try {
+    const task = await TTask.findById(req.params.taskId).populate("team");
+    if (!task) return res.status(404).json({ message: "Task not found" });
+
+    const team = await Team.findById(task.team._id).populate("members.user");
+    const member = team.members.find(m => String(m.user._id) === String(req.user._id));
+
+    if (!member || !["admin", "manager"].includes(member.role)) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    if (!task.extensionRequest || task.extensionRequest.status !== "pending") {
+      return res.status(400).json({ message: "No pending extension request" });
+    }
+
+    // Apply new due date
+    task.dueDate = task.extensionRequest.requestedDueDate;
+
+    // Mark as approved
+    task.extensionRequest.status = "approved";
+    task.extensionRequest.reviewedBy = req.user._id;
+    task.extensionRequest.reviewedAt = new Date();
+
+    await task.save();
+
+    // Notify requester
+    await Notification.create({
+      user: task.extensionRequest.requestedBy,
+      type: "extension_approved",
+      title: "Extension Approved",
+      message: `Your extension request for "${task.title}" was approved.`,
+      relatedTask: task._id,
+      relatedTeam: team._id,
+      metadata: { newDueDate: task.dueDate },
+    });
+
+    res.json({ message: "Extension approved", task });
+  } catch (err) {
+    console.error("APPROVE EXT ERROR:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+
+// ----------------------------------------------------
+// REJECT EXTENSION REQUEST (Admin / Manager)
+// ----------------------------------------------------
+router.post("/:taskId/extension/reject", protect, async (req, res) => {
+  try {
+    const task = await TTask.findById(req.params.taskId).populate("team");
+    if (!task) return res.status(404).json({ message: "Task not found" });
+
+    const team = await Team.findById(task.team._id).populate("members.user");
+    const member = team.members.find(m => String(m.user._id) === String(req.user._id));
+
+    if (!member || !["admin", "manager"].includes(member.role)) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    if (!task.extensionRequest || task.extensionRequest.status !== "pending") {
+      return res.status(400).json({ message: "No pending extension request" });
+    }
+
+    // Reject request
+    task.extensionRequest.status = "rejected";
+    task.extensionRequest.reviewedBy = req.user._id;
+    task.extensionRequest.reviewedAt = new Date();
+
+    await task.save();
+
+    // Notify requester
+    await Notification.create({
+      user: task.extensionRequest.requestedBy,
+      type: "extension_rejected",
+      title: "Extension Rejected",
+      message: `Your extension request for "${task.title}" was rejected.`,
+      relatedTask: task._id,
+      relatedTeam: team._id,
+    });
+
+    res.json({ message: "Extension rejected", task });
+  } catch (err) {
+    console.error("REJECT EXT ERROR:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+
+
+// ----------------------------------------------------
+
 
 // ----------------------------------------------------
 // NEW: GET TASKS ASSIGNED TO SPECIFIC USER (Admin/Manager only)
@@ -600,5 +702,6 @@ router.get("/:teamId/user/:userId", protect, async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+
 
 module.exports = router;
