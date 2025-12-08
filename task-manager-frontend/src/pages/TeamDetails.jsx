@@ -34,7 +34,6 @@ import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import TeamTaskForm from "../components/Teams/TeamTaskForm";
 import Badge from "@mui/material/Badge";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import ExtensionRequests from "../components/Teams/ExtensionRequests";
 
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
@@ -66,7 +65,6 @@ export default function TeamDetails() {
 
   const canEditTasks = myRole === "admin" || myRole === "manager";
   const isAdmin = myRole === "admin";
-  const pendingExtensionsCount = team?.pendingExtensions?.length || 0;
 
   // -------- FETCH TEAM --------
   const fetchTeam = async () => {
@@ -105,89 +103,6 @@ export default function TeamDetails() {
     }
   };
 
-  // -------- HANDLE EXTENSION APPROVAL/REJECTION --------
-  const handleApproveExtension = async (taskId) => {
-    try {
-      const reason = prompt("Enter approval reason (optional):", "Extension approved");
-      await teamTasksAPI.approveExtension(taskId, reason || "Extension approved");
-      await fetchTeamTasks();
-      await fetchTeam(); // Also refresh team to update pending extensions count
-      setSnackbar({
-        open: true,
-        message: "Extension approved",
-        severity: "success",
-      });
-    } catch (err) {
-      console.error("Approve extension error:", err);
-      setSnackbar({
-        open: true,
-        message: err.response?.data?.message || "Failed to approve extension",
-        severity: "error",
-      });
-    }
-  };
-
-  const handleRejectExtension = async (taskId) => {
-    try {
-      const reason = prompt("Enter rejection reason (optional):", "Extension rejected");
-      await teamTasksAPI.rejectExtension(taskId, reason || "Extension rejected");
-      await fetchTeamTasks();
-      await fetchTeam(); // Also refresh team to update pending extensions count
-      setSnackbar({
-        open: true,
-        message: "Extension rejected",
-        severity: "info",
-      });
-    } catch (err) {
-      console.error("Reject extension error:", err);
-      setSnackbar({
-        open: true,
-        message: err.response?.data?.message || "Failed to reject extension",
-        severity: "error",
-      });
-    }
-  };
-
-  // -------- HANDLE REQUEST EXTENSION --------
-const handleRequestExtension = async (taskId, reason, newDueDate) => {
-  try {
-    console.log("Sending extension request:", { taskId, reason, newDueDate });
-    
-    // Convert to ISO string for backend
-    const dateToSend = new Date(newDueDate).toISOString();
-    
-    const response = await teamTasksAPI.requestExtension(taskId, reason, dateToSend);
-    console.log("Extension response:", response.data);
-    
-    await fetchTeamTasks();
-    await fetchTeam();
-    
-    setSnackbar({
-      open: true,
-      message: "Extension request submitted successfully",
-      severity: "success",
-    });
-  } catch (err) {
-    console.error("Full extension error:", {
-      message: err.message,
-      response: err.response?.data,
-      status: err.response?.status,
-      url: err.config?.url,
-      method: err.config?.method,
-    });
-    
-    setSnackbar({
-      open: true,
-      message: err.response?.data?.message || "Failed to submit extension request",
-      severity: "error",
-    });
-  }
-};
-
-  useEffect(() => {
-    fetchTeam();
-    fetchTeamTasks();
-  }, [teamId]);
 
   // -------- HANDLE LEAVE TEAM --------
   const handleLeaveTeam = async () => {
@@ -389,18 +304,6 @@ const handleRequestExtension = async (taskId, reason, newDueDate) => {
           <Tab label="Overview" />
           <Tab label="Members" />
           <Tab label="Tasks" />
-
-          {/* EXTENSIONS TAB */}
-          <Tab
-            label={
-              <Badge badgeContent={pendingExtensionsCount} color="error">
-                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                  <AccessTimeIcon fontSize="small" />
-                  <span>Extensions</span>
-                </Box>
-              </Badge>
-            }
-          />
 
           <Tab label="Settings" />
         </Tabs>
@@ -680,22 +583,7 @@ const handleRequestExtension = async (taskId, reason, newDueDate) => {
         </Paper>
       )}
 
-      {/* EXTENSIONS TAB */}
-      
-      {tab === 3 && (
-        <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <ExtensionRequests 
-            teamId={teamId}
-            isAdminOrManager={canEditTasks}
-            onApprove={handleApproveExtension}
-            onReject={handleRejectExtension}
-            refreshData={() => {
-              fetchTeam();
-              fetchTeamTasks();
-            }}
-          />
-        </Paper>
-      )}
+
 
       {/* SETTINGS TAB */}
       {tab === 4 && (

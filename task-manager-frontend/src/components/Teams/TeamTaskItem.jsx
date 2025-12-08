@@ -12,11 +12,7 @@ import {
   Menu,
   MenuItem,
   Alert,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
+
 } from "@mui/material";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
@@ -36,18 +32,13 @@ export default function TeamTaskItem({
   onEdit, 
   onDelete, 
   onStatusChange,
-  onRequestExtension,
+ 
   onQuickComplete,
-  isAdminOrManager,    // <-- ADD THIS
-  onApproveExtension,  // <-- ADD THIS
-  onRejectExtension,   // <-- ADD THIS
+
   currentUserId        // <-- ADD THIS - current user ID should be passed as prop
 }) {
   const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState(null);
-  const [extensionDialogOpen, setExtensionDialogOpen] = useState(false);
-  const [extensionReason, setExtensionReason] = useState("");
-  const [requestedDueDate, setRequestedDueDate] = useState("");
 
   const priorityColors = {
     high: "error",
@@ -134,43 +125,11 @@ export default function TeamTaskItem({
     setAnchorEl(null);
   };
 
-  const handleExtensionRequest = () => {
-    handleMenuClose();
-    setExtensionDialogOpen(true);
-    // Set default extension date to current due date + 3 days
-    if (task.dueDate) {
-      const currentDueDate = new Date(task.dueDate);
-      const newDueDate = new Date(currentDueDate);
-      newDueDate.setDate(newDueDate.getDate() + 3);
-      setRequestedDueDate(newDueDate.toISOString().split('T')[0]);
-    } else {
-      // If no due date, set to 3 days from now
-      const newDueDate = new Date();
-      newDueDate.setDate(newDueDate.getDate() + 3);
-      setRequestedDueDate(newDueDate.toISOString().split('T')[0]);
-    }
-  };
 
-  const submitExtensionRequest = () => {
-    if (!extensionReason.trim()) {
-      alert("Please provide a reason for the extension");
-      return;
-    }
-    
-    if (!requestedDueDate) {
-      alert("Please select a new due date");
-      return;
-    }
-    
-    if (onRequestExtension) {
-      onRequestExtension(task._id, extensionReason, requestedDueDate);
-    }
-    
-    setExtensionDialogOpen(false);
-    setExtensionReason("");
-    setRequestedDueDate("");
-  };
 
+
+
+    
   const handleQuickComplete = () => {
     if (window.confirm("Mark this task as complete?")) {
       if (onQuickComplete) {
@@ -262,18 +221,7 @@ export default function TeamTaskItem({
               {task.title}
             </Typography>
             
-            {/* Extension Request Status */}
-            {task.extensionRequest?.status && (
-              <Chip
-                label={`Extension ${task.extensionRequest.status}`}
-                size="small"
-                color={task.extensionRequest.status === "pending" ? "warning" : 
-                       task.extensionRequest.status === "approved" ? "success" : "error"}
-                variant="outlined"
-                sx={{ mt: 0.5, mr: 1 }}
-                icon={<ScheduleIcon />}
-              />
-            )}
+
             
             <Stack direction="row" spacing={2} sx={{ mt: 1, flexWrap: 'wrap', gap: 1 }}>
               {task.createdBy && (
@@ -340,46 +288,6 @@ export default function TeamTaskItem({
           </Typography>
         )}
 
-        {/* ADMIN APPROVAL SECTION FOR EXTENSIONS */}
-        {task.extensionRequest?.status === "pending" && isAdminOrManager && (
-          <Box sx={{ mt: 2, p: 2, bgcolor: "action.hover", borderRadius: 2, border: `1px solid ${theme.palette.warning.main}` }}>
-            <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1, color: theme.palette.warning.dark }}>
-              ⏰ Extension Request Pending
-            </Typography>
-
-            <Typography variant="body2" sx={{ mb: 2 }}>
-              <strong>Reason:</strong> {task.extensionRequest.reason}
-            </Typography>
-
-            {task.extensionRequest.requestedDueDate && (
-              <Typography variant="body2" sx={{ mb: 2 }}>
-                <strong>Requested Due Date:</strong> {formatDate(task.extensionRequest.requestedDueDate)}
-              </Typography>
-            )}
-
-            <Stack direction="row" spacing={1}>
-              <Button
-                size="small"
-                variant="contained"
-                color="success"
-                startIcon={<CheckCircleIcon />}
-                onClick={() => onApproveExtension && onApproveExtension(task._id)}
-              >
-                Approve
-              </Button>
-
-              <Button
-                size="small"
-                variant="outlined"
-                color="error"
-                startIcon={<CancelIcon />}
-                onClick={() => onRejectExtension && onRejectExtension(task._id)}
-              >
-                Reject
-              </Button>
-            </Stack>
-          </Box>
-        )}
 
         <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
           <Chip 
@@ -511,12 +419,6 @@ export default function TeamTaskItem({
         open={Boolean(anchorEl)}
         onClose={handleMenuClose}
       >
-        {isAssignedToMe && !task.extensionRequest?.requested && task.status !== "completed" && (
-          <MenuItem onClick={handleExtensionRequest}>
-            <ScheduleIcon fontSize="small" sx={{ mr: 1 }} />
-            Request Extension
-          </MenuItem>
-        )}
         
         {task.status !== "completed" && isAssignedToMe && (
           <MenuItem onClick={handleQuickComplete}>
@@ -545,48 +447,7 @@ export default function TeamTaskItem({
         )}
       </Menu>
 
-      {/* Extension Request Dialog */}
-      <Dialog open={extensionDialogOpen} onClose={() => setExtensionDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Request Extension</DialogTitle>
-        <DialogContent>
-          <Box sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <TextField
-              label="Reason for extension *"
-              multiline
-              rows={3}
-              value={extensionReason}
-              onChange={(e) => setExtensionReason(e.target.value)}
-              fullWidth
-              required
-              error={!extensionReason.trim()}
-              helperText={!extensionReason.trim() ? "Please provide a reason" : ""}
-            />
-            
-            <TextField
-              label="New Due Date *"
-              type="date"
-              value={requestedDueDate}
-              onChange={(e) => setRequestedDueDate(e.target.value)}
-              fullWidth
-              InputLabelProps={{ shrink: true }}
-              required
-              error={!requestedDueDate}
-              helperText={!requestedDueDate ? "Please select a new due date" : ""}
-            />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setExtensionDialogOpen(false)}>Cancel</Button>
-          <Button 
-            onClick={submitExtensionRequest} 
-            variant="contained" 
-            color="primary"
-            disabled={!extensionReason.trim() || !requestedDueDate}
-          >
-            Submit Request
-          </Button>
-        </DialogActions>
-      </Dialog>
+
     </Card>
   );
 }

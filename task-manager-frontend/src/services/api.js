@@ -128,20 +128,6 @@ export const teamTasksAPI = {
 };
 
 
-export const teamExtensionsAPI = {
-  requestExtension: (taskId, data) =>
-    api.post(`/api/team-extensions/${taskId}/request-extension`, data),
-
-  getPendingExtensions: (teamId) =>
-    api.get(`/api/team-extensions/${teamId}/extensions/pending`),
-
-  approveExtension: (taskId) =>
-    api.put(`/api/team-extensions/${taskId}/approve-extension`),
-
-  rejectExtension: (taskId) =>
-    api.put(`/api/team-extensions/${taskId}/reject-extension`),
-};
-
 // -------------------------
 // NOTIFICATIONS API
 // -------------------------
