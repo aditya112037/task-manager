@@ -83,48 +83,6 @@ const TTaskSchema = new mongoose.Schema(
       trim: true,
     }],
 
-    // EXTENSION REQUEST - FIXED STRUCTURE
-    extensionRequest: {
-      requested: { 
-        type: Boolean, 
-        default: false 
-      },
-      reason: { 
-        type: String 
-      },
-      requestedBy: { 
-        type: mongoose.Schema.Types.ObjectId, 
-        ref: "User" 
-      },
-      requestedAt: { 
-        type: Date 
-      },
-      status: { 
-        type: String, 
-        enum: ["pending", "approved", "rejected"], 
-        default: "pending" 
-      },
-      requestedDueDate: { 
-        type: Date 
-      },
-      approvedBy: { 
-        type: mongoose.Schema.Types.ObjectId, 
-        ref: "User" 
-      },
-      approvedAt: { 
-        type: Date 
-      },
-      rejectedBy: { 
-        type: mongoose.Schema.Types.ObjectId, 
-        ref: "User" 
-      },
-      rejectedAt: { 
-        type: Date 
-      },
-      rejectionReason: { 
-        type: String 
-      }
-    },
 
     lastNotified: { 
       type: Date 

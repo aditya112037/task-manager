@@ -519,7 +519,6 @@ export default function TeamDetails() {
                       });
                     }
                   }}
-                  onRequestExtension={handleRequestExtension}
                   onQuickComplete={async (taskId) => {
                     try {
                       await teamTasksAPI.updateTask(taskId, { status: "completed" });
@@ -538,8 +537,8 @@ export default function TeamDetails() {
                       });
                     }
                   }}
-                  onApproveExtension={handleApproveExtension}
-                  onRejectExtension={handleRejectExtension}
+                  
+                 
                 />
               ))}
             </Stack>
