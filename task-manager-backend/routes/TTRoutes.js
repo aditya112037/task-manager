@@ -43,7 +43,11 @@ const member = team.members.find(m => {
 router.post("/:taskId/extension/approve", protect, async (req, res) => {
   try {
     const task = await TTask.findById(req.params.taskId)
-      .populate("team", "name members")
+      .populate({
+  path: "team",
+  populate: { path: "members.user", select: "name email photo" }
+})
+
       .populate("assignedTo", "name email");
 
     if (!task) return res.status(404).json({ message: "Task not found" });
@@ -108,16 +112,22 @@ if (
 router.post("/:taskId/extension/reject", protect, async (req, res) => {
   try {
     const task = await TTask.findById(req.params.taskId)
-      .populate("team", "name members")
+      .populate({
+  path: "team",
+  populate: { path: "members.user", select: "name email photo" }
+})
+
       .populate("assignedTo", "name email");
 
     if (!task) return res.status(404).json({ message: "Task not found" });
 
     // Check if user is admin/manager of the team
     const team = await Team.findById(task.team._id);
-    const member = team.members.find(
-  m => String(m.user) === String(req.user._id)
-);
+const member = team.members.find(m => {
+  const memberId = m.user?._id || m.user;
+  return String(memberId) === String(req.user._id);
+});
+
 
     
     if (!member || !["admin", "manager"].includes(member.role)) {
@@ -177,9 +187,11 @@ router.post("/:teamId", protect, async (req, res) => {
     const team = await Team.findById(teamId);
     if (!team) return res.status(404).json({ message: "Team not found" });
 
-    const member = team.members.find(
-  m => String(m.user) === String(req.user._id)
-);
+const member = team.members.find(m => {
+  const memberId = m.user?._id || m.user;
+  return String(memberId) === String(req.user._id);
+});
+
 
     if (!member) return res.status(403).json({ message: "You are not a member of this team" });
 
@@ -248,9 +260,11 @@ router.put("/:taskId", protect, async (req, res) => {
 
     // Check team membership
     const team = await Team.findById(task.team._id);
-    const member = team.members.find(
-  m => String(m.user) === String(req.user._id)
-);
+const member = team.members.find(m => {
+  const memberId = m.user?._id || m.user;
+  return String(memberId) === String(req.user._id);
+});
+
 
     
     if (!member) return res.status(403).json({ message: "You are not a member of this team" });
@@ -379,9 +393,11 @@ router.delete("/:taskId", protect, async (req, res) => {
 
     // Check team membership and permissions
     const team = await Team.findById(task.team._id);
-    const member = team.members.find(
-  m => String(m.user) === String(req.user._id)
-);
+const member = team.members.find(m => {
+  const memberId = m.user?._id || m.user;
+  return String(memberId) === String(req.user._id);
+});
+
 
     
     if (!member) return res.status(403).json({ message: "You are not a member of this team" });
@@ -407,9 +423,11 @@ router.get("/:teamId", protect, async (req, res) => {
     const team = await Team.findById(req.params.teamId);
     if (!team) return res.status(404).json({ message: "Team not found" });
 
-    const member = team.members.find(
-  m => String(m.user) === String(req.user._id)
-);
+const member = team.members.find(m => {
+  const memberId = m.user?._id || m.user;
+  return String(memberId) === String(req.user._id);
+});
+
 
     if (!member) return res.status(403).json({ message: "You are not a member of this team" });
 
@@ -453,13 +471,17 @@ router.post("/:taskId/request-extension", protect, async (req, res) => {
     }
 
     // Check if there's already a pending request
- if (
-  !task.extensionRequest ||
-  !task.extensionRequest.requested ||
-  task.extensionRequest.status !== "pending"
+// If there's already a pending request, block it
+// If there's already a pending request, block it
+if (
+  task.extensionRequest &&
+  task.extensionRequest.requested &&
+  task.extensionRequest.status === "pending"
 ) {
-  return res.status(400).json({ message: "No pending extension request" });
+  return res.status(400).json({ message: "You already have a pending extension request" });
 }
+
+
 
     // Validate requested due date
     const requestedDate = new Date(requestedDueDate);
