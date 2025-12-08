@@ -464,136 +464,112 @@ export default function TeamDetails() {
       )}
 
       {/* TASKS */}
-      {tab === 2 && (
-        <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
-            <Typography variant="h6" fontWeight={700}>
-              Team Tasks
-            </Typography>
+{/* TASKS */}
+{tab === 2 && (
+  <Paper sx={{ p: 3, borderRadius: 3 }}>
+    <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
+      <Typography variant="h6" fontWeight={700}>
+        Team Tasks
+      </Typography>
 
-            {canEditTasks && (
-              <Button
-                variant="contained"
-                onClick={() => {
-                  setEditingTask(null);
-                  setShowTaskForm(true);
-                }}
-              >
-                Create Task
-              </Button>
-            )}
-          </Box>
-
-          {loadingTasks ? (
-            <Box sx={{ display: "flex", justifyContent: "center", p: 3 }}>
-              <CircularProgress />
-            </Box>
-          ) : teamTasks.length === 0 ? (
-            <Typography color="text.secondary" sx={{ textAlign: "center", p: 3 }}>
-              No team tasks yet. Create your first task!
-            </Typography>
-          ) : (
-            <Stack spacing={2}>
-              {teamTasks.map((task) => {
-                const isPending = task.extensionRequest?.status === "pending";
-                const isAssignedToMe =
-                  task.assignedTo && (task.assignedTo._id === user?._id || task.assignedTo === user?._id);
-
-                return (
-                  <Box key={task._id} sx={{ position: "relative" }}>
-                    <TeamTaskItem
-                      task={task}
-                      canEdit={canEditTasks}
-                      isAdminOrManager={canEditTasks}
-                      currentUserId={user?._id}
-                      onEdit={() => {
-                        setEditingTask(task);
-                        setShowTaskForm(true);
-                      }}
-                      onDelete={async () => {
-                        try {
-                          await teamTasksAPI.deleteTask(task._id);
-                          await fetchTeamTasks();
-                          setSnackbar({ open: true, message: "Task deleted", severity: "success" });
-                        } catch (err) {
-                          console.error("Delete task error:", err);
-                          setSnackbar({ open: true, message: "Failed to delete task", severity: "error" });
-                        }
-                      }}
-                      onStatusChange={async (taskId, newStatus) => {
-                        try {
-                          await teamTasksAPI.updateTask(taskId, { status: newStatus });
-                          await fetchTeamTasks();
-                        } catch (err) {
-                          console.error("Status update error:", err);
-                          setSnackbar({ open: true, message: "Failed to update task status", severity: "error" });
-                        }
-                      }}
-                      onQuickComplete={async (taskId) => {
-                        try {
-                          await teamTasksAPI.updateTask(taskId, { status: "completed" });
-                          await fetchTeamTasks();
-                          setSnackbar({ open: true, message: "Task marked as complete", severity: "success" });
-                        } catch (err) {
-                          console.error("Quick complete error:", err);
-                          setSnackbar({ open: true, message: "Failed to complete task", severity: "error" });
-                        }
-                      }}
-                    />
-
-                    {/* If pending extension and current user is admin/manager, show Review button
-                        This button will switch to the Extensions tab and fetch pending extensions */}
-                    {isPending && canEditTasks && (
-                      <Box sx={{ position: "absolute", top: 12, right: 12 }}>
-                        <Button
-                          variant="contained"
-                          color="primary"
-                          size="small"
-                          onClick={() => {
-                            setTab(3);
-                            fetchPendingExtensions();
-                          }}
-                        >
-                          Review Request
-                        </Button>
-                      </Box>
-                    )}
-                  </Box>
-                );
-              })}
-            </Stack>
-          )}
-
-          {/* Task form dialog */}
-          {showTaskForm && (
-            <TeamTaskForm
-              open={showTaskForm}
-              task={editingTask}
-              teamMembers={team.members}
-              onCancel={() => {
-                setShowTaskForm(false);
-                setEditingTask(null);
-              }}
-              onSubmit={async (formData) => {
-                try {
-                  if (editingTask) {
-                    await teamTasksAPI.updateTask(editingTask._id, formData);
-                  } else {
-                    await teamTasksAPI.createTask(teamId, formData);
-                  }
-                  await fetchTeamTasks();
-                  setShowTaskForm(false);
-                  setEditingTask(null);
-                  setSnackbar({ open: true, message: editingTask ? "Task updated" : "Task created", severity: "success" });
-                } catch (err) {
-                  console.error("Task save error:", err);
-                  setSnackbar({ open: true, message: err.response?.data?.message || "Failed to save task", severity: "error" });
-                }
-              }}
-            />
-          )}
-        </Paper>
+      {canEditTasks && (
+        <Button
+          variant="contained"
+          onClick={() => {
+            setEditingTask(null);
+            setShowTaskForm(true);
+          }}
+        >
+          Create Task
+        </Button>
       )}
+    </Box>
+
+    {loadingTasks ? (
+      <Box sx={{ display: "flex", justifyContent: "center", p: 3 }}>
+        <CircularProgress />
+      </Box>
+    ) : teamTasks.length === 0 ? (
+      <Typography color="text.secondary" sx={{ textAlign: "center", p: 3 }}>
+        No team tasks yet. Create your first task!
+      </Typography>
+    ) : (
+      <Stack spacing={2}>
+        {teamTasks.map((task) => (
+          <TeamTaskItem
+            key={task._id}
+            task={task}
+            canEdit={canEditTasks}
+            isAdminOrManager={canEditTasks}
+            currentUserId={user?._id}
+            onEdit={() => {
+              setEditingTask(task);
+              setShowTaskForm(true);
+            }}
+            onDelete={async () => {
+              try {
+                await teamTasksAPI.deleteTask(task._id);
+                await fetchTeamTasks();
+                setSnackbar({ open: true, message: "Task deleted", severity: "success" });
+              } catch (err) {
+                console.error("Delete task error:", err);
+                setSnackbar({ open: true, message: "Failed to delete task", severity: "error" });
+              }
+            }}
+            onStatusChange={async (taskId, newStatus) => {
+              try {
+                await teamTasksAPI.updateTask(taskId, { status: newStatus });
+                await fetchTeamTasks();
+              } catch (err) {
+                console.error("Status update error:", err);
+                setSnackbar({ open: true, message: "Failed to update task status", severity: "error" });
+              }
+            }}
+            onQuickComplete={async (taskId) => {
+              try {
+                await teamTasksAPI.updateTask(taskId, { status: "completed" });
+                await fetchTeamTasks();
+                setSnackbar({ open: true, message: "Task marked as complete", severity: "success" });
+              } catch (err) {
+                console.error("Quick complete error:", err);
+                setSnackbar({ open: true, message: "Failed to complete task", severity: "error" });
+              }
+            }}
+          />
+        ))}
+      </Stack>
+    )}
+
+    {/* Task form dialog */}
+    {showTaskForm && (
+      <TeamTaskForm
+        open={showTaskForm}
+        task={editingTask}
+        teamMembers={team.members}
+        onCancel={() => {
+          setShowTaskForm(false);
+          setEditingTask(null);
+        }}
+        onSubmit={async (formData) => {
+          try {
+            if (editingTask) {
+              await teamTasksAPI.updateTask(editingTask._id, formData);
+            } else {
+              await teamTasksAPI.createTask(teamId, formData);
+            }
+            await fetchTeamTasks();
+            setShowTaskForm(false);
+            setEditingTask(null);
+            setSnackbar({ open: true, message: editingTask ? "Task updated" : "Task created", severity: "success" });
+          } catch (err) {
+            console.error("Task save error:", err);
+            setSnackbar({ open: true, message: err.response?.data?.message || "Failed to save task", severity: "error" });
+          }
+        }}
+      />
+    )}
+  </Paper>
+)}
 
       {/* EXTENSIONS */}
       {tab === 3 && (
