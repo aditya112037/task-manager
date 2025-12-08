@@ -326,21 +326,42 @@ export default function TeamDetails() {
 
         <Divider sx={{ my: 2 }} />
 
-        <Tabs value={tab} onChange={(e, v) => setTab(v)}>
-          <Tab label="Overview" />
-          <Tab label="Members" />
-          <Tab label="Tasks" />
-          <Tab
-            label="Extensions"
-            // show a badge if pending requests and user is admin/manager
-            icon={
-              ["admin", "manager"].includes(myRole) && pendingExtensions.length > 0 ? (
-                <Chip label={`${pendingExtensions.length}`} color="error" size="small" />
-              ) : null
-            }
+<Tabs 
+  value={tab} 
+  onChange={(e, v) => setTab(v)}
+  sx={{
+    // Allow tabs to wrap if needed
+    flexWrap: 'wrap',
+    minHeight: '48px' // Ensure consistent height even with badge
+  }}
+>
+  <Tab label="Overview" />
+  <Tab label="Members" />
+  <Tab label="Tasks" />
+  <Tab
+    label={
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        Extensions
+        {["admin", "manager"].includes(myRole) && pendingExtensions.length > 0 && (
+          <Chip 
+            label={pendingExtensions.length} 
+            color="error" 
+            size="small" 
+            sx={{ 
+              height: '20px', 
+              minWidth: '20px', 
+              fontSize: '0.75rem',
+              '& .MuiChip-label': {
+                px: 0.5
+              }
+            }}
           />
-          <Tab label="Settings" />
-        </Tabs>
+        )}
+      </Box>
+    }
+  />
+  <Tab label="Settings" />
+</Tabs>
       </Paper>
 
       {/* OVERVIEW */}
@@ -575,216 +596,73 @@ export default function TeamDetails() {
       )}
 
       {/* EXTENSIONS */}
-{/* EXTENSIONS */}
-{tab === 3 && (
-  <Paper sx={{ p: 3, borderRadius: 3 }}>
-    <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 3 }}>
-      <Typography variant="h6" fontWeight={700}>
-        Extension Requests
-        {pendingExtensions.length > 0 && (
-          <Chip 
-            label={`${pendingExtensions.length} pending`} 
-            color="error" 
-            size="small" 
-            sx={{ ml: 2, verticalAlign: 'middle' }} 
-          />
-        )}
-      </Typography>
-      <Button 
-        variant="outlined" 
-        onClick={fetchPendingExtensions}
-        startIcon={<RefreshIcon />}
-      >
-        Refresh
-      </Button>
-    </Box>
+      {tab === 3 && (
+        <Paper sx={{ p: 3, borderRadius: 3 }}>
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+            <Typography variant="h6" fontWeight={700}>
+              Extension Requests
+            </Typography>
+            <Box>
+              <Button variant="outlined" onClick={fetchPendingExtensions}>
+                Refresh
+              </Button>
+            </Box>
+          </Box>
 
-    {!["admin", "manager"].includes(myRole) ? (
-      <Box sx={{ textAlign: 'center', p: 4 }}>
-        <Typography color="text.secondary" variant="body1">
-          Only team admins and managers can approve or reject extension requests.
-        </Typography>
-        <Typography color="text.secondary" variant="body2" sx={{ mt: 1 }}>
-          If you requested an extension, check the task card for its status.
-        </Typography>
-      </Box>
-    ) : loadingExtensions ? (
-      <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
-        <CircularProgress />
-      </Box>
-    ) : pendingExtensions.length === 0 ? (
-      <Box sx={{ textAlign: 'center', p: 4 }}>
-        <Typography color="text.secondary" variant="body1">
-          No pending extension requests.
-        </Typography>
-        <Button 
-          variant="outlined" 
-          onClick={fetchPendingExtensions}
-          sx={{ mt: 2 }}
-        >
-          Check Again
-        </Button>
-      </Box>
-    ) : (
-      <Stack spacing={3}>
-        {pendingExtensions.map((t) => (
-          <Paper 
-            key={t._id} 
-            sx={{ 
-              p: 3, 
-              borderRadius: 2,
-              border: '1px solid',
-              borderColor: 'divider',
-              '&:hover': {
-                boxShadow: 2,
-              }
-            }}
-          >
-            <Grid container spacing={2} alignItems="center">
-              <Grid item xs={12} md={8}>
-                <Box sx={{ mb: 2 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                    <Typography variant="h6" fontWeight={600}>
-                      {t.title}
-                    </Typography>
-                    <Chip 
-                      label="Extension Requested" 
-                      color="warning" 
-                      size="small" 
-                      sx={{ ml: 2 }} 
-                    />
-                  </Box>
-                  
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                    Assigned to: <strong>{t.assignedTo?.name || "Unassigned"}</strong>
-                  </Typography>
-                  
-                  {t.description && (
-                    <Paper 
-                      variant="outlined" 
-                      sx={{ 
-                        p: 2, 
-                        mt: 2, 
-                        mb: 2,
-                        bgcolor: 'background.default',
-                        borderRadius: 1
-                      }}
-                    >
-                      <Typography variant="body2">
+          {!["admin", "manager"].includes(myRole) ? (
+            <Typography color="text.secondary">
+              Only team admins and managers can approve or reject extension requests. If you requested an extension,
+              check the task card for its status.
+            </Typography>
+          ) : loadingExtensions ? (
+            <Box sx={{ display: "flex", justifyContent: "center", p: 3 }}>
+              <CircularProgress />
+            </Box>
+          ) : pendingExtensions.length === 0 ? (
+            <Typography color="text.secondary">No pending extension requests.</Typography>
+          ) : (
+            <Stack spacing={2}>
+              {pendingExtensions.map((t) => (
+                <Paper key={t._id} sx={{ p: 2 }}>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={8}>
+                      <Typography variant="h6">{t.title}</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Assigned to: {t.assignedTo?.name || "Unassigned"}
+                      </Typography>
+                      <Typography variant="body2" sx={{ mt: 1 }}>
                         {t.description}
                       </Typography>
-                    </Paper>
-                  )}
-                  
-                  <Box sx={{ mt: 2 }}>
-                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>
-                          <strong>Requested by:</strong>
-                        </Typography>
-                        <Typography variant="caption">
-                          {t.extensionRequest?.requestedBy?.name || "Unknown"}
-                        </Typography>
-                      </Box>
-                      
-                      <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                        <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>
-                          <strong>Requested at:</strong>
-                        </Typography>
-                        <Typography variant="caption">
-                          {t.extensionRequest?.requestedAt ? 
-                            new Date(t.extensionRequest.requestedAt).toLocaleString() : "N/A"}
-                        </Typography>
-                      </Box>
-                    </Stack>
-                    
-                    <Box sx={{ mt: 1 }}>
-                      <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>
-                        <strong>Reason:</strong>
+                      <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
+                        Requested by: {t.extensionRequest?.requestedBy?.name || "Unknown"} • Requested at:{" "}
+                        {t.extensionRequest?.requestedAt ? new Date(t.extensionRequest.requestedAt).toLocaleString() : ""}
                       </Typography>
-                      <Typography variant="caption">
-                        {t.extensionRequest?.reason || "No reason provided"}
+                      <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
+                        Reason: {t.extensionRequest?.reason}
                       </Typography>
-                    </Box>
-                    
-                    {t.extensionRequest?.requestedDueDate && (
-                      <Box sx={{ mt: 1 }}>
-                        <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>
-                          <strong>New due date requested:</strong>
+                      {t.extensionRequest?.requestedDueDate && (
+                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: "block" }}>
+                          Requested new due date: {new Date(t.extensionRequest.requestedDueDate).toLocaleDateString()}
                         </Typography>
-                        <Typography variant="caption">
-                          {new Date(t.extensionRequest.requestedDueDate).toLocaleDateString('en-US', {
-                            weekday: 'short',
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric'
-                          })}
-                        </Typography>
-                      </Box>
-                    )}
-                    
-                    {t.dueDate && (
-                      <Box sx={{ mt: 1 }}>
-                        <Typography variant="caption" color="text.secondary" sx={{ mr: 1 }}>
-                          <strong>Original due date:</strong>
-                        </Typography>
-                        <Typography variant="caption">
-                          {new Date(t.dueDate).toLocaleDateString('en-US', {
-                            weekday: 'short',
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric'
-                          })}
-                        </Typography>
-                      </Box>
-                    )}
-                  </Box>
-                </Box>
-              </Grid>
+                      )}
+                    </Grid>
 
-              <Grid item xs={12} md={4}>
-                <Box sx={{ 
-                  display: 'flex', 
-                  flexDirection: { xs: 'row', md: 'column' }, 
-                  gap: 2,
-                  justifyContent: { xs: 'flex-end', md: 'center' },
-                  alignItems: 'center'
-                }}>
-                  <Button 
-                    variant="contained" 
-                    color="success" 
-                    onClick={() => handleApproveExtension(t._id)}
-                    fullWidth
-                    sx={{ 
-                      py: 1.5,
-                      borderRadius: 2,
-                      boxShadow: 1
-                    }}
-                  >
-                    Approve
-                  </Button>
-                  
-                  <Button 
-                    variant="outlined" 
-                    color="error" 
-                    onClick={() => handleRejectExtension(t._id)}
-                    fullWidth
-                    sx={{ 
-                      py: 1.5,
-                      borderRadius: 2
-                    }}
-                  >
-                    Reject
-                  </Button>
-                </Box>
-              </Grid>
-            </Grid>
-          </Paper>
-        ))}
-      </Stack>
-    )}
-  </Paper>
-)}
+                    <Grid item xs={12} md={4} sx={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 1 }}>
+                      <Button variant="contained" color="success" onClick={() => handleApproveExtension(t._id)}>
+                        Approve
+                      </Button>
+                      <Button variant="outlined" color="error" onClick={() => handleRejectExtension(t._id)}>
+                        Reject
+                      </Button>
+                    </Grid>
+                  </Grid>
+                </Paper>
+              ))}
+            </Stack>
+          )}
+        </Paper>
+      )}
+
       {/* SETTINGS */}
       {tab === 4 && (
         <Paper sx={{ p: 3, borderRadius: 3 }}>
