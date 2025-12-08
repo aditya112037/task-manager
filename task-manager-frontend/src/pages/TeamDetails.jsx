@@ -303,6 +303,29 @@ export default function TeamDetails() {
     }
   };
 
+// ---- Delete team ----
+const handleDeleteTeam = async () => {
+  if (!window.confirm("Are you sure you want to delete this team? This action cannot be undone.")) return;
+
+  try {
+    await teamsAPI.deleteTeam(teamId);
+    setSnackbar({
+      open: true,
+      message: "Team deleted successfully",
+      severity: "success",
+    });
+    navigate("/teams");
+  } catch (err) {
+    console.error("Delete team error:", err);
+    setSnackbar({
+      open: true,
+      message: err.response?.data?.message || "Failed to delete team",
+      severity: "error",
+    });
+  }
+};
+
+
   /* ---------------------------------------------------
      LOADING
   --------------------------------------------------- */
