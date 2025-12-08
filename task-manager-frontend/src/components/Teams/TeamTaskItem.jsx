@@ -174,9 +174,15 @@ export default function TeamTaskItem({
               )}
 
               {/* Admin quick link: opens TeamDetails where approval UI exists */}
-              {isAdminOrManager && hasPendingRequest && (
-                <Button variant="contained" color="primary" onClick={() => window.location.href = `/teams/${task.team?._id || task.team}`}>Review Request</Button>
-              )}
+              <Button
+  variant="contained"
+  color="primary"
+  onClick={() =>
+    window.location.href = `/teams/${task.team?._id || task.team}?tab=extensions`
+  }
+>
+  Review Request
+</Button>
             </Box>
           </Box>
 
