@@ -10,7 +10,19 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ["task_assigned", "task_due_soon", "task_overdue", "extension_requested", "extension_approved", "extension_rejected", "task_completed", "new_team_task"],
+      enum: ["task_assigned",
+    "task_due_soon",
+    "task_overdue",
+
+    // extension events
+    "extension_request",   // you use this in TTRoutes
+    "extension",           // used in approve route
+    "extension_requested", // optional (from old system)
+    "extension_approved",
+    "extension_rejected",
+
+    "task_completed",
+    "new_team_task"],
       required: true,
     },
     title: {
