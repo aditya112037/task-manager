@@ -1,5 +1,6 @@
 // src/pages/TeamDetails.jsx
 import React, { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import {
   Box, Typography, Avatar, Tabs, Tab, Paper, Divider, Stack,
   Button, Chip, IconButton, MenuItem, Select, FormControl,
@@ -20,7 +21,9 @@ export default function TeamDetails() {
   const { teamId } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
-
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  const forcedTab = params.get("tab");
   const [tab, setTab] = useState(0);
   const [team, setTeam] = useState(null);
   const [loadingTeam, setLoadingTeam] = useState(true);
@@ -137,6 +140,12 @@ export default function TeamDetails() {
   );
 
   const inviteURL = `${window.location.origin}/join/${team._id}`;
+
+  useEffect(() => {
+  if (forcedTab === "extensions") {
+    setTab(3);   // tab index for EXTENSIONS
+  }
+}, [forcedTab]);
 
   return (
     <Box sx={{ px: 2, pt: { xs: 10, sm: 8 }, maxWidth: 1200, mx: "auto" }}>
