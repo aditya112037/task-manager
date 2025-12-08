@@ -229,18 +229,50 @@ router.post("/:taskId/quick-complete", protect, async (req, res) => {
    TEAM TASK ROUTES (LAST)
 ---------------------------------------------------- */
 
+/* ----------------------------------------------------
+   GET ALL TASKS FOR TEAM — with correct permissions
+---------------------------------------------------- */
 router.get("/:teamId", protect, async (req, res) => {
   try {
-    const tasks = await TTask.find({ team: req.params.teamId })
-      .populate("assignedTo", "name")
-      .populate("createdBy", "name")
-      .populate("team", "name");
+    const team = await Team.findById(req.params.teamId);
+    if (!team) return res.status(404).json({ message: "Team not found" });
+
+    const member = team.members.find(
+      (m) => String(m.user) === String(req.user._id)
+    );
+
+    if (!member) {
+      return res.status(403).json({ message: "You are not a member of this team" });
+    }
+
+    let tasks;
+
+    // Admin / Manager → see ALL tasks
+    if (["admin", "manager"].includes(member.role)) {
+      tasks = await TTask.find({ team: req.params.teamId })
+        .populate("assignedTo", "name photo")
+        .populate("createdBy", "name photo")
+        .populate("team", "name color icon")
+        .sort({ dueDate: 1 });
+    } 
+    // Members → only tasks assigned TO THEM
+    else {
+      tasks = await TTask.find({
+        team: req.params.teamId,
+        assignedTo: req.user._id,
+      })
+        .populate("assignedTo", "name photo")
+        .populate("createdBy", "name photo")
+        .populate("team", "name color icon")
+        .sort({ dueDate: 1 });
+    }
 
     res.json(tasks);
   } catch (err) {
-    console.error("TEAM TASKS ERR:", err);
+    console.error("TEAM TASKS PERMISSION ERROR:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
+
 
 module.exports = router;
