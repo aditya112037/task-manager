@@ -10,7 +10,41 @@ const { protect } = require("../middleware/auth");
    ⚠ ROUTE ORDER IS IMPORTANT
    Specific routes MUST come before /:teamId
 ---------------------------------------------------- */
+/* ----------------------------------------------------
+   6️⃣ GET MY TASKS IN A TEAM
+---------------------------------------------------- */
+router.get("/:teamId/my", protect, async (req, res) => {
+  try {
+    const tasks = await TTask.find({
+      team: req.params.teamId,
+      assignedTo: req.user._id
+    })
+      .populate("team", "name color icon")
+      .sort({ dueDate: 1 });
 
+    res.json(tasks);
+  } catch (err) {
+    console.error("MY TASKS ERROR:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+/* ----------------------------------------------------
+   7️⃣ GET ALL TASKS FOR TEAM (Generic route – LAST!)
+---------------------------------------------------- */
+router.get("/:teamId", protect, async (req, res) => {
+  try {
+    const tasks = await TTask.find({ team: req.params.teamId })
+      .populate("assignedTo", "name photo")
+      .populate("team", "name color icon")
+      .sort({ dueDate: 1 });
+
+    res.json(tasks);
+  } catch (err) {
+    console.error("TEAM TASKS ERROR:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
 /* ----------------------------------------------------
    1️⃣ GET PENDING EXTENSION REQUESTS (Admin/Manager)
 ---------------------------------------------------- */
@@ -205,40 +239,6 @@ router.get("/:teamId/user/:userId", protect, async (req, res) => {
   }
 });
 
-/* ----------------------------------------------------
-   6️⃣ GET MY TASKS IN A TEAM
----------------------------------------------------- */
-router.get("/:teamId/my", protect, async (req, res) => {
-  try {
-    const tasks = await TTask.find({
-      team: req.params.teamId,
-      assignedTo: req.user._id
-    })
-      .populate("team", "name color icon")
-      .sort({ dueDate: 1 });
 
-    res.json(tasks);
-  } catch (err) {
-    console.error("MY TASKS ERROR:", err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-/* ----------------------------------------------------
-   7️⃣ GET ALL TASKS FOR TEAM (Generic route – LAST!)
----------------------------------------------------- */
-router.get("/:teamId", protect, async (req, res) => {
-  try {
-    const tasks = await TTask.find({ team: req.params.teamId })
-      .populate("assignedTo", "name photo")
-      .populate("team", "name color icon")
-      .sort({ dueDate: 1 });
-
-    res.json(tasks);
-  } catch (err) {
-    console.error("TEAM TASKS ERROR:", err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
 
 module.exports = router;
