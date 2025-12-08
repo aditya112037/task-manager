@@ -14,7 +14,6 @@ import {
   MenuItem,
   Select,
   FormControl,
-  InputLabel,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -32,9 +31,6 @@ import { useParams } from "react-router-dom";
 import { teamsAPI, teamTasksAPI } from "../services/api";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import TeamTaskForm from "../components/Teams/TeamTaskForm";
-import Badge from "@mui/material/Badge";
-import AccessTimeIcon from "@mui/icons-material/AccessTime";
-
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 
@@ -58,10 +54,10 @@ export default function TeamDetails() {
     severity: "success",
   });
 
-  // Calculate user role
-  const myRole = team?.members?.find(m => 
-    m.user?._id === user?._id || m.user === user?._id
-  )?.role;
+  // Calculate user role - only when team is loaded
+  const myRole = team ? team?.members?.find(m => 
+    (m.user?._id === user?._id) || (m.user === user?._id)
+  )?.role : null;
 
   const canEditTasks = myRole === "admin" || myRole === "manager";
   const isAdmin = myRole === "admin";
@@ -85,6 +81,7 @@ export default function TeamDetails() {
         message: "Failed to load team",
         severity: "error",
       });
+      setTeam(null); // Ensure team is null on error
     } finally {
       setLoadingTeam(false);
     }
@@ -103,6 +100,13 @@ export default function TeamDetails() {
     }
   };
 
+  // -------- INITIAL FETCH --------
+  useEffect(() => {
+    if (teamId) {
+      fetchTeam();
+      fetchTeamTasks();
+    }
+  }, [teamId]);
 
   // -------- HANDLE LEAVE TEAM --------
   const handleLeaveTeam = async () => {
@@ -222,20 +226,42 @@ export default function TeamDetails() {
     }
   };
 
-  if (loadingTeam) return (
-    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-      <CircularProgress />
-    </Box>
-  );
-  
-  if (!team) return (
-    <Box sx={{ p: 3 }}>
-      <Typography variant="h6" color="error">Team not found or you don't have access.</Typography>
-      <Button variant="contained" onClick={() => navigate("/teams")} sx={{ mt: 2 }}>
-        Back to Teams
-      </Button>
-    </Box>
-  );
+  // Loading state
+  if (loadingTeam) {
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh' 
+      }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
+
+  // Team not found or no access
+  if (!team) {
+    return (
+      <Box sx={{ 
+        p: 3, 
+        pt: { xs: 10, sm: 8 },
+        maxWidth: 1200, 
+        mx: "auto" 
+      }}>
+        <Typography variant="h6" color="error">
+          Team not found or you don't have access.
+        </Typography>
+        <Button 
+          variant="contained" 
+          onClick={() => navigate("/teams")} 
+          sx={{ mt: 2 }}
+        >
+          Back to Teams
+        </Button>
+      </Box>
+    );
+  }
 
   const inviteURL = `${window.location.origin}/join/${team._id}`;
 
@@ -282,12 +308,14 @@ export default function TeamDetails() {
               <Typography variant="body2" color="text.secondary">
                 {team.description || "No description"}
               </Typography>
-              <Chip
-                label={`${myRole || "member"}`.toUpperCase()}
-                color={isAdmin ? "primary" : "default"}
-                size="small"
-                sx={{ mt: 1 }}
-              />
+              {myRole && (
+                <Chip
+                  label={`${myRole}`.toUpperCase()}
+                  color={isAdmin ? "primary" : "default"}
+                  size="small"
+                  sx={{ mt: 1 }}
+                />
+              )}
             </Box>
           </Stack>
 
@@ -304,7 +332,6 @@ export default function TeamDetails() {
           <Tab label="Overview" />
           <Tab label="Members" />
           <Tab label="Tasks" />
-
           <Tab label="Settings" />
         </Tabs>
       </Paper>
@@ -537,8 +564,6 @@ export default function TeamDetails() {
                       });
                     }
                   }}
-                  
-                 
                 />
               ))}
             </Stack>
@@ -582,10 +607,8 @@ export default function TeamDetails() {
         </Paper>
       )}
 
-
-
       {/* SETTINGS TAB */}
-      {tab === 4 && (
+      {tab === 3 && (
         <Paper sx={{ p: 3, borderRadius: 3 }}>
           <Typography variant="h6" fontWeight={700} sx={{ mb: 3 }}>
             Team Settings
