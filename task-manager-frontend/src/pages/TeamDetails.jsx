@@ -402,18 +402,7 @@ useEffect(() => {
             Copy Invite Link
           </Button>
 
-          <Box sx={{ mt: 4 }}>
-            <Typography fontWeight={600} sx={{ mb: 2 }}>
-              Recent Tasks
-            </Typography>
-            {teamTasks.slice(0, 5).map((t) => (
-              <Box key={t._id} sx={{ display: "flex", alignItems: "center", mb: 1 }}>
-                <Chip label={t.status} color={t.status === "completed" ? "success" : "default"} size="small" sx={{ mr: 2 }} />
-                <Typography>{t.title}</Typography>
-              </Box>
-            ))}
-            {teamTasks.length === 0 && <Typography color="text.secondary">No tasks yet</Typography>}
-          </Box>
+
         </Paper>
       )}
 
