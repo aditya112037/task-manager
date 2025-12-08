@@ -125,19 +125,21 @@ export const teamTasksAPI = {
   updateTask: (taskId, data) => api.put(`/api/team-tasks/${taskId}`, data),
   deleteTask: (taskId) => api.delete(`/api/team-tasks/${taskId}`),
   
-  // NEW: Extension Management
-  requestExtension: (taskId, data) => 
-    api.post(`/api/team-tasks/${taskId}/request-extension`, data),
-  
-  approveExtension: (taskId) => 
-    api.put(`/api/team-tasks/${taskId}/extension/approve`),
-  
-  rejectExtension: (taskId) => 
-    api.put(`/api/team-tasks/${taskId}/extension/reject`),
-  
-  // NEW: Quick Actions
-  quickComplete: (taskId) => 
-    api.post(`/api/team-tasks/${taskId}/quick-complete`),
+};
+
+
+export const teamExtensionsAPI = {
+  requestExtension: (taskId, data) =>
+    api.post(`/api/team-extensions/${taskId}/request-extension`, data),
+
+  getPendingExtensions: (teamId) =>
+    api.get(`/api/team-extensions/${teamId}/extensions/pending`),
+
+  approveExtension: (taskId) =>
+    api.put(`/api/team-extensions/${taskId}/approve-extension`),
+
+  rejectExtension: (taskId) =>
+    api.put(`/api/team-extensions/${taskId}/reject-extension`),
 };
 
 // -------------------------

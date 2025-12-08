@@ -34,6 +34,7 @@ app.use(passport.initialize());
 
 // ROUTES - MAKE SURE THESE ARE CORRECT
 app.use("/api/auth", require("./routes/auth"));
+app.use("/api/team-extensions", require("./routes/teamExtensions"));
 app.use("/api/auth", require("./routes/googleAuth"));
 app.use("/api/tasks", require("./routes/tasks"));
 app.use("/api/teams", require("./routes/teams"));
