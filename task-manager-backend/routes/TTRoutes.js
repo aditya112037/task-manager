@@ -7,44 +7,36 @@ const Notification = require("../models/Notification");
 const { protect } = require("../middleware/auth");
 
 /* ----------------------------------------------------
-   ⚠ ROUTE ORDER IS IMPORTANT
-   Specific routes MUST come before /:teamId
+   ⚠ ROUTE ORDER IS CRITICAL
+   Global routes must be BEFORE /:teamId routes
 ---------------------------------------------------- */
+
 /* ----------------------------------------------------
-   6️⃣ GET MY TASKS IN A TEAM
+   0️⃣ GET ALL TEAM TASKS ACROSS ALL TEAMS (Dashboard)
 ---------------------------------------------------- */
-router.get("/:teamId/my", protect, async (req, res) => {
+router.get("/my/all", protect, async (req, res) => {
   try {
+    // get teams user belongs to
+    const teams = await Team.find({ "members.user": req.user._id });
+    const teamIds = teams.map((t) => t._id);
+
     const tasks = await TTask.find({
-      team: req.params.teamId,
-      assignedTo: req.user._id
+      team: { $in: teamIds },
     })
       .populate("team", "name color icon")
+      .populate("createdBy", "name email photo")
+      .populate("assignedTo", "name email photo")
+      .populate("extensionRequest.requestedBy", "name email photo")
+      .populate("extensionRequest.reviewedBy", "name email photo")
       .sort({ dueDate: 1 });
 
     res.json(tasks);
   } catch (err) {
-    console.error("MY TASKS ERROR:", err);
+    console.error("MY_ALL_TASKS ERROR:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
 
-/* ----------------------------------------------------
-   7️⃣ GET ALL TASKS FOR TEAM (Generic route – LAST!)
----------------------------------------------------- */
-router.get("/:teamId", protect, async (req, res) => {
-  try {
-    const tasks = await TTask.find({ team: req.params.teamId })
-      .populate("assignedTo", "name photo")
-      .populate("team", "name color icon")
-      .sort({ dueDate: 1 });
-
-    res.json(tasks);
-  } catch (err) {
-    console.error("TEAM TASKS ERROR:", err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
 /* ----------------------------------------------------
    1️⃣ GET PENDING EXTENSION REQUESTS (Admin/Manager)
 ---------------------------------------------------- */
@@ -53,14 +45,16 @@ router.get("/:teamId/extensions/pending", protect, async (req, res) => {
     const team = await Team.findById(req.params.teamId);
     if (!team) return res.status(404).json({ message: "Team not found" });
 
-    const member = team.members.find(m => String(m.user) === String(req.user._id));
+    const member = team.members.find(
+      (m) => String(m.user) === String(req.user._id)
+    );
     if (!member || !["admin", "manager"].includes(member.role)) {
       return res.status(403).json({ message: "Not authorized" });
     }
 
     const pending = await TTask.find({
       team: req.params.teamId,
-      "extensionRequest.status": "pending"
+      "extensionRequest.status": "pending",
     })
       .populate("createdBy", "name email photo")
       .populate("assignedTo", "name email photo")
@@ -85,7 +79,9 @@ router.post("/:taskId/request-extension", protect, async (req, res) => {
     if (!task) return res.status(404).json({ message: "Task not found" });
 
     if (!task.assignedTo || String(task.assignedTo) !== String(req.user._id)) {
-      return res.status(403).json({ message: "Only assigned user can request extension" });
+      return res
+        .status(403)
+        .json({ message: "Only assigned user can request extension" });
     }
 
     task.extensionRequest = {
@@ -99,18 +95,18 @@ router.post("/:taskId/request-extension", protect, async (req, res) => {
 
     await task.save();
 
-    // Notify admins/managers
     const team = await Team.findById(task.team).populate("members.user");
-    const approvers = team.members.filter(m =>
+    const approvers = team.members.filter((m) =>
       ["admin", "manager"].includes(m.role)
     );
 
+    // notify admins
     for (const m of approvers) {
       await Notification.create({
         user: m.user._id,
         type: "extension_requested",
         title: "Extension Requested",
-        message: `${req.user.name} requested an extension for task "${task.title}".`,
+        message: `${req.user.name} requested an extension for "${task.title}".`,
         relatedTask: task._id,
         relatedTeam: team._id,
         metadata: { reason, requestedDueDate },
@@ -132,12 +128,18 @@ router.post("/:taskId/extension/approve", protect, async (req, res) => {
     const task = await TTask.findById(req.params.taskId).populate("team");
     if (!task) return res.status(404).json({ message: "Task not found" });
 
-    if (!task.extensionRequest || task.extensionRequest.status !== "pending") {
+    if (
+      !task.extensionRequest ||
+      task.extensionRequest.status !== "pending" ||
+      !task.extensionRequest.requested
+    ) {
       return res.status(400).json({ message: "No pending extension request" });
     }
 
     const team = await Team.findById(task.team._id).populate("members.user");
-    const member = team.members.find(m => String(m.user._id) === String(req.user._id));
+    const member = team.members.find(
+      (m) => String(m.user._id) === String(req.user._id)
+    );
 
     if (!member || !["admin", "manager"].includes(member.role)) {
       return res.status(403).json({ message: "Not authorized" });
@@ -175,12 +177,18 @@ router.post("/:taskId/extension/reject", protect, async (req, res) => {
     const task = await TTask.findById(req.params.taskId).populate("team");
     if (!task) return res.status(404).json({ message: "Task not found" });
 
-    if (!task.extensionRequest || task.extensionRequest.status !== "pending") {
+    if (
+      !task.extensionRequest ||
+      task.extensionRequest.status !== "pending" ||
+      !task.extensionRequest.requested
+    ) {
       return res.status(400).json({ message: "No pending extension request" });
     }
 
     const team = await Team.findById(task.team._id).populate("members.user");
-    const member = team.members.find(m => String(m.user._id) === String(req.user._id));
+    const member = team.members.find(
+      (m) => String(m.user._id) === String(req.user._id)
+    );
 
     if (!member || !["admin", "manager"].includes(member.role)) {
       return res.status(403).json({ message: "Not authorized" });
@@ -216,20 +224,27 @@ router.get("/:teamId/user/:userId", protect, async (req, res) => {
     const team = await Team.findById(req.params.teamId);
     if (!team) return res.status(404).json({ message: "Team not found" });
 
-    const member = team.members.find(m => String(m.user) === String(req.user._id));
+    const member = team.members.find(
+      (m) => String(m.user) === String(req.user._id)
+    );
     if (!member || !["admin", "manager"].includes(member.role)) {
       return res.status(403).json({ message: "Not authorized" });
     }
 
-    const isMember = team.members.some(m => String(m.user) === req.params.userId);
-    if (!isMember) return res.status(400).json({ message: "User not in this team" });
+    const isMember = team.members.some(
+      (m) => String(m.user) === req.params.userId
+    );
+    if (!isMember)
+      return res
+        .status(400)
+        .json({ message: "User not a member of this team" });
 
     const tasks = await TTask.find({
       team: req.params.teamId,
-      assignedTo: req.params.userId
+      assignedTo: req.params.userId,
     })
-      .populate("assignedTo", "name")
-      .populate("team", "name")
+      .populate("assignedTo", "name photo")
+      .populate("team", "name color icon")
       .sort({ dueDate: 1 });
 
     res.json(tasks);
@@ -239,6 +254,42 @@ router.get("/:teamId/user/:userId", protect, async (req, res) => {
   }
 });
 
+/* ----------------------------------------------------
+   6️⃣ GET MY TASKS IN A TEAM
+---------------------------------------------------- */
+router.get("/:teamId/my", protect, async (req, res) => {
+  try {
+    const tasks = await TTask.find({
+      team: req.params.teamId,
+      assignedTo: req.user._id,
+    })
+      .populate("team", "name color icon")
+      .populate("assignedTo", "name email photo")
+      .sort({ dueDate: 1 });
 
+    res.json(tasks);
+  } catch (err) {
+    console.error("MY TASKS ERROR:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+/* ----------------------------------------------------
+   7️⃣ GET ALL TASKS FOR TEAM (Generic route – MUST BE LAST)
+---------------------------------------------------- */
+router.get("/:teamId", protect, async (req, res) => {
+  try {
+    const tasks = await TTask.find({ team: req.params.teamId })
+      .populate("assignedTo", "name email photo")
+      .populate("createdBy", "name email photo")
+      .populate("team", "name color icon")
+      .sort({ dueDate: 1 });
+
+    res.json(tasks);
+  } catch (err) {
+    console.error("TEAM TASKS ERROR:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
 
 module.exports = router;
