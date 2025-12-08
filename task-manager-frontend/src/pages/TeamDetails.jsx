@@ -30,6 +30,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import ExitToAppIcon from "@mui/icons-material/ExitToApp";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import { useParams, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { teamsAPI, teamTasksAPI } from "../services/api";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import TeamTaskForm from "../components/Teams/TeamTaskForm";
@@ -40,6 +41,15 @@ export default function TeamDetails() {
   const { teamId } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+const params = new URLSearchParams(location.search);
+const forcedTab = params.get("tab");
+
+useEffect(() => {
+  if (forcedTab === "extensions") {
+    setTab(3);   // tab index for EXTENSIONS
+  }
+}, [forcedTab]);
 
   // Tabs: 0 = Overview, 1 = Members, 2 = Tasks, 3 = Extensions, 4 = Settings
   const [tab, setTab] = useState(0);
@@ -570,6 +580,7 @@ export default function TeamDetails() {
     )}
   </Paper>
 )}
+
 
       {/* EXTENSIONS */}
       {tab === 3 && (
