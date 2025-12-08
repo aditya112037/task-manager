@@ -125,6 +125,17 @@ export const teamTasksAPI = {
   updateTask: (taskId, data) => api.put(`/api/team-tasks/${taskId}`, data),
   deleteTask: (taskId) => api.delete(`/api/team-tasks/${taskId}`),
   
+    requestExtension: (taskId, payload) =>
+    api.post(`/api/team-tasks/${taskId}/request-extension`, payload),
+
+  approveExtension: (taskId) =>
+    api.post(`/api/team-tasks/${taskId}/extension/approve`),
+
+  rejectExtension: (taskId) =>
+    api.post(`/api/team-tasks/${taskId}/extension/reject`),
+
+  getPendingExtensions: (teamId) =>
+    api.get(`/api/team-tasks/${teamId}/extensions/pending`),
 };
 
 
