@@ -5,155 +5,128 @@ const Team = require("../models/team");
 const Notification = require("../models/Notification");
 const { protect } = require("../middleware/auth");
 
-/* -----------------------------------------
-   1️⃣ PENDING EXTENSION REQUESTS
------------------------------------------ */
+/* ---------------------------------------------------
+   🔧 Helper: Safe Member Lookup (works for populated & unpopulated)
+--------------------------------------------------- */
+function findMember(team, userId) {
+  return team.members.find(m => {
+    const memberId = m.user?._id || m.user;
+    return String(memberId) === String(userId);
+  });
+}
+
+/* ---------------------------------------------------
+   1️⃣ GET PENDING EXTENSION REQUESTS (ADMIN/MANAGER ONLY)
+--------------------------------------------------- */
 router.get("/:teamId/extensions/pending", protect, async (req, res) => {
   try {
     const team = await Team.findById(req.params.teamId);
     if (!team) return res.status(404).json({ message: "Team not found" });
 
-const member = team.members.find(m => {
-  const memberId = m.user?._id || m.user;
-  return String(memberId) === String(req.user._id);
-});
-
-
-    if (!member || !["admin","manager"].includes(member.role)) {
+    const member = findMember(team, req.user._id);
+    if (!member || !["admin", "manager"].includes(member.role)) {
       return res.status(403).json({ message: "Not authorized" });
     }
 
     const pending = await TTask.find({
       team: req.params.teamId,
-      "extensionRequest.status": "pending"
+      "extensionRequest.status": "pending",
     })
-    .populate("extensionRequest.requestedBy", "name email photo")
-    .populate("assignedTo", "name photo")
-    .populate("createdBy", "name photo");
+      .populate("extensionRequest.requestedBy", "name email photo")
+      .populate("assignedTo", "name photo")
+      .populate("createdBy", "name photo");
 
     res.json(pending);
   } catch (err) {
+    console.error("Pending extension error:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
 
-/* -----------------------------------------
-   2️⃣ EXTENSION APPROVAL
------------------------------------------ */
+/* ---------------------------------------------------
+   2️⃣ APPROVE EXTENSION REQUEST
+--------------------------------------------------- */
 router.post("/:taskId/extension/approve", protect, async (req, res) => {
   try {
-    const task = await TTask.findById(req.params.taskId)
-      .populate({
-  path: "team",
-  populate: { path: "members.user", select: "name email photo" }
-})
-
-      .populate("assignedTo", "name email");
+    const task = await TTask.findById(req.params.taskId).populate({
+      path: "team",
+      populate: { path: "members.user", select: "name email photo" },
+    });
 
     if (!task) return res.status(404).json({ message: "Task not found" });
 
-    // Check if user is admin/manager of the team
-    const team = await Team.findById(task.team._id);
-    const member = team.members.find(m => {
-  const memberId = m.user?._id || m.user;
-  return String(memberId) === String(req.user._id);
-});
-
-    
+    const member = findMember(task.team, req.user._id);
     if (!member || !["admin", "manager"].includes(member.role)) {
-      return res.status(403).json({ message: "Only admins/managers can approve extensions" });
+      return res.status(403).json({ message: "Not authorized" });
     }
 
-    // Check if there's a pending extension request
-if (
-  !task.extensionRequest ||
-  !task.extensionRequest.requested ||
-  task.extensionRequest.status !== "pending"
-) {
-  return res.status(400).json({ message: "No pending extension request" });
-}
+    if (
+      !task.extensionRequest ||
+      !task.extensionRequest.requested ||
+      task.extensionRequest.status !== "pending"
+    ) {
+      return res.status(400).json({ message: "No pending request" });
+    }
 
-    // Update due date and extension status
+    // Apply extension
     task.dueDate = task.extensionRequest.requestedDueDate;
     task.extensionRequest.status = "approved";
     task.extensionRequest.reviewedBy = req.user._id;
     task.extensionRequest.reviewedAt = new Date();
-    
     await task.save();
 
-    // Create notification for the task assignee
-   if (task.assignedTo && (task.assignedTo._id || task.assignedTo)) {
-  await Notification.create({
-    user: task.assignedTo._id || task.assignedTo,
+    // Notify assignee
+    if (task.assignedTo) {
+      await Notification.create({
+        user: task.assignedTo,
         title: "Extension Approved",
-        message: `Your extension request for "${task.title}" has been approved. New due date: ${new Date(task.dueDate).toLocaleDateString()}`,
+        message: `Your extension request for "${task.title}" has been approved.`,
         link: `/teams/${task.team._id}?tab=tasks`,
         type: "extension",
         team: task.team._id,
       });
     }
 
-    res.json({ 
-      message: "Extension approved", 
-      task: await TTask.findById(task._id)
-        .populate("assignedTo", "name photo")
-        .populate("createdBy", "name photo")
-        .populate("team", "name color icon")
-    });
+    res.json({ message: "Extension approved", task });
   } catch (err) {
     console.error("Approve extension error:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
 
-/* -----------------------------------------
-   3️⃣ EXTENSION REJECTION
------------------------------------------ */
+/* ---------------------------------------------------
+   3️⃣ REJECT EXTENSION REQUEST
+--------------------------------------------------- */
 router.post("/:taskId/extension/reject", protect, async (req, res) => {
   try {
-    const task = await TTask.findById(req.params.taskId)
-      .populate({
-  path: "team",
-  populate: { path: "members.user", select: "name email photo" }
-})
-
-      .populate("assignedTo", "name email");
+    const task = await TTask.findById(req.params.taskId).populate({
+      path: "team",
+      populate: { path: "members.user", select: "name email photo" },
+    });
 
     if (!task) return res.status(404).json({ message: "Task not found" });
 
-    // Check if user is admin/manager of the team
-    const team = await Team.findById(task.team._id);
-const member = team.members.find(m => {
-  const memberId = m.user?._id || m.user;
-  return String(memberId) === String(req.user._id);
-});
-
-
-    
+    const member = findMember(task.team, req.user._id);
     if (!member || !["admin", "manager"].includes(member.role)) {
-      return res.status(403).json({ message: "Only admins/managers can reject extensions" });
+      return res.status(403).json({ message: "Not authorized" });
     }
 
-    // Check if there's a pending extension request
- if (
-  !task.extensionRequest ||
-  !task.extensionRequest.requested ||
-  task.extensionRequest.status !== "pending"
-) {
-  return res.status(400).json({ message: "No pending extension request" });
-}
+    if (
+      !task.extensionRequest ||
+      !task.extensionRequest.requested ||
+      task.extensionRequest.status !== "pending"
+    ) {
+      return res.status(400).json({ message: "No pending request" });
+    }
 
-    // Update extension status (don't change due date)
     task.extensionRequest.status = "rejected";
     task.extensionRequest.reviewedBy = req.user._id;
     task.extensionRequest.reviewedAt = new Date();
-    
     await task.save();
 
-    // Create notification for the task assignee
-    if (task.assignedTo && (task.assignedTo._id || task.assignedTo)) {
-  await Notification.create({
-    user: task.assignedTo._id || task.assignedTo,
+    if (task.assignedTo) {
+      await Notification.create({
+        user: task.assignedTo,
         title: "Extension Rejected",
         message: `Your extension request for "${task.title}" has been rejected.`,
         link: `/teams/${task.team._id}?tab=tasks`,
@@ -162,54 +135,37 @@ const member = team.members.find(m => {
       });
     }
 
-    res.json({ 
-      message: "Extension rejected", 
-      task: await TTask.findById(task._id)
-        .populate("assignedTo", "name photo")
-        .populate("createdBy", "name photo")
-        .populate("team", "name color icon")
-    });
+    res.json({ message: "Extension rejected", task });
   } catch (err) {
     console.error("Reject extension error:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
 
-/* -----------------------------------------
-   4️⃣ CREATE TASK (with assigned/unassigned handling)
------------------------------------------ */
+/* ---------------------------------------------------
+   4️⃣ CREATE TEAM TASK (ADMIN/MANAGER ONLY)
+--------------------------------------------------- */
 router.post("/:teamId", protect, async (req, res) => {
   try {
-    const { title, description, priority, dueDate, assignedTo, color, icon } = req.body;
-    const teamId = req.params.teamId;
-
-    // Check if user is member of the team
-    const team = await Team.findById(teamId);
+    const team = await Team.findById(req.params.teamId);
     if (!team) return res.status(404).json({ message: "Team not found" });
 
-const member = team.members.find(m => {
-  const memberId = m.user?._id || m.user;
-  return String(memberId) === String(req.user._id);
-});
+    const member = findMember(team, req.user._id);
+    if (!member) return res.status(403).json({ message: "Not a member" });
 
-
-    if (!member) return res.status(403).json({ message: "You are not a member of this team" });
-
-    // Only admins/managers can create tasks
     if (!["admin", "manager"].includes(member.role)) {
       return res.status(403).json({ message: "Only admins/managers can create tasks" });
     }
 
-    // Validate assignedTo if provided
+    const { title, description, priority, dueDate, assignedTo, color, icon } = req.body;
+
     if (assignedTo) {
-      const assignedMember = team.members.find(m => String(m.user) === String(assignedTo));
-      if (!assignedMember) {
-        return res.status(400).json({ message: "Assigned user must be a team member" });
-      }
+      const assignedMember = findMember(team, assignedTo);
+      if (!assignedMember) return res.status(400).json({ message: "Assigned user not member" });
     }
 
-    const task = new TTask({
-      team: teamId,
+    const task = await TTask.create({
+      team: req.params.teamId,
       title,
       description,
       priority: priority || "medium",
@@ -220,225 +176,134 @@ const member = team.members.find(m => {
       createdBy: req.user._id,
     });
 
-    await task.save();
-
-    // Populate the task for response
-    const populatedTask = await TTask.findById(task._id)
-      .populate("assignedTo", "name photo")
-      .populate("createdBy", "name photo")
-      .populate("team", "name color icon");
-
-    // Create notification if task is assigned
-   if (task.assignedTo && (task.assignedTo._id || task.assignedTo)) {
-  await Notification.create({
-    user: task.assignedTo._id || task.assignedTo,
+    if (assignedTo) {
+      await Notification.create({
+        user: assignedTo,
         title: "New Task Assigned",
-        message: `You have been assigned to "${title}" in team ${team.name}`,
-        link: `/teams/${teamId}?tab=tasks`,
+        message: `You have been assigned "${title}".`,
+        link: `/teams/${team._id}?tab=tasks`,
         type: "task_assigned",
-        team: teamId,
+        team: team._id,
       });
     }
 
-    res.status(201).json(populatedTask);
+    res.status(201).json(task);
   } catch (err) {
     console.error("Create task error:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
 
-/* -----------------------------------------
-   5️⃣ UPDATE TASK (with permission checks)
------------------------------------------ */
+/* ---------------------------------------------------
+   5️⃣ UPDATE TASK (ADMIN/MANAGER; member only updates status)
+--------------------------------------------------- */
 router.put("/:taskId", protect, async (req, res) => {
   try {
-    const task = await TTask.findById(req.params.taskId)
-      .populate("team", "name members")
-      .populate("assignedTo", "name photo");
+    const task = await TTask.findById(req.params.taskId).populate({
+      path: "team",
+      populate: { path: "members.user" },
+    });
 
     if (!task) return res.status(404).json({ message: "Task not found" });
 
-    // Check team membership
-    const team = await Team.findById(task.team._id);
-const member = team.members.find(m => {
-  const memberId = m.user?._id || m.user;
-  return String(memberId) === String(req.user._id);
-});
+    const member = findMember(task.team, req.user._id);
+    if (!member) return res.status(403).json({ message: "Not a member" });
 
+    const { title, description, priority, dueDate, assignedTo, status, color, icon } =
+      req.body;
 
-    
-    if (!member) return res.status(403).json({ message: "You are not a member of this team" });
-
-    // Determine what can be updated
-    const { title, description, priority, dueDate, assignedTo, status, color, icon } = req.body;
-    
-    // Regular members can only update their own task status
+    // MEMBER logic
     if (member.role === "member") {
-      // Can only update status if assigned to them
-      if (task.assignedTo && String(task.assignedTo._id) !== String(req.user._id)) {
-        return res.status(403).json({ message: "You can only update tasks assigned to you" });
+      if (!task.assignedTo || String(task.assignedTo) !== String(req.user._id)) {
+        return res.status(403).json({ message: "Not allowed" });
       }
-      
-      // Can only update status field
-      if (status && ["todo", "in-progress", "completed"].includes(status)) {
-        const oldStatus = task.status;
-        task.status = status;
-        
-        if (status === "completed") {
-          task.completedAt = new Date();
-          task.completedBy = req.user._id;
-        }
-        
-        await task.save();
-        
-        // Notification for task completion
-        if (oldStatus !== "completed" && status === "completed") {
-          await Notification.create({
-            user: task.createdBy,
-            title: "Task Completed",
-            message: `"${task.title}" has been marked as completed by ${req.user.name || "a team member"}`,
-            link: `/teams/${task.team._id}?tab=tasks`,
-            type: "task_completed",
-            team: task.team._id,
-          });
-        }
-      } else {
+      if (!["todo", "in-progress", "completed"].includes(status)) {
         return res.status(403).json({ message: "Members can only update task status" });
       }
-    } else {
-      // Admin/manager can update anything
-      if (title !== undefined) task.title = title;
-      if (description !== undefined) task.description = description;
-      if (priority !== undefined) task.priority = priority;
-      if (dueDate !== undefined) task.dueDate = dueDate ? new Date(dueDate) : null;
-      if (color !== undefined) task.color = color;
-      if (icon !== undefined) task.icon = icon;
-      
-      // Handle status updates
-      if (status !== undefined && ["todo", "in-progress", "completed"].includes(status)) {
-        const oldStatus = task.status;
-        task.status = status;
-        
-        if (status === "completed") {
-          task.completedAt = new Date();
-          task.completedBy = req.user._id;
-        }
-        
-        // Notification for task completion
-        if (oldStatus !== "completed" && status === "completed" && task.assignedTo) {
-          await Notification.create({
-            user: task.createdBy,
-            title: "Task Completed",
-            message: `"${task.title}" has been marked as completed by ${req.user.name || "a team member"}`,
-            link: `/teams/${task.team._id}?tab=tasks`,
-            type: "task_completed",
-            team: task.team._id,
-          });
-        }
+
+      task.status = status;
+      if (status === "completed") {
+        task.completedAt = new Date();
+        task.completedBy = req.user._id;
       }
-      
-      // Handle assignment changes
-      if (assignedTo !== undefined) {
-        const oldAssignee = task.assignedTo;
-        
-        if (assignedTo === null || assignedTo === "") {
-          task.assignedTo = null;
-        } else {
-          // Validate new assignee is a team member
-          const assignedMember = team.members.find(m => String(m.user) === String(assignedTo));
-          if (!assignedMember) {
-            return res.status(400).json({ message: "Assigned user must be a team member" });
-          }
-          task.assignedTo = assignedTo;
-          
-          // Notification for new assignment
-          if (String(oldAssignee?._id) !== String(assignedTo)) {
-            await Notification.create({
-              user: assignedTo,
-              title: "Task Assigned",
-              message: `You have been assigned to "${task.title}" in team ${team.name}`,
-              link: `/teams/${task.team._id}?tab=tasks`,
-              type: "task_assigned",
-              team: task.team._id,
-            });
-          }
-        }
-      }
-      
+
       await task.save();
+      return res.json(task);
     }
 
-    // Populate the updated task
-    const populatedTask = await TTask.findById(task._id)
-      .populate("assignedTo", "name photo")
-      .populate("createdBy", "name photo")
-      .populate("team", "name color icon");
+    // ADMIN/MANAGER logic:
+    if (title !== undefined) task.title = title;
+    if (description !== undefined) task.description = description;
+    if (priority !== undefined) task.priority = priority;
+    if (dueDate !== undefined) task.dueDate = new Date(dueDate);
+    if (color !== undefined) task.color = color;
+    if (icon !== undefined) task.icon = icon;
 
-    res.json(populatedTask);
+    if (status && ["todo", "in-progress", "completed"].includes(status)) {
+      task.status = status;
+      if (status === "completed") {
+        task.completedAt = new Date();
+        task.completedBy = req.user._id;
+      }
+    }
+
+    if (assignedTo !== undefined) {
+      if (assignedTo === "" || assignedTo === null) {
+        task.assignedTo = null;
+      } else {
+        const assignedMember = findMember(task.team, assignedTo);
+        if (!assignedMember) {
+          return res.status(400).json({ message: "Assigned user not member" });
+        }
+        task.assignedTo = assignedTo;
+      }
+    }
+
+    await task.save();
+    res.json(task);
   } catch (err) {
     console.error("Update task error:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
 
-/* -----------------------------------------
+/* ---------------------------------------------------
    6️⃣ DELETE TASK
------------------------------------------ */
+--------------------------------------------------- */
 router.delete("/:taskId", protect, async (req, res) => {
   try {
-    const task = await TTask.findById(req.params.taskId)
-      .populate("team", "name members");
+    const task = await TTask.findById(req.params.taskId).populate("team");
 
     if (!task) return res.status(404).json({ message: "Task not found" });
 
-    // Check team membership and permissions
-    const team = await Team.findById(task.team._id);
-const member = team.members.find(m => {
-  const memberId = m.user?._id || m.user;
-  return String(memberId) === String(req.user._id);
-});
-
-
-    
-    if (!member) return res.status(403).json({ message: "You are not a member of this team" });
-    
-    // Only admins/managers can delete tasks
-    if (!["admin", "manager"].includes(member.role)) {
-      return res.status(403).json({ message: "Only admins/managers can delete tasks" });
+    const member = findMember(task.team, req.user._id);
+    if (!member || !["admin", "manager"].includes(member.role)) {
+      return res.status(403).json({ message: "Not allowed" });
     }
 
-    await TTask.findByIdAndDelete(req.params.taskId);
-    res.json({ message: "Task deleted successfully" });
+    await task.deleteOne();
+    res.json({ message: "Task deleted" });
   } catch (err) {
     console.error("Delete task error:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
 
-/* -----------------------------------------
-   7️⃣ GET ALL TASKS FOR TEAM (with member filtering)
------------------------------------------ */
+/* ---------------------------------------------------
+   7️⃣ GET ALL TASKS FOR TEAM (Member sees only their tasks)
+--------------------------------------------------- */
 router.get("/:teamId", protect, async (req, res) => {
   try {
     const team = await Team.findById(req.params.teamId);
     if (!team) return res.status(404).json({ message: "Team not found" });
 
-const member = team.members.find(m => {
-  const memberId = m.user?._id || m.user;
-  return String(memberId) === String(req.user._id);
-});
-
-
-    if (!member) return res.status(403).json({ message: "You are not a member of this team" });
+    const member = findMember(team, req.user._id);
+    if (!member) return res.status(403).json({ message: "Not a member" });
 
     let query = { team: req.params.teamId };
-    
-    // Regular members only see tasks assigned to them or unassigned
+
     if (member.role === "member") {
-      query.$or = [
-        { assignedTo: req.user._id },
-        { assignedTo: null }
-      ];
+      query.$or = [{ assignedTo: req.user._id }, { assignedTo: null }];
     }
 
     const tasks = await TTask.find(query)
@@ -453,50 +318,45 @@ const member = team.members.find(m => {
   }
 });
 
-/* -----------------------------------------
+/* ---------------------------------------------------
    8️⃣ REQUEST EXTENSION
------------------------------------------ */
+--------------------------------------------------- */
 router.post("/:taskId/request-extension", protect, async (req, res) => {
   try {
     const { reason, requestedDueDate } = req.body;
-    const task = await TTask.findById(req.params.taskId)
-      .populate("team", "name members")
-      .populate("assignedTo", "name email");
+
+    const task = await TTask.findById(req.params.taskId).populate({
+      path: "team",
+      populate: { path: "members.user" },
+    });
 
     if (!task) return res.status(404).json({ message: "Task not found" });
 
-    // Check if task is assigned to the current user
-    if (!task.assignedTo || String(task.assignedTo._id) !== String(req.user._id)) {
-      return res.status(403).json({ message: "You can only request extensions for tasks assigned to you" });
+    if (!task.assignedTo || String(task.assignedTo) !== String(req.user._id)) {
+      return res.status(403).json({ message: "Not allowed" });
     }
 
-    // Check if there's already a pending request
-// If there's already a pending request, block it
-// If there's already a pending request, block it
-if (
-  task.extensionRequest &&
-  task.extensionRequest.requested &&
-  task.extensionRequest.status === "pending"
-) {
-  return res.status(400).json({ message: "You already have a pending extension request" });
-}
-
-
-
-    // Validate requested due date
-    const requestedDate = new Date(requestedDueDate);
-    const currentDueDate = new Date(task.dueDate);
-    
-    if (requestedDate <= currentDueDate) {
-      return res.status(400).json({ message: "Requested due date must be after the current due date" });
+    // Prevent duplicate pending request
+    if (
+      task.extensionRequest &&
+      task.extensionRequest.requested &&
+      task.extensionRequest.status === "pending"
+    ) {
+      return res.status(400).json({ message: "Already requested" });
     }
 
-    // Create extension request
+    const reqDate = new Date(requestedDueDate);
+    if (reqDate <= new Date(task.dueDate)) {
+      return res
+        .status(400)
+        .json({ message: "Requested due date must be later" });
+    }
+
     task.extensionRequest = {
       requested: true,
       requestedBy: req.user._id,
       reason,
-      requestedDueDate: requestedDate,
+      requestedDueDate: reqDate,
       requestedAt: new Date(),
       status: "pending",
       reviewedBy: null,
@@ -505,30 +365,24 @@ if (
 
     await task.save();
 
-    // Create notifications for admins/managers
-    const team = await Team.findById(task.team._id);
-    const adminsManagers = team.members.filter(m => ["admin", "manager"].includes(m.role));
-    
-    for (const adminManager of adminsManagers) {
+    const admins = task.team.members.filter(m =>
+      ["admin", "manager"].includes(m.role)
+    );
+
+    for (const admin of admins) {
       await Notification.create({
-        user: adminManager.user,
+        user: admin.user,
         title: "Extension Request",
-        message: `${req.user.name || "A user"} has requested an extension for "${task.title}"`,
+        message: `${req.user.name} requested extension for "${task.title}"`,
         link: `/teams/${task.team._id}?tab=extensions`,
         type: "extension_request",
         team: task.team._id,
       });
     }
 
-    res.json({ 
-      message: "Extension request submitted", 
-      task: await TTask.findById(task._id)
-        .populate("assignedTo", "name photo")
-        .populate("createdBy", "name photo")
-        .populate("team", "name color icon")
-    });
+    res.json({ message: "Extension request submitted", task });
   } catch (err) {
-    console.error("Request extension error:", err);
+    console.error("Extension request error:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
