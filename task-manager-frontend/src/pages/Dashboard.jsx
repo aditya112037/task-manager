@@ -68,83 +68,73 @@ const Dashboard = () => {
 
   // fetch all team tasks via new backend route (GET /api/team-tasks/my/all)
   const fetchTeamTasks = useCallback(async () => {
-    setLoading((s) => ({ ...s, teamTasks: true }));
-    setError((e) => ({ ...e, teamTasks: null }));
-    try {
-      const res = await teamTasksAPI.getTeamTasks(team._id);
-      const tasks = Array.isArray(res.data) ? res.data : [];
-      setTeamTasks(tasks);
-      // group by team for Team Tasks tab
-      const grouped = {};
-      tasks.forEach((t) => {
-        if (!t.team) return;
-        const teamObj = typeof t.team === "object" ? t.team : { _id: String(t.team), name: "Team" };
-        const id = teamObj._id || teamObj;
-        if (!grouped[id]) {
-          grouped[id] = {
-            id,
-            name: teamObj.name || "Unknown Team",
-            color: teamObj.color || "#1976d2",
-            icon: teamObj.icon || "👥",
-            tasks: [],
-          };
-        }
-        grouped[id].tasks.push(t);
-      });
-      // sort tasks inside groups by due date
-      Object.values(grouped).forEach((g) => {
-        g.tasks.sort((a, b) => {
-          if (!a.dueDate && !b.dueDate) return 0;
-          if (!a.dueDate) return 1;
-          if (!b.dueDate) return -1;
-          return new Date(a.dueDate) - new Date(b.dueDate);
-        });
-      });
-      setTeamTasksByTeam(grouped);
-    } catch (err) {
-      console.error("fetchTeamTasks:", err);
-      // show 404/500 friendly message and keep UI stable
-      setError((e) => ({ ...e, teamTasks: err.response?.data?.message || "Failed to load team tasks" }));
-    } finally {
-      setLoading((s) => ({ ...s, teamTasks: false }));
+  setLoading(s => ({ ...s, teamTasks: true }));
+
+  try {
+    let allTasks = [];
+
+    for (const team of teams) {
+      try {
+        const res = await teamTasksAPI.getTeamTasks(team._id);
+        if (Array.isArray(res.data)) allTasks = allTasks.concat(res.data);
+      } catch (err) {
+        console.warn(`Failed to load tasks for team ${team._id}`);
+      }
     }
-  }, []);
+
+    setTeamTasks(allTasks);
+
+    // group by team
+    const grouped = {};
+    allTasks.forEach(t => {
+      const teamId = t.team?._id || t.team;
+      if (!grouped[teamId]) {
+        grouped[teamId] = {
+          id: teamId,
+          name: t.team.name,
+          icon: t.team.icon,
+          color: t.team.color,
+          tasks: []
+        };
+      }
+      grouped[teamId].tasks.push(t);
+    });
+
+    setTeamTasksByTeam(grouped);
+
+  } finally {
+    setLoading(s => ({ ...s, teamTasks: false }));
+  }
+}, [teams]);
 
   // fetch "assigned to me" tasks using dedicated endpoint (safer/reliable)
-  const fetchAssignedTasks = useCallback(async () => {
-    setLoading((s) => ({ ...s, assigned: true }));
-    setError((e) => ({ ...e, assigned: null }));
-    try {
-      // this endpoint in your api.js returns /api/team-tasks/my/all?assignedTo=me
-      const res = await teamTasksAPI.getTeamTasks(team._id); // implementation should attach assignedTo=me server-side
-      const tasks = Array.isArray(res.data) ? res.data : [];
-      // sort by due date (nearest first)
-      tasks.sort((a, b) => {
-        if (!a.dueDate && !b.dueDate) return 0;
-        if (!a.dueDate) return 1;
-        if (!b.dueDate) return -1;
-        return new Date(a.dueDate) - new Date(b.dueDate);
-      });
-      setAssignedTasks(tasks);
-    } catch (err) {
-      console.error("fetchAssignedTasks:", err);
-      // fallback: try to derive from teamTasks if dedicated endpoint fails
+const fetchAssignedTasks = useCallback(async () => {
+  setLoading(s => ({ ...s, assigned: true }));
+
+  try {
+    let assigned = [];
+
+    for (const team of teams) {
       try {
-        const fallback = teamTasks.filter((t) => {
-          if (!t.assignedTo) return false;
-          const id = typeof t.assignedTo === "object" ? (t.assignedTo._id || t.assignedTo) : t.assignedTo;
-          return String(id) === String(user?._id);
-        });
-        setAssignedTasks(fallback);
-        setError((e) => ({ ...e, assigned: "Showing derived assigned tasks (endpoint failed)" }));
-      } catch (ex) {
-        setAssignedTasks([]);
-        setError((e) => ({ ...e, assigned: err.response?.data?.message || "Failed to load assigned tasks" }));
+        const res = await teamTasksAPI.getTeamTasks(team._id);
+        const tasks = res.data || [];
+
+        const mine = tasks.filter(
+          t => String(t.assignedTo?._id || t.assignedTo) === String(user?._id)
+        );
+
+        assigned = assigned.concat(mine);
+      } catch (err) {
+        console.warn(`Failed assigned tasks for team ${team._id}`);
       }
-    } finally {
-      setLoading((s) => ({ ...s, assigned: false }));
     }
-  }, [teamTasks, user]);
+
+    setAssignedTasks(assigned);
+  } finally {
+    setLoading(s => ({ ...s, assigned: false }));
+  }
+}, [teams, user]);
+
 
   // helpers for task manipulation
   const handleStatusChange = async (taskId, status) => {
