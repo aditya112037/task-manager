@@ -27,7 +27,10 @@ import { useAuth } from "../context/AuthContext";
 const Dashboard = () => {
   const theme = useTheme();
   const { user } = useAuth();
-
+  const openExtensionModal = (task) => {
+  setSelectedTask(task);
+  setExtensionModalOpen(true);
+};
   const [tab, setTab] = useState(1); // default to Assigned tab (matches screenshot)
   const [teams, setTeams] = useState([]);
   const [teamTasks, setTeamTasks] = useState([]); // all tasks user can see (GET /my/all)
@@ -388,11 +391,13 @@ const fetchAssignedTasks = useCallback(async () => {
                   key={task._id}
                   task={task}
                   canEdit={true}
+                  showExtension={true}
+                  onRequestExtension={() => openExtensionModal(task)}
                   onEdit={() => handleEditTask(task)}
                   onDelete={() => handleDeleteTask(task._id)}
                   onStatusChange={(id, s) => handleStatusChange(id, s)}
                   onQuickComplete={() => handleQuickComplete(task._id)}
-                  showExtension
+                  
                 />
               ))}
             </Box>
@@ -500,7 +505,6 @@ const fetchAssignedTasks = useCallback(async () => {
                           onDelete={() => handleDeleteTask(task._id)}
                           onStatusChange={(id, s) => handleStatusChange(id, s)}
                           onQuickComplete={() => handleQuickComplete(task._id)}
-                          showExtension
                         />
                       ))}
                     </Box>
