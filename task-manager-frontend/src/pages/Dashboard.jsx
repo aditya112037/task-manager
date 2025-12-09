@@ -71,7 +71,7 @@ const Dashboard = () => {
     setLoading((s) => ({ ...s, teamTasks: true }));
     setError((e) => ({ ...e, teamTasks: null }));
     try {
-      const res = await teamTasksAPI.getMyTeamTasks();
+      const res = await teamTasksAPI.getTeamTasks(team._id);
       const tasks = Array.isArray(res.data) ? res.data : [];
       setTeamTasks(tasks);
       // group by team for Team Tasks tab
@@ -116,7 +116,7 @@ const Dashboard = () => {
     setError((e) => ({ ...e, assigned: null }));
     try {
       // this endpoint in your api.js returns /api/team-tasks/my/all?assignedTo=me
-      const res = await teamTasksAPI.getMyAssignedTasks({}); // implementation should attach assignedTo=me server-side
+      const res = await teamTasksAPI.getTeamTasks(team._id); // implementation should attach assignedTo=me server-side
       const tasks = Array.isArray(res.data) ? res.data : [];
       // sort by due date (nearest first)
       tasks.sort((a, b) => {
