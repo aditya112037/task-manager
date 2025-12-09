@@ -648,7 +648,7 @@ const handleDeleteTeam = async () => {
                       color="success"
                       size="small"
                       startIcon={<CheckIcon />}
-                      sx={{ borderRadius: 2, textTransform: "none", mr: 1 }}
+                      sx={{ borderRadius: 1, textTransform: "none" }}
                       onClick={() => handleApproveExtension(t._id)}
                     >
                       Approve
@@ -659,7 +659,7 @@ const handleDeleteTeam = async () => {
                       color="error"
                       size="small"
                       startIcon={<CloseIcon />}
-                      sx={{ borderRadius: 2, textTransform: "none", mr: 1 }}
+                      sx={{ borderRadius: 1, textTransform: "none" }}
                       onClick={() => handleRejectExtension(t._id)}
                     >
                       Reject
