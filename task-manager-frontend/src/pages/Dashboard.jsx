@@ -28,7 +28,7 @@ const Dashboard = () => {
   const theme = useTheme();
   const { user } = useAuth();
 
-  const [tab, setTab] = useState(1); // default to Assigned tab (matches screenshot)
+  const [tab, setTab] = useState(0); // default to Assigned tab (matches screenshot)
   const [teams, setTeams] = useState([]);
   const [teamTasks, setTeamTasks] = useState([]); // all tasks user can see (GET /my/all)
   const [teamTasksByTeam, setTeamTasksByTeam] = useState({});
