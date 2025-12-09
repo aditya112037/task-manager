@@ -84,11 +84,14 @@ export const teamTasksAPI = {
   // 🆕 Load every team task user has access to (admin/member)
   getMyTeamTasks: (filters = {}) => api.get("/api/team-tasks/my/all", { params: filters }),
 
-  getTeamTasks: (teamId) => api.get(`/team-tasks/${teamId}`),
+    getTeamTasks: (teamId) =>
+    api.get(`/api/team-tasks/${teamId}`),
+
 
   // 🆕 Assigned tasks only — NO teamId needed anymore
-  getMyAssignedTasks: (filters = {}) =>
-      api.get(`/team-tasks/${teamId}`),
+  getMyAssignedTasks: (teamId) =>
+    api.get(`/api/team-tasks/${teamId}`),
+
 
   // Get all tasks for a specific team (admin/member)
   getTasks: (teamId, filters = {}) =>
