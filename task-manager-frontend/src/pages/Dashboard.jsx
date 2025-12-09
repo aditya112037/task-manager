@@ -27,15 +27,20 @@ import { useAuth } from "../context/AuthContext";
 const Dashboard = () => {
   const theme = useTheme();
   const { user } = useAuth();
-  const openExtensionModal = (task) => {
-  setSelectedTask(task);
-  setExtensionModalOpen(true);
-};
+
   const [tab, setTab] = useState(1); // default to Assigned tab (matches screenshot)
   const [teams, setTeams] = useState([]);
   const [teamTasks, setTeamTasks] = useState([]); // all tasks user can see (GET /my/all)
   const [teamTasksByTeam, setTeamTasksByTeam] = useState({});
   const [assignedTasks, setAssignedTasks] = useState([]);
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [extensionModalOpen, setExtensionModalOpen] = useState(false);
+
+  const openExtensionModal = (task) => {
+  setSelectedTask(task);
+  setExtensionModalOpen(true);
+};
+  
 
   const [loading, setLoading] = useState({
     teams: true,
