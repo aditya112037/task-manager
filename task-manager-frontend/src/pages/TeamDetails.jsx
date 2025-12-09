@@ -25,7 +25,8 @@ import {
   CircularProgress,
   Grid,
 } from "@mui/material";
-
+import CheckIcon from "@mui/icons-material/Check"
+import CloseIcon from "@mui/icons-material/Close"
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ExitToAppIcon from "@mui/icons-material/ExitToApp";
@@ -648,7 +649,7 @@ const handleDeleteTeam = async () => {
                       size="small"
                       startIcon={<CheckIcon />}
                       sx={{ borderRadius: 2, textTransform: "none", mr: 1 }}
-                      onClick={() => handleApproveExtension(ext.taskId)}
+                      onClick={() => handleApproveExtension(t._id)}
                     >
                       Approve
                     </Button>
@@ -659,7 +660,7 @@ const handleDeleteTeam = async () => {
                       size="small"
                       startIcon={<CloseIcon />}
                       sx={{ borderRadius: 2, textTransform: "none", mr: 1 }}
-                      onClick={() => handleRejectExtension(ext.taskId)}
+                      onClick={() => handleRejectExtension(t._id)}
                     >
                       Reject
                     </Button>
