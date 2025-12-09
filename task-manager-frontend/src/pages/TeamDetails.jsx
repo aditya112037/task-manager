@@ -643,20 +643,27 @@ const handleDeleteTeam = async () => {
                       sx={{ display: "flex", justifyContent: "flex-end", gap: 1 }}
                     >
                       <Button
-                        variant="contained"
-                        color="success"
-                        onClick={() => handleApproveExtension(t._id)}
-                      >
-                        Approve
-                      </Button>
+                      variant="contained"
+                      color="success"
+                      size="small"
+                      startIcon={<CheckIcon />}
+                      sx={{ borderRadius: 2, textTransform: "none", mr: 1 }}
+                      onClick={() => handleApproveExtension(ext.taskId)}
+                    >
+                      Approve
+                    </Button>
 
                       <Button
-                        variant="outlined"
-                        color="error"
-                        onClick={() => handleRejectExtension(t._id)}
-                      >
-                        Reject
-                      </Button>
+                      variant="contained"
+                      color="error"
+                      size="small"
+                      startIcon={<CloseIcon />}
+                      sx={{ borderRadius: 2, textTransform: "none", mr: 1 }}
+                      onClick={() => handleRejectExtension(ext.taskId)}
+                    >
+                      Reject
+                    </Button>
+
                     </Grid>
                   </Grid>
                 </Paper>
