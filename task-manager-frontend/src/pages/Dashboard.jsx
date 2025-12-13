@@ -24,7 +24,6 @@ import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import { teamTasksAPI, teamsAPI } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { initSocket, getSocket, disconnectSocket } from "../services/socket";
-import ExtensionModal from "../components/Task/ExtensionModal";
 
 const Dashboard = () => {
   const theme = useTheme();
@@ -35,13 +34,6 @@ const Dashboard = () => {
   const [teams, setTeams] = useState([]);
   const [teamTasks, setTeamTasks] = useState([]);
   const [assignedTasks, setAssignedTasks] = useState([]);
-  const [selectedTask, setSelectedTask] = useState(null);
-  const [extensionModalOpen, setExtensionModalOpen] = useState(false);
-
-  const openExtensionModal = (task) => {
-    setSelectedTask(task);
-    setExtensionModalOpen(true);
-  };
 
   const [loading, setLoading] = useState({
     teams: true,
@@ -140,11 +132,6 @@ const Dashboard = () => {
         prev.map(task => task._id === updatedTask._id ? updatedTask : task)
       );
       
-      // If this is the selected task in extension modal, update it
-      setSelectedTask(prev => 
-        prev?._id === updatedTask._id ? updatedTask : prev
-      );
-      
       showSnack(`Task updated: ${updatedTask.title}`, "info");
     };
 
@@ -156,12 +143,6 @@ const Dashboard = () => {
       
       // Update assignedTasks
       setAssignedTasks(prev => prev.filter(task => task._id !== deletedTaskId));
-      
-      // If this is the selected task in extension modal, close modal
-      if (selectedTask?._id === deletedTaskId) {
-        setExtensionModalOpen(false);
-        setSelectedTask(null);
-      }
       
       showSnack("Task deleted", "warning");
     };
@@ -176,11 +157,6 @@ const Dashboard = () => {
       
       setAssignedTasks(prev => 
         prev.map(t => t._id === task._id ? task : t)
-      );
-      
-      // Update selectedTask if it's the same task
-      setSelectedTask(prev => 
-        prev?._id === task._id ? task : prev
       );
       
       // Show notification based on user role
@@ -208,20 +184,9 @@ const Dashboard = () => {
         prev.map(t => t._id === task._id ? task : t)
       );
       
-      // Update selectedTask if it's the same task
-      setSelectedTask(prev => 
-        prev?._id === task._id ? task : prev
-      );
-      
       // If current user requested the extension
       if (String(task.assignedTo?._id || task.assignedTo) === String(user?._id)) {
         showSnack(`Extension approved for task: ${task.title}`, "success");
-      }
-      
-      // Close extension modal if it's open for this task
-      if (selectedTask?._id === task._id) {
-        setExtensionModalOpen(false);
-        setSelectedTask(null);
       }
     };
 
@@ -237,20 +202,9 @@ const Dashboard = () => {
         prev.map(t => t._id === task._id ? task : t)
       );
       
-      // Update selectedTask if it's the same task
-      setSelectedTask(prev => 
-        prev?._id === task._id ? task : prev
-      );
-      
       // If current user requested the extension
       if (String(task.assignedTo?._id || task.assignedTo) === String(user?._id)) {
         showSnack(`Extension rejected for task: ${task.title}`, "warning");
-      }
-      
-      // Close extension modal if it's open for this task
-      if (selectedTask?._id === task._id) {
-        setExtensionModalOpen(false);
-        setSelectedTask(null);
       }
     };
 
@@ -291,7 +245,7 @@ const Dashboard = () => {
         socket.off("reconnect");
       }
     };
-  }, [teams.length, user?._id]); // Fixed dependency array
+  }, [teams.length, user?._id]);
 
   // fetch user's teams
   const fetchTeams = useCallback(async () => {
@@ -403,26 +357,6 @@ const Dashboard = () => {
   const handleEditTask = (task) => {
     const teamId = task.team?._id || task.team;
     if (teamId) window.location.href = `/teams/${teamId}`;
-  };
-
-  // Handle extension request submission
-  const handleExtensionSubmit = async (reason, requestedDate) => {
-    if (!selectedTask) return;
-    
-    try {
-      await teamTasksAPI.requestExtension(selectedTask._id, {
-        reason,
-        requestedDate,
-      });
-      
-      showSnack("Extension request submitted successfully", "success");
-      setExtensionModalOpen(false);
-      setSelectedTask(null);
-      // Socket event will handle UI update
-    } catch (err) {
-      console.error("handleExtensionSubmit:", err);
-      showSnack(err.response?.data?.message || "Failed to submit extension request", "error");
-    }
   };
 
   // Manual refresh function - use only when needed
@@ -542,19 +476,6 @@ const Dashboard = () => {
           } />
         </Tabs>
       </Paper>
-
-      {/* Extension Modal */}
-      {selectedTask && (
-        <ExtensionModal
-          open={extensionModalOpen}
-          onClose={() => {
-            setExtensionModalOpen(false);
-            setSelectedTask(null);
-          }}
-          task={selectedTask}
-          onSubmit={handleExtensionSubmit}
-        />
-      )}
 
       {/* TAB 0 - My Tasks (existing component) */}
       {tab === 0 && <TaskList />}
@@ -681,8 +602,7 @@ const Dashboard = () => {
                   key={task._id}
                   task={task}
                   canEdit={true}
-                  showExtension={true}
-                  onRequestExtension={() => openExtensionModal(task)}
+                  currentUserId={user?._id}
                   onEdit={() => handleEditTask(task)}
                   onDelete={() => handleDeleteTask(task._id)}
                   onStatusChange={(id, s) => handleStatusChange(id, s)}
@@ -803,8 +723,8 @@ const Dashboard = () => {
                             key={task._id}
                             task={task}
                             canEdit={canEdit || String((task.assignedTo && (task.assignedTo._id || task.assignedTo))) === String(user?._id)}
-                            showExtension={String(task.assignedTo?._id || task.assignedTo) === String(user?._id)}
-                            onRequestExtension={() => openExtensionModal(task)}
+                            currentUserId={user?._id}
+                            isAdminOrManager={canEdit}
                             onEdit={() => handleEditTask(task)}
                             onDelete={() => handleDeleteTask(task._id)}
                             onStatusChange={(id, s) => handleStatusChange(id, s)}
