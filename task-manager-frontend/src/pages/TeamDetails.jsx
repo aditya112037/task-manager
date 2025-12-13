@@ -1,5 +1,5 @@
 // TeamDetails.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Box,
   Typography,
@@ -37,6 +37,7 @@ import { teamsAPI, teamTasksAPI } from "../services/api";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import TeamTaskForm from "../components/Teams/TeamTaskForm";
 import { useAuth } from "../context/AuthContext";
+import { initSocket, getSocket, disconnectSocket } from "../services/socket";
 
 /* ---------------------------------------------------
    SAFE MEMBER RESOLVER (prevents all crashes)
@@ -53,11 +54,13 @@ export default function TeamDetails() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const socketRef = useRef(null);
 
   const params = new URLSearchParams(location.search);
   const forcedTab = params.get("tab");
 
   const [tab, setTab] = useState(0);
+  const [socketConnected, setSocketConnected] = useState(false); // FIX: Track socket connection state
 
   const [team, setTeam] = useState(null);
   const [loadingTeam, setLoadingTeam] = useState(true);
@@ -81,6 +84,251 @@ export default function TeamDetails() {
   });
 
   /* ---------------------------------------------------
+     Helper functions - MOVED BEFORE socket useEffect
+  --------------------------------------------------- */
+  const getMyRole = useCallback(() => {
+    if (!team || !user) return null;
+    return team.members?.find((m) => resolveUserId(m.user) === resolveUserId(user?._id))?.role;
+  }, [team, user]);
+
+  const showSnack = useCallback((msg, sev = "success") => {
+    setSnackbar({ open: true, message: msg, severity: sev });
+  }, []);
+
+  /* ---------------------------------------------------
+     Initialize Socket
+  --------------------------------------------------- */
+  useEffect(() => {
+    if (!user?._id) return;
+    
+    initSocket(user._id);
+    socketRef.current = getSocket();
+    
+    return () => {
+      disconnectSocket();
+      socketRef.current = null;
+      setSocketConnected(false);
+    };
+  }, [user]);
+
+  /* ---------------------------------------------------
+     Join team room and setup socket listeners
+  --------------------------------------------------- */
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket || !teamId) return;
+
+    // Join the team room
+    socket.emit("joinTeam", teamId);
+
+    // Track connection status - FIX: Added to trigger re-renders
+    const handleConnect = () => setSocketConnected(true);
+    const handleDisconnect = () => setSocketConnected(false);
+    
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
+    
+    // Set initial connection state
+    setSocketConnected(socket.connected);
+
+    // Set up socket event listeners
+    const handleTaskCreated = (newTask) => {
+      console.log("taskCreated event in TeamDetails:", newTask);
+      
+      // Check if task belongs to this team
+      const taskTeamId = newTask.team?._id || newTask.team;
+      if (taskTeamId !== teamId) return;
+      
+      setTeamTasks(prev => {
+        const exists = prev.some(task => task._id === newTask._id);
+        if (exists) return prev;
+        return [...prev, newTask];
+      });
+      
+      showSnack(`New task created: ${newTask.title}`, "info");
+    };
+
+    const handleTaskUpdated = (updatedTask) => {
+      console.log("taskUpdated event in TeamDetails:", updatedTask);
+      
+      // Check if task belongs to this team
+      const taskTeamId = updatedTask.team?._id || updatedTask.team;
+      if (taskTeamId !== teamId) return;
+      
+      // FIX: Handle task reassignment - add if doesn't exist
+      setTeamTasks(prev => {
+        const exists = prev.some(t => t._id === updatedTask._id);
+        if (!exists) return [...prev, updatedTask];
+        return prev.map(task => task._id === updatedTask._id ? updatedTask : task);
+      });
+      
+      // Update pending extensions list
+      setPendingExtensions(prev => 
+        prev.map(task => task._id === updatedTask._id ? updatedTask : task)
+      );
+      
+      // If editing this task, update editingTask
+      setEditingTask(prev => 
+        prev?._id === updatedTask._id ? updatedTask : prev
+      );
+      
+      showSnack(`Task updated: ${updatedTask.title}`, "info");
+    };
+
+    const handleTaskDeleted = (deletedTaskId) => {
+      console.log("taskDeleted event in TeamDetails:", deletedTaskId);
+      
+      setTeamTasks(prev => prev.filter(task => task._id !== deletedTaskId));
+      setPendingExtensions(prev => prev.filter(task => task._id !== deletedTaskId));
+      
+      // If editing this task, close form
+      if (editingTask?._id === deletedTaskId) {
+        setShowTaskForm(false);
+        setEditingTask(null);
+      }
+      
+      showSnack("Task deleted", "warning");
+    };
+
+    const handleExtensionRequested = (task) => {
+      console.log("extensionRequested event in TeamDetails:", task);
+      
+      const taskTeamId = task.team?._id || task.team;
+      if (taskTeamId !== teamId) return;
+      
+      // FIX: Use getMyRole() which is now properly defined
+      const myRole = getMyRole();
+      
+      // Update the task in teamTasks
+      setTeamTasks(prev => 
+        prev.map(t => t._id === task._id ? task : t)
+      );
+      
+      // If user is admin/manager, add to pending extensions
+      if (["admin", "manager"].includes(myRole)) {
+        setPendingExtensions(prev => {
+          const exists = prev.some(t => t._id === task._id);
+          if (exists) {
+            return prev.map(t => t._id === task._id ? task : t);
+          }
+          return [...prev, task];
+        });
+      }
+      
+      showSnack(`Extension requested for task: ${task.title}`, "info");
+    };
+
+    const handleExtensionApproved = (task) => {
+      console.log("extensionApproved event in TeamDetails:", task);
+      
+      const taskTeamId = task.team?._id || task.team;
+      if (taskTeamId !== teamId) return;
+      
+      // Update the task
+      setTeamTasks(prev => 
+        prev.map(t => t._id === task._id ? task : t)
+      );
+      
+      // Remove from pending extensions
+      setPendingExtensions(prev => prev.filter(t => t._id !== task._id));
+      
+      showSnack(`Extension approved for task: ${task.title}`, "success");
+    };
+
+    const handleExtensionRejected = (task) => {
+      console.log("extensionRejected event in TeamDetails:", task);
+      
+      const taskTeamId = task.team?._id || task.team;
+      if (taskTeamId !== teamId) return;
+      
+      // Update the task
+      setTeamTasks(prev => 
+        prev.map(t => t._id === task._id ? task : t)
+      );
+      
+      // Remove from pending extensions
+      setPendingExtensions(prev => prev.filter(t => t._id !== task._id));
+      
+      showSnack(`Extension rejected for task: ${task.title}`, "warning");
+    };
+
+    const handleTeamUpdated = (updatedTeam) => {
+      console.log("teamUpdated event in TeamDetails:", updatedTeam);
+      
+      if (updatedTeam._id !== teamId) return;
+      
+      setTeam(updatedTeam);
+      setTeamFormData({
+        name: updatedTeam.name,
+        description: updatedTeam.description || "",
+        icon: updatedTeam.icon || "",
+        color: updatedTeam.color || "#1976d2",
+      });
+      
+      showSnack("Team information updated", "info");
+    };
+
+    const handleMemberUpdated = (data) => {
+      console.log("memberUpdated event in TeamDetails:", data);
+      
+      const { teamId: eventTeamId } = data;
+      if (eventTeamId !== teamId) return;
+      
+      // Refresh team data to get updated members
+      fetchTeam();
+      showSnack("Team membership updated", "info");
+    };
+
+    // Register event listeners
+    socket.on("taskCreated", handleTaskCreated);
+    socket.on("taskUpdated", handleTaskUpdated);
+    socket.on("taskDeleted", handleTaskDeleted);
+    socket.on("extensionRequested", handleExtensionRequested);
+    socket.on("extensionApproved", handleExtensionApproved);
+    socket.on("extensionRejected", handleExtensionRejected);
+    socket.on("teamUpdated", handleTeamUpdated);
+    socket.on("memberUpdated", handleMemberUpdated);
+
+    // Handle socket errors
+    socket.on("connect_error", (error) => {
+      console.error("Socket connection error:", error);
+      showSnack("Connection lost. Attempting to reconnect...", "error");
+    });
+
+    socket.on("reconnect", () => {
+      console.log("Socket reconnected in TeamDetails");
+      setSocketConnected(true);
+      showSnack("Connection restored", "success");
+      
+      // Rejoin team room after reconnection
+      socket.emit("joinTeam", teamId);
+      
+      // Refresh data to ensure consistency
+      fetchTeamTasks();
+      fetchPendingExtensions();
+    });
+
+    // Cleanup function
+    return () => {
+      if (socket) {
+        socket.emit("leaveTeam", teamId);
+        socket.off("connect", handleConnect);
+        socket.off("disconnect", handleDisconnect);
+        socket.off("taskCreated", handleTaskCreated);
+        socket.off("taskUpdated", handleTaskUpdated);
+        socket.off("taskDeleted", handleTaskDeleted);
+        socket.off("extensionRequested", handleExtensionRequested);
+        socket.off("extensionApproved", handleExtensionApproved);
+        socket.off("extensionRejected", handleExtensionRejected);
+        socket.off("teamUpdated", handleTeamUpdated);
+        socket.off("memberUpdated", handleMemberUpdated);
+        socket.off("connect_error");
+        socket.off("reconnect");
+      }
+    };
+  }, [teamId, getMyRole, showSnack]); // Added getMyRole and showSnack to dependencies
+
+  /* ---------------------------------------------------
      APPLY ?tab=extensions
   --------------------------------------------------- */
   useEffect(() => {
@@ -88,12 +336,9 @@ export default function TeamDetails() {
   }, [forcedTab]);
 
   /* ---------------------------------------------------
-     DETECT MY ROLE SAFELY
+     DETECT MY ROLE SAFELY - Now using the useCallback function
   --------------------------------------------------- */
-  const myRole = team
-    ? team.members?.find((m) => resolveUserId(m.user) === resolveUserId(user?._id))?.role
-    : null;
-
+  const myRole = getMyRole();
   const canEditTasks = myRole === "admin" || myRole === "manager";
   const isAdmin = myRole === "admin";
 
@@ -114,11 +359,7 @@ export default function TeamDetails() {
       });
     } catch (err) {
       console.error("Team load error:", err);
-      setSnackbar({
-        open: true,
-        message: "Failed to load team",
-        severity: "error",
-      });
+      showSnack("Failed to load team", "error");
       setTeam(null);
     } finally {
       setLoadingTeam(false);
@@ -166,11 +407,7 @@ export default function TeamDetails() {
       setPendingExtensions(res.data || []);
     } catch (err) {
       console.error("Pending extensions error:", err);
-      setSnackbar({
-        open: true,
-        message: "Failed to load extension requests",
-        severity: "error",
-      });
+      showSnack("Failed to load extension requests", "error");
     } finally {
       setLoadingExtensions(false);
     }
@@ -183,16 +420,10 @@ export default function TeamDetails() {
     if (!window.confirm("Approve this extension request?")) return;
     try {
       await teamTasksAPI.approveExtension(taskId);
-      setSnackbar({ open: true, message: "Extension approved", severity: "success" });
-      await fetchPendingExtensions();
-      await fetchTeamTasks();
+      // Socket event will handle UI update
     } catch (err) {
       console.error("Approve error:", err);
-      setSnackbar({
-        open: true,
-        message: err.response?.data?.message || "Server error",
-        severity: "error",
-      });
+      showSnack(err.response?.data?.message || "Server error", "error");
     }
   };
 
@@ -203,16 +434,10 @@ export default function TeamDetails() {
     if (!window.confirm("Reject this extension request?")) return;
     try {
       await teamTasksAPI.rejectExtension(taskId);
-      setSnackbar({ open: true, message: "Extension rejected", severity: "success" });
-      await fetchPendingExtensions();
-      await fetchTeamTasks();
+      // Socket event will handle UI update
     } catch (err) {
       console.error("Reject error:", err);
-      setSnackbar({
-        open: true,
-        message: err.response?.data?.message || "Server error",
-        severity: "error",
-      });
+      showSnack(err.response?.data?.message || "Server error", "error");
     }
   };
 
@@ -237,15 +462,11 @@ export default function TeamDetails() {
 
     try {
       await teamsAPI.leaveTeam(teamId);
-      setSnackbar({ open: true, message: "Left team", severity: "success" });
+      showSnack("Left team", "success");
       navigate("/teams");
     } catch (err) {
       console.error("Leave error:", err);
-      setSnackbar({
-        open: true,
-        message: err.response?.data?.message || "Error leaving team",
-        severity: "error",
-      });
+      showSnack(err.response?.data?.message || "Error leaving team", "error");
     }
   };
 
@@ -255,8 +476,7 @@ export default function TeamDetails() {
   const handleUpdateRole = async (userId, newRole) => {
     try {
       await teamsAPI.updateMemberRole(teamId, userId, newRole);
-      await fetchTeam();
-      setSnackbar({ open: true, message: "Role updated", severity: "success" });
+      // Socket event will handle UI update
     } catch (err) {
       console.error("Role update error:", err);
     }
@@ -270,7 +490,7 @@ export default function TeamDetails() {
 
     try {
       await teamsAPI.removeMember(teamId, userId);
-      await fetchTeam();
+      // Socket event will handle UI update
     } catch (err) {
       console.error("Remove member error:", err);
     }
@@ -281,51 +501,106 @@ export default function TeamDetails() {
   --------------------------------------------------- */
   const handleCopyInviteLink = () => {
     navigator.clipboard.writeText(`${window.location.origin}/join/${team._id}`);
-    setSnackbar({ open: true, message: "Copied!", severity: "success" });
+    showSnack("Copied!", "success");
   };
 
   /* ---------------------------------------------------
      UPDATE TEAM
   --------------------------------------------------- */
   const handleUpdateTeam = async () => {
-    
     try {
       await teamsAPI.updateTeam(teamId, teamFormData);
-      await fetchTeam();
+      // Socket event will handle UI update
       setEditTeamDialog(false);
-      setSnackbar({ open: true, message: "Team updated", severity: "success" });
     } catch (err) {
       console.error("Update team error:", err);
-      setSnackbar({
-        open: true,
-        message: "Failed to update team",
-        severity: "error",
-      });
+      showSnack("Failed to update team", "error");
     }
   };
 
-// ---- Delete team ----
-const handleDeleteTeam = async () => {
-  if (!window.confirm("Are you sure you want to delete this team? This action cannot be undone.")) return;
+  // ---- Delete team ----
+  const handleDeleteTeam = async () => {
+    if (!window.confirm("Are you sure you want to delete this team? This action cannot be undone.")) return;
 
-  try {
-    await teamsAPI.deleteTeam(teamId);
-    setSnackbar({
-      open: true,
-      message: "Team deleted successfully",
-      severity: "success",
-    });
-    navigate("/teams");
-  } catch (err) {
-    console.error("Delete team error:", err);
-    setSnackbar({
-      open: true,
-      message: err.response?.data?.message || "Failed to delete team",
-      severity: "error",
-    });
-  }
-};
+    try {
+      await teamsAPI.deleteTeam(teamId);
+      showSnack("Team deleted successfully", "success");
+      navigate("/teams");
+    } catch (err) {
+      console.error("Delete team error:", err);
+      showSnack(err.response?.data?.message || "Failed to delete team", "error");
+    }
+  };
 
+  // Task handlers - no refetching needed
+  const handleDeleteTask = async (taskId) => {
+    if (!window.confirm("Delete this task?")) return;
+    try {
+      await teamTasksAPI.deleteTask(taskId);
+      // Socket event will handle UI update
+    } catch (err) {
+      console.error("Delete task error:", err);
+      showSnack("Failed to delete task", "error");
+    }
+  };
+
+  const handleStatusChange = async (taskId, newStatus) => {
+    try {
+      await teamTasksAPI.updateTask(taskId, { status: newStatus });
+      // Socket event will handle UI update
+    } catch (err) {
+      console.error("Status change error:", err);
+      showSnack("Failed to update task status", "error");
+    }
+  };
+
+  const handleQuickComplete = async (taskId) => {
+    try {
+      await teamTasksAPI.updateTask(taskId, { status: "completed" });
+      // Socket event will handle UI update
+    } catch (err) {
+      console.error("Quick complete error:", err);
+      showSnack("Failed to complete task", "error");
+    }
+  };
+
+  const handleTaskSubmit = async (data) => {
+    try {
+      if (editingTask) {
+        await teamTasksAPI.updateTask(editingTask._id, data);
+      } else {
+        await teamTasksAPI.createTask(teamId, data);
+      }
+      
+      // Socket events will handle UI updates
+      setShowTaskForm(false);
+      setEditingTask(null);
+    } catch (err) {
+      console.error("Task submit error:", err);
+      showSnack("Failed to save task", "error");
+    }
+  };
+
+  // Manual refresh functions
+  const handleRefreshTasks = async () => {
+    setLoadingTasks(true);
+    try {
+      await fetchTeamTasks();
+      showSnack("Tasks refreshed", "success");
+    } catch (err) {
+      showSnack("Failed to refresh tasks", "error");
+    }
+  };
+
+  const handleRefreshExtensions = async () => {
+    setLoadingExtensions(true);
+    try {
+      await fetchPendingExtensions();
+      showSnack("Extensions refreshed", "success");
+    } catch (err) {
+      showSnack("Failed to refresh extensions", "error");
+    }
+  };
 
   /* ---------------------------------------------------
      LOADING
@@ -373,12 +648,20 @@ const handleDeleteTeam = async () => {
               <Typography color="text.secondary">{team.description || "No description"}</Typography>
 
               {myRole && (
-                <Chip
-                  label={myRole.toUpperCase()}
-                  color={isAdmin ? "primary" : "default"}
-                  size="small"
-                  sx={{ mt: 1 }}
-                />
+                <Box sx={{ display: "flex", alignItems: "center", gap: 2, mt: 1 }}>
+                  <Chip
+                    label={myRole.toUpperCase()}
+                    color={isAdmin ? "primary" : "default"}
+                    size="small"
+                  />
+                  {/* FIX: Using state variable instead of socketRef.current */}
+                  <Chip
+                    label={`Live ${socketConnected ? "🟢" : "🔴"}`}
+                    size="small"
+                    color={socketConnected ? "success" : "error"}
+                    variant="outlined"
+                  />
+                </Box>
               )}
             </Box>
           </Stack>
@@ -495,17 +778,28 @@ const handleDeleteTeam = async () => {
       {/* ---------------------------- TASKS ----------------------------- */}
       {tab === 2 && (
         <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
             <Typography variant="h6" fontWeight={700}>Team Tasks</Typography>
-
-            {canEditTasks && (
-              <Button variant="contained" onClick={() => {
-                setEditingTask(null);
-                setShowTaskForm(true);
-              }}>
-                Create Task
+            
+            <Box sx={{ display: "flex", gap: 1 }}>
+              <Button 
+                variant="outlined" 
+                size="small"
+                onClick={handleRefreshTasks}
+                disabled={loadingTasks}
+              >
+                Refresh
               </Button>
-            )}
+              
+              {canEditTasks && (
+                <Button variant="contained" onClick={() => {
+                  setEditingTask(null);
+                  setShowTaskForm(true);
+                }}>
+                  Create Task
+                </Button>
+              )}
+            </Box>
           </Box>
 
           {loadingTasks ? (
@@ -520,37 +814,16 @@ const handleDeleteTeam = async () => {
                 <TeamTaskItem
                   key={t._id}
                   task={t}
-                  canEdit={canEditTasks}
+                  canEdit={canEditTasks || resolveUserId(t.assignedTo) === resolveUserId(user?._id)}
                   isAdminOrManager={canEditTasks}
                   currentUserId={resolveUserId(user?._id)}
                   onEdit={() => {
                     setEditingTask(t);
                     setShowTaskForm(true);
                   }}
-                  onDelete={async () => {
-                    try {
-                      await teamTasksAPI.deleteTask(t._id);
-                      await fetchTeamTasks();
-                    } catch (err) {
-                      console.error(err);
-                    }
-                  }}
-                  onStatusChange={async (taskId, newStatus) => {
-                    try {
-                      await teamTasksAPI.updateTask(taskId, { status: newStatus });
-                      await fetchTeamTasks();
-                    } catch (err) {
-                      console.error(err);
-                    }
-                  }}
-                  onQuickComplete={async (taskId) => {
-                    try {
-                      await teamTasksAPI.updateTask(taskId, { status: "completed" });
-                      await fetchTeamTasks();
-                    } catch (err) {
-                      console.error(err);
-                    }
-                  }}
+                  onDelete={() => handleDeleteTask(t._id)}
+                  onStatusChange={(taskId, newStatus) => handleStatusChange(taskId, newStatus)}
+                  onQuickComplete={() => handleQuickComplete(t._id)}
                 />
               ))}
             </Stack>
@@ -565,21 +838,7 @@ const handleDeleteTeam = async () => {
                 setShowTaskForm(false);
                 setEditingTask(null);
               }}
-              onSubmit={async (data) => {
-                try {
-                  if (editingTask) {
-                    await teamTasksAPI.updateTask(editingTask._id, data);
-                  } else {
-                    await teamTasksAPI.createTask(teamId, data);
-                  }
-
-                  await fetchTeamTasks();
-                  setShowTaskForm(false);
-                  setEditingTask(null);
-                } catch (err) {
-                  console.error(err);
-                }
-              }}
+              onSubmit={handleTaskSubmit}
             />
           )}
         </Paper>
@@ -588,9 +847,25 @@ const handleDeleteTeam = async () => {
       {/* ------------------------ EXTENSIONS -------------------------- */}
       {tab === 3 && (
         <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
             <Typography variant="h6" fontWeight={700}>Extension Requests</Typography>
-            <Button variant="outlined" onClick={fetchPendingExtensions}>Refresh</Button>
+            
+            <Box sx={{ display: "flex", gap: 1 }}>
+              {/* FIX: Using state variable instead of socketRef.current */}
+              <Chip 
+                label={`Live ${socketConnected ? "🟢" : "🔴"}`}
+                size="small"
+                color={socketConnected ? "success" : "error"}
+                variant="outlined"
+              />
+              <Button 
+                variant="outlined" 
+                onClick={handleRefreshExtensions}
+                disabled={loadingExtensions}
+              >
+                Refresh
+              </Button>
+            </Box>
           </Box>
 
           {!["admin", "manager"].includes(myRole) ? (
@@ -644,27 +919,26 @@ const handleDeleteTeam = async () => {
                       sx={{ display: "flex", justifyContent: "flex-end", gap: 1 }}
                     >
                       <Button
-                      variant="contained"
-                      color="success"
-                      size="small"
-                      startIcon={<CheckIcon />}
-                      sx={{ borderRadius: 1, textTransform: "none" }}
-                      onClick={() => handleApproveExtension(t._id)}
-                    >
-                      Approve
-                    </Button>
+                        variant="contained"
+                        color="success"
+                        size="small"
+                        startIcon={<CheckIcon />}
+                        sx={{ borderRadius: 1, textTransform: "none" }}
+                        onClick={() => handleApproveExtension(t._id)}
+                      >
+                        Approve
+                      </Button>
 
                       <Button
-                      variant="contained"
-                      color="error"
-                      size="small"
-                      startIcon={<CloseIcon />}
-                      sx={{ borderRadius: 1, textTransform: "none" }}
-                      onClick={() => handleRejectExtension(t._id)}
-                    >
-                      Reject
-                    </Button>
-
+                        variant="contained"
+                        color="error"
+                        size="small"
+                        startIcon={<CloseIcon />}
+                        sx={{ borderRadius: 1, textTransform: "none" }}
+                        onClick={() => handleRejectExtension(t._id)}
+                      >
+                        Reject
+                      </Button>
                     </Grid>
                   </Grid>
                 </Paper>

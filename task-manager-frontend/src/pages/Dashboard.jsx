@@ -1,5 +1,5 @@
 // src/pages/Dashboard.jsx
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import {
   Box,
   Tabs,
@@ -23,24 +23,25 @@ import TaskList from "../components/Task/TaskList";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import { teamTasksAPI, teamsAPI } from "../services/api";
 import { useAuth } from "../context/AuthContext";
+import { initSocket, getSocket, disconnectSocket } from "../services/socket";
+import ExtensionModal from "../components/Task/ExtensionModal";
 
 const Dashboard = () => {
   const theme = useTheme();
   const { user } = useAuth();
+  const socketRef = useRef(null);
 
-  const [tab, setTab] = useState(0); // default to Assigned tab (matches screenshot)
+  const [tab, setTab] = useState(0);
   const [teams, setTeams] = useState([]);
-  const [teamTasks, setTeamTasks] = useState([]); // all tasks user can see (GET /my/all)
-  const [teamTasksByTeam, setTeamTasksByTeam] = useState({});
+  const [teamTasks, setTeamTasks] = useState([]);
   const [assignedTasks, setAssignedTasks] = useState([]);
   const [selectedTask, setSelectedTask] = useState(null);
   const [extensionModalOpen, setExtensionModalOpen] = useState(false);
 
   const openExtensionModal = (task) => {
-  setSelectedTask(task);
-  setExtensionModalOpen(true);
-};
-  
+    setSelectedTask(task);
+    setExtensionModalOpen(true);
+  };
 
   const [loading, setLoading] = useState({
     teams: true,
@@ -59,6 +60,239 @@ const Dashboard = () => {
   const handleTabChange = (_, v) => setTab(v);
   const showSnack = (msg, sev = "success") => setSnackbar({ open: true, message: msg, severity: sev });
 
+  // Initialize socket connection
+  useEffect(() => {
+    if (!user?._id) return;
+    
+    initSocket(user._id);
+    socketRef.current = getSocket();
+    
+    return () => {
+      disconnectSocket();
+      socketRef.current = null;
+    };
+  }, [user]);
+
+  // Derive teamTasksByTeam from teamTasks
+  const teamTasksByTeam = useMemo(() => {
+    const grouped = {};
+    teamTasks.forEach(t => {
+      const teamId = t.team?._id || t.team;
+      if (!teamId) return;
+      
+      if (!grouped[teamId]) {
+        grouped[teamId] = {
+          id: teamId,
+          name: t.team?.name || "Unknown Team",
+          icon: t.team?.icon,
+          color: t.team?.color,
+          tasks: []
+        };
+      }
+      grouped[teamId].tasks.push(t);
+    });
+    return grouped;
+  }, [teamTasks]);
+
+  // Join team rooms and set up socket listeners
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (!socket || teams.length === 0) return;
+
+    // Join all team rooms
+    teams.forEach((team) => {
+      socket.emit("joinTeam", team._id);
+    });
+
+    // Set up socket event listeners
+    const handleTaskCreated = (newTask) => {
+      console.log("taskCreated event received:", newTask);
+      
+      // Update teamTasks state
+      setTeamTasks(prev => {
+        const exists = prev.some(task => task._id === newTask._id);
+        if (exists) return prev;
+        return [...prev, newTask];
+      });
+      
+      // Update assignedTasks if task is assigned to current user
+      if (String(newTask.assignedTo?._id || newTask.assignedTo) === String(user?._id)) {
+        setAssignedTasks(prev => {
+          const exists = prev.some(task => task._id === newTask._id);
+          if (exists) return prev;
+          return [...prev, newTask];
+        });
+      }
+      
+      showSnack(`New task created: ${newTask.title}`, "info");
+    };
+
+    const handleTaskUpdated = (updatedTask) => {
+      console.log("taskUpdated event received:", updatedTask);
+      
+      // Update teamTasks state
+      setTeamTasks(prev => 
+        prev.map(task => task._id === updatedTask._id ? updatedTask : task)
+      );
+      
+      // Update assignedTasks
+      setAssignedTasks(prev => 
+        prev.map(task => task._id === updatedTask._id ? updatedTask : task)
+      );
+      
+      // If this is the selected task in extension modal, update it
+      setSelectedTask(prev => 
+        prev?._id === updatedTask._id ? updatedTask : prev
+      );
+      
+      showSnack(`Task updated: ${updatedTask.title}`, "info");
+    };
+
+    const handleTaskDeleted = (deletedTaskId) => {
+      console.log("taskDeleted event received:", deletedTaskId);
+      
+      // Update teamTasks state
+      setTeamTasks(prev => prev.filter(task => task._id !== deletedTaskId));
+      
+      // Update assignedTasks
+      setAssignedTasks(prev => prev.filter(task => task._id !== deletedTaskId));
+      
+      // If this is the selected task in extension modal, close modal
+      if (selectedTask?._id === deletedTaskId) {
+        setExtensionModalOpen(false);
+        setSelectedTask(null);
+      }
+      
+      showSnack("Task deleted", "warning");
+    };
+
+    const handleExtensionRequested = (task) => {
+      console.log("extensionRequested event received:", task);
+      
+      // Update the specific task
+      setTeamTasks(prev => 
+        prev.map(t => t._id === task._id ? task : t)
+      );
+      
+      setAssignedTasks(prev => 
+        prev.map(t => t._id === task._id ? task : t)
+      );
+      
+      // Update selectedTask if it's the same task
+      setSelectedTask(prev => 
+        prev?._id === task._id ? task : prev
+      );
+      
+      // Show notification based on user role
+      const team = teams.find(t => t._id === (task.team?._id || task.team));
+      const userRole = team?.members?.find(m => 
+        String(m.user?._id || m.user) === String(user?._id)
+      )?.role;
+      
+      if (userRole === "admin" || userRole === "manager") {
+        showSnack(`Extension requested for task: ${task.title}`, "info");
+      } else if (String(task.assignedTo?._id || task.assignedTo) === String(user?._id)) {
+        showSnack("Your extension request has been submitted", "info");
+      }
+    };
+
+    const handleExtensionApproved = (task) => {
+      console.log("extensionApproved event received:", task);
+      
+      // Update the task
+      setTeamTasks(prev => 
+        prev.map(t => t._id === task._id ? task : t)
+      );
+      
+      setAssignedTasks(prev => 
+        prev.map(t => t._id === task._id ? task : t)
+      );
+      
+      // Update selectedTask if it's the same task
+      setSelectedTask(prev => 
+        prev?._id === task._id ? task : prev
+      );
+      
+      // If current user requested the extension
+      if (String(task.assignedTo?._id || task.assignedTo) === String(user?._id)) {
+        showSnack(`Extension approved for task: ${task.title}`, "success");
+      }
+      
+      // Close extension modal if it's open for this task
+      if (selectedTask?._id === task._id) {
+        setExtensionModalOpen(false);
+        setSelectedTask(null);
+      }
+    };
+
+    const handleExtensionRejected = (task) => {
+      console.log("extensionRejected event received:", task);
+      
+      // Update the task
+      setTeamTasks(prev => 
+        prev.map(t => t._id === task._id ? task : t)
+      );
+      
+      setAssignedTasks(prev => 
+        prev.map(t => t._id === task._id ? task : t)
+      );
+      
+      // Update selectedTask if it's the same task
+      setSelectedTask(prev => 
+        prev?._id === task._id ? task : prev
+      );
+      
+      // If current user requested the extension
+      if (String(task.assignedTo?._id || task.assignedTo) === String(user?._id)) {
+        showSnack(`Extension rejected for task: ${task.title}`, "warning");
+      }
+      
+      // Close extension modal if it's open for this task
+      if (selectedTask?._id === task._id) {
+        setExtensionModalOpen(false);
+        setSelectedTask(null);
+      }
+    };
+
+    // Register event listeners
+    socket.on("taskCreated", handleTaskCreated);
+    socket.on("taskUpdated", handleTaskUpdated);
+    socket.on("taskDeleted", handleTaskDeleted);
+    socket.on("extensionRequested", handleExtensionRequested);
+    socket.on("extensionApproved", handleExtensionApproved);
+    socket.on("extensionRejected", handleExtensionRejected);
+
+    // Handle socket errors
+    socket.on("connect_error", (error) => {
+      console.error("Socket connection error:", error);
+      showSnack("Connection lost. Attempting to reconnect...", "error");
+    });
+
+    socket.on("reconnect", () => {
+      console.log("Socket reconnected");
+      showSnack("Connection restored", "success");
+      
+      // Rejoin teams after reconnection
+      teams.forEach((team) => {
+        socket.emit("joinTeam", team._id);
+      });
+    });
+
+    // Cleanup function
+    return () => {
+      if (socket) {
+        socket.off("taskCreated", handleTaskCreated);
+        socket.off("taskUpdated", handleTaskUpdated);
+        socket.off("taskDeleted", handleTaskDeleted);
+        socket.off("extensionRequested", handleExtensionRequested);
+        socket.off("extensionApproved", handleExtensionApproved);
+        socket.off("extensionRejected", handleExtensionRejected);
+        socket.off("connect_error");
+        socket.off("reconnect");
+      }
+    };
+  }, [teams.length, user?._id]); // Fixed dependency array
+
   // fetch user's teams
   const fetchTeams = useCallback(async () => {
     setLoading((s) => ({ ...s, teams: true }));
@@ -74,82 +308,71 @@ const Dashboard = () => {
     }
   }, []);
 
-  // fetch all team tasks via new backend route (GET /api/team-tasks/my/all)
+  // fetch all team tasks
   const fetchTeamTasks = useCallback(async () => {
-  setLoading(s => ({ ...s, teamTasks: true }));
+    setLoading(s => ({ ...s, teamTasks: true }));
+    setError(e => ({ ...e, teamTasks: null }));
 
-  try {
-    let allTasks = [];
+    try {
+      let allTasks = [];
 
-    for (const team of teams) {
-      try {
-        const res = await teamTasksAPI.getTeamTasks(team._id);
-        if (Array.isArray(res.data)) allTasks = allTasks.concat(res.data);
-      } catch (err) {
-        console.warn(`Failed to load tasks for team ${team._id}`);
+      for (const team of teams) {
+        try {
+          const res = await teamTasksAPI.getTeamTasks(team._id);
+          if (Array.isArray(res.data)) allTasks = allTasks.concat(res.data);
+        } catch (err) {
+          console.warn(`Failed to load tasks for team ${team._id}`);
+          setError(e => ({ ...e, teamTasks: "Failed to load some team tasks" }));
+        }
       }
+
+      setTeamTasks(allTasks);
+    } catch (err) {
+      console.error("fetchTeamTasks error:", err);
+      setError(e => ({ ...e, teamTasks: "Failed to load team tasks" }));
+    } finally {
+      setLoading(s => ({ ...s, teamTasks: false }));
     }
+  }, [teams]);
 
-    setTeamTasks(allTasks);
+  // fetch "assigned to me" tasks
+  const fetchAssignedTasks = useCallback(async () => {
+    setLoading(s => ({ ...s, assigned: true }));
+    setError(e => ({ ...e, assigned: null }));
 
-    // group by team
-    const grouped = {};
-    allTasks.forEach(t => {
-      const teamId = t.team?._id || t.team;
-      if (!grouped[teamId]) {
-        grouped[teamId] = {
-          id: teamId,
-          name: t.team.name,
-          icon: t.team.icon,
-          color: t.team.color,
-          tasks: []
-        };
+    try {
+      let assigned = [];
+
+      for (const team of teams) {
+        try {
+          const res = await teamTasksAPI.getTeamTasks(team._id);
+          const tasks = res.data || [];
+
+          const mine = tasks.filter(
+            t => String(t.assignedTo?._id || t.assignedTo) === String(user?._id)
+          );
+
+          assigned = assigned.concat(mine);
+        } catch (err) {
+          console.warn(`Failed assigned tasks for team ${team._id}`);
+          setError(e => ({ ...e, assigned: "Failed to load some assigned tasks" }));
+        }
       }
-      grouped[teamId].tasks.push(t);
-    });
 
-    setTeamTasksByTeam(grouped);
-
-  } finally {
-    setLoading(s => ({ ...s, teamTasks: false }));
-  }
-}, [teams]);
-
-  // fetch "assigned to me" tasks using dedicated endpoint (safer/reliable)
-const fetchAssignedTasks = useCallback(async () => {
-  setLoading(s => ({ ...s, assigned: true }));
-
-  try {
-    let assigned = [];
-
-    for (const team of teams) {
-      try {
-        const res = await teamTasksAPI.getTeamTasks(team._id);
-        const tasks = res.data || [];
-
-        const mine = tasks.filter(
-          t => String(t.assignedTo?._id || t.assignedTo) === String(user?._id)
-        );
-
-        assigned = assigned.concat(mine);
-      } catch (err) {
-        console.warn(`Failed assigned tasks for team ${team._id}`);
-      }
+      setAssignedTasks(assigned);
+    } catch (err) {
+      console.error("fetchAssignedTasks error:", err);
+      setError(e => ({ ...e, assigned: "Failed to load assigned tasks" }));
+    } finally {
+      setLoading(s => ({ ...s, assigned: false }));
     }
+  }, [teams, user]);
 
-    setAssignedTasks(assigned);
-  } finally {
-    setLoading(s => ({ ...s, assigned: false }));
-  }
-}, [teams, user]);
-
-
-  // helpers for task manipulation
+  // Fixed handlers - no refetch after mutations
   const handleStatusChange = async (taskId, status) => {
     try {
       await teamTasksAPI.updateTask(taskId, { status });
-      showSnack("Task status updated", "success");
-      await Promise.all([fetchTeamTasks(), fetchAssignedTasks()]);
+      // Socket event will handle UI update
     } catch (err) {
       console.error("handleStatusChange:", err);
       showSnack(err.response?.data?.message || "Failed to update task", "error");
@@ -160,8 +383,7 @@ const fetchAssignedTasks = useCallback(async () => {
     if (!window.confirm("Delete this task?")) return;
     try {
       await teamTasksAPI.deleteTask(taskId);
-      showSnack("Task deleted", "success");
-      await Promise.all([fetchTeamTasks(), fetchAssignedTasks()]);
+      // Socket event will handle UI update
     } catch (err) {
       console.error("handleDeleteTask:", err);
       showSnack(err.response?.data?.message || "Failed to delete", "error");
@@ -171,8 +393,7 @@ const fetchAssignedTasks = useCallback(async () => {
   const handleQuickComplete = async (taskId) => {
     try {
       await teamTasksAPI.updateTask(taskId, { status: "completed" });
-      showSnack("Task completed", "success");
-      await Promise.all([fetchTeamTasks(), fetchAssignedTasks()]);
+      // Socket event will handle UI update
     } catch (err) {
       console.error("handleQuickComplete:", err);
       showSnack(err.response?.data?.message || "Failed to complete", "error");
@@ -184,14 +405,46 @@ const fetchAssignedTasks = useCallback(async () => {
     if (teamId) window.location.href = `/teams/${teamId}`;
   };
 
-  // Assigned stats for UI
-  const assignedStats = {
-    total: assignedTasks.length,
-    todo: assignedTasks.filter((t) => t.status === "todo").length,
-    inProgress: assignedTasks.filter((t) => t.status === "in-progress").length,
-    completed: assignedTasks.filter((t) => t.status === "completed").length,
-    overdue: assignedTasks.filter((t) => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== "completed").length,
+  // Handle extension request submission
+  const handleExtensionSubmit = async (reason, requestedDate) => {
+    if (!selectedTask) return;
+    
+    try {
+      await teamTasksAPI.requestExtension(selectedTask._id, {
+        reason,
+        requestedDate,
+      });
+      
+      showSnack("Extension request submitted successfully", "success");
+      setExtensionModalOpen(false);
+      setSelectedTask(null);
+      // Socket event will handle UI update
+    } catch (err) {
+      console.error("handleExtensionSubmit:", err);
+      showSnack(err.response?.data?.message || "Failed to submit extension request", "error");
+    }
   };
+
+  // Manual refresh function - use only when needed
+  const handleRefresh = () => {
+    Promise.all([fetchTeams(), fetchTeamTasks(), fetchAssignedTasks()])
+      .then(() => showSnack("Data refreshed", "success"))
+      .catch(() => showSnack("Failed to refresh data", "error"));
+  };
+
+  // Assigned stats for UI
+  const assignedStats = useMemo(() => {
+    return {
+      total: assignedTasks.length,
+      todo: assignedTasks.filter((t) => t.status === "todo").length,
+      inProgress: assignedTasks.filter((t) => t.status === "in-progress").length,
+      completed: assignedTasks.filter((t) => t.status === "completed").length,
+      overdue: assignedTasks.filter((t) => {
+        if (!t.dueDate || t.status === "completed") return false;
+        return new Date(t.dueDate) < new Date();
+      }).length,
+    };
+  }, [assignedTasks]);
 
   // initial loads
   useEffect(() => {
@@ -202,10 +455,11 @@ const fetchAssignedTasks = useCallback(async () => {
 
   // when teams loaded (or user changes), fetch tasks
   useEffect(() => {
-    fetchTeamTasks();
-    fetchAssignedTasks();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [teams.length]);
+    if (teams.length > 0) {
+      fetchTeamTasks();
+      fetchAssignedTasks();
+    }
+  }, [teams.length, fetchTeamTasks, fetchAssignedTasks]);
 
   // small loader component
   const Loader = () => (
@@ -214,10 +468,9 @@ const fetchAssignedTasks = useCallback(async () => {
     </Box>
   );
 
-  // UI styling: match screenshot with tab card, stat chips and big tiles
   return (
     <Container maxWidth="xl" sx={{ 
-      pt: { xs: 10, sm: 8 }, // Add padding to avoid header collision
+      pt: { xs: 10, sm: 8 },
       pb: 6,
       minHeight: "100vh"
     }}>
@@ -231,6 +484,18 @@ const fetchAssignedTasks = useCallback(async () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Refresh button for manual sync only */}
+      <Box sx={{ display: "flex", justifyContent: "flex-end", mb: 1 }}>
+        <Button
+          variant="outlined"
+          size="small"
+          onClick={handleRefresh}
+          disabled={loading.teams || loading.teamTasks || loading.assigned}
+        >
+          Refresh Data
+        </Button>
+      </Box>
 
       {/* Welcome message with user name */}
       <Box sx={{ mb: 3 }}>
@@ -278,6 +543,19 @@ const fetchAssignedTasks = useCallback(async () => {
         </Tabs>
       </Paper>
 
+      {/* Extension Modal */}
+      {selectedTask && (
+        <ExtensionModal
+          open={extensionModalOpen}
+          onClose={() => {
+            setExtensionModalOpen(false);
+            setSelectedTask(null);
+          }}
+          task={selectedTask}
+          onSubmit={handleExtensionSubmit}
+        />
+      )}
+
       {/* TAB 0 - My Tasks (existing component) */}
       {tab === 0 && <TaskList />}
 
@@ -289,14 +567,21 @@ const fetchAssignedTasks = useCallback(async () => {
               <Typography variant="h5" fontWeight={600}>
                 Tasks Assigned to You
               </Typography>
-              {assignedTasks.length > 0 && (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                {assignedStats.overdue > 0 && (
+                  <Chip 
+                    label={`${assignedStats.overdue} overdue`} 
+                    color="error" 
+                    size="small"
+                  />
+                )}
                 <Chip 
-                  label={`${assignedStats.overdue} overdue`} 
-                  color="error" 
+                  label={`Live Updates ${socketRef.current?.connected ? "🟢" : "🔴"}`} 
+                  variant="outlined" 
                   size="small"
-                  sx={{ display: assignedStats.overdue > 0 ? 'flex' : 'none' }}
+                  color={socketRef.current?.connected ? "success" : "error"}
                 />
-              )}
+              </Box>
             </Box>
             <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
               <Chip label={`Total: ${assignedStats.total}`} variant="outlined" />
@@ -402,7 +687,6 @@ const fetchAssignedTasks = useCallback(async () => {
                   onDelete={() => handleDeleteTask(task._id)}
                   onStatusChange={(id, s) => handleStatusChange(id, s)}
                   onQuickComplete={() => handleQuickComplete(task._id)}
-                  
                 />
               ))}
             </Box>
@@ -447,75 +731,91 @@ const fetchAssignedTasks = useCallback(async () => {
               </Button>
             </Paper>
           ) : (
-            Object.values(teamTasksByTeam)
-              .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
-              .map((g) => {
-                // get user's role in that team (best-effort from teams list)
-                const teamRecord = teams.find((t) => String(t._id) === String(g.id));
-                const role = teamRecord?.members?.find((m) => {
-                  const uid = typeof m.user === "object" ? (m.user._id || m.user) : m.user;
-                  return String(uid) === String(user?._id);
-                })?.role;
-                const canEdit = ["admin", "manager"].includes(role);
-                return (
-                  <Paper key={g.id} sx={{ mb: 3, borderRadius: 2, overflow: 'hidden' }}>
-                    <Box sx={{ 
-                      p: 3, 
-                      display: "flex", 
-                      justifyContent: "space-between", 
-                      alignItems: "center",
-                      bgcolor: g.color ? `${g.color}20` : 'primary.light',
-                      borderBottom: `1px solid ${theme.palette.divider}`
-                    }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Box sx={{ 
-                          width: 50, 
-                          height: 50, 
-                          borderRadius: '50%', 
-                          bgcolor: g.color || theme.palette.primary.main,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: '1.5rem',
-                          color: 'white'
-                        }}>
-                          {g.icon || "👥"}
+            <Box>
+              <Paper sx={{ p: 2, mb: 3, borderRadius: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="body2" color="text.secondary">
+                  Live updates enabled for all teams you're a member of
+                </Typography>
+                <Chip 
+                  label={`Connection: ${socketRef.current?.connected ? "Connected 🟢" : "Disconnected 🔴"}`} 
+                  size="small"
+                  color={socketRef.current?.connected ? "success" : "error"}
+                  variant="outlined"
+                />
+              </Paper>
+              
+              {Object.values(teamTasksByTeam)
+                .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
+                .map((g) => {
+                  // get user's role in that team
+                  const teamRecord = teams.find((t) => String(t._id) === String(g.id));
+                  const role = teamRecord?.members?.find((m) => {
+                    const uid = typeof m.user === "object" ? (m.user._id || m.user) : m.user;
+                    return String(uid) === String(user?._id);
+                  })?.role;
+                  const canEdit = ["admin", "manager"].includes(role);
+                  return (
+                    <Paper key={g.id} sx={{ mb: 3, borderRadius: 2, overflow: 'hidden' }}>
+                      <Box sx={{ 
+                        p: 3, 
+                        display: "flex", 
+                        justifyContent: "space-between", 
+                        alignItems: "center",
+                        bgcolor: g.color ? `${g.color}20` : 'primary.light',
+                        borderBottom: `1px solid ${theme.palette.divider}`
+                      }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Box sx={{ 
+                            width: 50, 
+                            height: 50, 
+                            borderRadius: '50%', 
+                            bgcolor: g.color || theme.palette.primary.main,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '1.5rem',
+                            color: 'white'
+                          }}>
+                            {g.icon || "👥"}
+                          </Box>
+                          <Box>
+                            <Typography variant="h6" fontWeight={700}>
+                              {g.name}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {g.tasks.length} task{g.tasks.length > 1 ? 's' : ''} • {role ? `Your role: ${role}` : 'Member'} • Live Updates
+                            </Typography>
+                          </Box>
                         </Box>
-                        <Box>
-                          <Typography variant="h6" fontWeight={700}>
-                            {g.name}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            {g.tasks.length} task{g.tasks.length > 1 ? 's' : ''} • {role ? `Your role: ${role}` : 'Member'}
-                          </Typography>
-                        </Box>
+                        <Button 
+                          variant="contained" 
+                          size="small" 
+                          onClick={() => (window.location.href = `/teams/${g.id}`)}
+                          sx={{ borderRadius: 2 }}
+                        >
+                          View Team
+                        </Button>
                       </Box>
-                      <Button 
-                        variant="contained" 
-                        size="small" 
-                        onClick={() => (window.location.href = `/teams/${g.id}`)}
-                        sx={{ borderRadius: 2 }}
-                      >
-                        View Team
-                      </Button>
-                    </Box>
 
-                    <Box sx={{ p: 3 }}>
-                      {g.tasks.map((task) => (
-                        <TeamTaskItem
-                          key={task._id}
-                          task={task}
-                          canEdit={canEdit || String((task.assignedTo && (task.assignedTo._id || task.assignedTo))) === String(user?._id)}
-                          onEdit={() => handleEditTask(task)}
-                          onDelete={() => handleDeleteTask(task._id)}
-                          onStatusChange={(id, s) => handleStatusChange(id, s)}
-                          onQuickComplete={() => handleQuickComplete(task._id)}
-                        />
-                      ))}
-                    </Box>
-                  </Paper>
-                );
-              })
+                      <Box sx={{ p: 3 }}>
+                        {g.tasks.map((task) => (
+                          <TeamTaskItem
+                            key={task._id}
+                            task={task}
+                            canEdit={canEdit || String((task.assignedTo && (task.assignedTo._id || task.assignedTo))) === String(user?._id)}
+                            showExtension={String(task.assignedTo?._id || task.assignedTo) === String(user?._id)}
+                            onRequestExtension={() => openExtensionModal(task)}
+                            onEdit={() => handleEditTask(task)}
+                            onDelete={() => handleDeleteTask(task._id)}
+                            onStatusChange={(id, s) => handleStatusChange(id, s)}
+                            onQuickComplete={() => handleQuickComplete(task._id)}
+                          />
+                        ))}
+                      </Box>
+                    </Paper>
+                  );
+                })}
+            </Box>
           )}
         </Box>
       )}

@@ -1,4 +1,3 @@
-// src/components/Teams/TeamTaskItem.jsx
 import React, { useState } from "react";
 import {
   Card,
@@ -19,12 +18,14 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import EventBusyIcon from "@mui/icons-material/EventBusy";
 import EventIcon from "@mui/icons-material/Event";
 import GoogleIcon from "@mui/icons-material/Google";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import { useTheme } from "@mui/material/styles";
-import ExtensionRequestModal from "./ExtensionRequestModal"; // relative path: if different, adjust
+import ExtensionRequestModal from "./ExtensionRequestModal";
+
+/* ------------------ helpers ------------------ */
+const resolveId = (v) => (typeof v === "object" ? v?._id : v);
 
 export default function TeamTaskItem({
   task,
@@ -34,195 +35,193 @@ export default function TeamTaskItem({
   onStatusChange,
   onQuickComplete,
   currentUserId,
-  isAdminOrManager = false, // passed from parent when available
+  isAdminOrManager = false,
 }) {
   const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState(null);
   const [openExtensionModal, setOpenExtensionModal] = useState(false);
 
   const priorityColors = { high: "error", medium: "warning", low: "success" };
-  const statusColors = { todo: "default", "in-progress": "info", completed: "success" };
+  const statusColors = {
+    todo: "default",
+    "in-progress": "info",
+    completed: "success",
+  };
 
-  const isAssignedToMe = task.assignedTo?._id === currentUserId;
+  const isAssignedToMe =
+    resolveId(task.assignedTo) === resolveId(currentUserId);
 
-  // Extension request helpers
   const ext = task.extensionRequest || {};
   const hasPendingRequest = ext.requested && ext.status === "pending";
-  const hasApproved = ext.status === "approved";
-  const hasRejected = ext.status === "rejected";
 
+  /* ------------------ due date logic ------------------ */
   const getDueDateStatus = () => {
-    if (!task.dueDate) return { status: "no-due-date", color: "text.secondary", message: "No due date" };
-    if (task.status === "completed") return { status: "completed", color: "success.main", message: "Completed" };
-    const now = new Date(); const dueDate = new Date(task.dueDate);
-    const timeDiff = dueDate.getTime() - now.getTime();
-    const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
-    if (daysDiff < 0) return { status: "overdue", color: "error.main", message: `Overdue by ${Math.abs(daysDiff)} day${Math.abs(daysDiff) === 1 ? '' : 's'}` };
-    if (daysDiff === 0) return { status: "due-today", color: "warning.main", message: "Due today!" };
-    if (daysDiff <= 2) return { status: "due-soon", color: "warning.light", message: `Due in ${daysDiff} day${daysDiff === 1 ? '' : 's'}` };
-    return { status: "future", color: "text.secondary", message: `Due in ${daysDiff} days` };
+    if (!task.dueDate)
+      return { color: "text.secondary", message: "No due date" };
+
+    if (task.status === "completed")
+      return { color: "success.main", message: "Completed" };
+
+    const now = new Date();
+    const due = new Date(task.dueDate);
+    const days = Math.ceil((due - now) / (1000 * 3600 * 24));
+
+    if (days < 0)
+      return {
+        color: "error.main",
+        message: `Overdue by ${Math.abs(days)} day${Math.abs(days) !== 1 ? "s" : ""}`,
+      };
+    if (days === 0) return { color: "warning.main", message: "Due today" };
+    if (days <= 2)
+      return { color: "warning.light", message: `Due in ${days} days` };
+
+    return { color: "text.secondary", message: `Due in ${days} days` };
   };
 
-  const dueDateStatus = getDueDateStatus();
+  const dueStatus = getDueDateStatus();
 
-  const formatDate = (dateString) => {
-    if (!dateString) return "No due date";
-    const date = new Date(dateString);
-    const today = new Date();
-    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
-    if (date.toDateString() === today.toDateString()) return "Today";
-    if (date.toDateString() === tomorrow.toDateString()) return "Tomorrow";
-    return date.toLocaleDateString();
+  const formatDate = (d) =>
+    d ? new Date(d).toLocaleDateString() : "No due date";
+
+  const getICSUrl = () =>
+    `${process.env.REACT_APP_API_URL}/api/ics/${task._id}`;
+
+  const getGoogleUrl = () => {
+    if (!task.dueDate) return "#";
+    const s = new Date(task.dueDate);
+    const e = new Date(s.getTime() + 30 * 60 * 1000);
+    const f = (d) =>
+      d.toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
+
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
+      task.title
+    )}&details=${encodeURIComponent(task.description || "")}&dates=${f(s)}/${f(
+      e
+    )}`;
   };
 
-  const handleMenuOpen = (e) => setAnchorEl(e.currentTarget);
-  const handleMenuClose = () => setAnchorEl(null);
-
-  const getICSUrl = () => {
-    const baseUrl = process.env.REACT_APP_API_URL || window.location.origin;
-    return `${baseUrl}/api/ics/${task._id}`;
-  };
+  /* ------------------ menu ------------------ */
+  const openMenu = Boolean(anchorEl);
+  const showMenu =
+    isAssignedToMe || canEdit || Boolean(task.dueDate);
 
   return (
     <>
-      <Card sx={{ mb: 2, borderRadius: 3, p: 1, borderLeft: `5px solid ${task.color || theme.palette.primary.main}` }}>
-        {dueDateStatus.status === "overdue" && task.status !== "completed" && (
-          <Alert severity="error" sx={{ mb: 2 }}>{dueDateStatus.message}</Alert>
-        )}
-        {dueDateStatus.status === "due-today" && task.status !== "completed" && (
-          <Alert severity="warning" sx={{ mb: 2 }}>{dueDateStatus.message}</Alert>
+      <Card
+        sx={{
+          mb: 2,
+          borderRadius: 3,
+          borderLeft: `5px solid ${task.color || theme.palette.primary.main}`,
+        }}
+      >
+        {dueStatus.color === "error.main" && (
+          <Alert severity="error">{dueStatus.message}</Alert>
         )}
 
         <CardContent>
-          <Box sx={{ display: "flex", justifyContent: "space-between", mb: 1 }}>
-            <Box sx={{ flex: 1 }}>
-              <Typography variant="h6" fontWeight={700}>
-                <span style={{ marginRight: 8 }}>{task.icon || "📋"}</span>
-                {task.title}
-              </Typography>
-              <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: 'wrap' }}>
-                {task.createdBy && <Typography variant="caption" color="text.secondary">Created by: {task.createdBy.name || task.createdBy}</Typography>}
-                {task.assignedTo && <Typography variant="caption" color="text.secondary">Assigned to: {task.assignedTo.name || task.assignedTo}</Typography>}
-                {/* Show extension badge quickly in small text */}
-                {ext.requested && (
-                  <Chip
-                    label={ext.status === "pending" ? "Extension: Pending" : ext.status === "approved" ? "Extension: Approved" : "Extension: Rejected"}
-                    size="small"
-                    variant={ext.status === "approved" ? "filled" : "outlined"}
-                    color={ext.status === "approved" ? "success" : ext.status === "rejected" ? "error" : "warning"}
-                    sx={{ ml: 1 }}
-                  />
-                )}
-              </Stack>
-            </Box>
+          {/* header */}
+          <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+            <Typography variant="h6" fontWeight={700}>
+              {task.icon || "📋"} {task.title}
+            </Typography>
 
-            <Box>
-              <IconButton size="small" onClick={handleMenuOpen} sx={{ mr: 1 }}>
+            {showMenu && (
+              <IconButton size="small" onClick={(e) => setAnchorEl(e.currentTarget)}>
                 <MoreVertIcon />
               </IconButton>
-
-              {canEdit && (
-                <>
-                  <IconButton color="primary" onClick={() => onEdit && onEdit(task)} size="small" sx={{ mr: 1 }}>
-                    <EditIcon fontSize="small" />
-                  </IconButton>
-                  <IconButton color="error" onClick={() => onDelete && onDelete(task._id)} size="small">
-                    <DeleteIcon fontSize="small" />
-                  </IconButton>
-                </>
-              )}
-            </Box>
+            )}
           </Box>
 
-          {task.description && <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>{task.description}</Typography>}
-
-          <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap' }}>
-            <Chip label={task.priority} color={priorityColors[task.priority] || "default"} size="small" />
-            <Chip label={task.status?.replace("-", " ") || "todo"} color={statusColors[task.status] || "default"} size="small" />
-            <Chip icon={<AccessTimeIcon />} label={`${formatDate(task.dueDate)} • ${dueDateStatus.message}`} variant="outlined" size="small" />
-            {task.team && typeof task.team === "object" && <Chip label={`👥 ${task.team.name}`} size="small" />}
-          </Stack>
-
-          <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
-            <Button variant="contained" startIcon={<EventIcon />} onClick={() => window.open(getICSUrl(), "_blank")}>Add to Calendar</Button>
-            <Button variant="outlined" startIcon={<GoogleIcon />} href={task.dueDate ? (function(){
-              const s = new Date(task.dueDate); const e = new Date(s.getTime() + 30*60*1000);
-              const f = d => d.toISOString().replace(/[-:]/g,"").replace(/\.\d+Z$/,"Z");
-              return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(task.title)}&details=${encodeURIComponent(task.description||"")}&dates=${f(s)}/${f(e)}`;
-            })() : "#"} target="_blank" disabled={!task.dueDate}>Google Calendar</Button>
-          </Stack>
-
-          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
-            <Stack direction="row" spacing={1}>
-              <Chip label="To Do" clickable variant={task.status === "todo" ? "filled" : "outlined"} onClick={() => onStatusChange && onStatusChange(task._id, "todo")} />
-              <Chip label="In Progress" clickable variant={task.status === "in-progress" ? "filled" : "outlined"} onClick={() => onStatusChange && onStatusChange(task._id, "in-progress")} />
-              <Chip label="Completed" clickable variant={task.status === "completed" ? "filled" : "outlined"} onClick={() => onStatusChange && onStatusChange(task._id, "completed")} />
-            </Stack>
-
-            <Box sx={{ display: "flex", gap: 1 }}>
-              {task.status !== "completed" && isAssignedToMe && (
-                <Button variant="contained" color="success" onClick={() => onQuickComplete && onQuickComplete(task._id)}>Mark Complete</Button>
-              )}
-
-              {/* Extension controls */}
-              {isAssignedToMe && !ext.requested && (
-                <Button variant="outlined" onClick={() => setOpenExtensionModal(true)}>Request Extension</Button>
-              )}
-
-              {isAssignedToMe && hasPendingRequest && (
-                <Button variant="outlined" disabled>Extension Pending</Button>
-              )}
-
-              {/* Admin quick link: opens TeamDetails where approval UI exists */}
-              <Button
-  variant="contained"
-  color="primary"
-  onClick={() =>
-    window.location.href = `/teams/${task.team?._id || task.team}?tab=extensions`
-  }
->
-  Review Request
-</Button>
-            </Box>
-          </Box>
-
-          {/* show full extension details if present */}
-          {ext.requested && (
-            <Box sx={{ mt: 2 }}>
-              <Typography variant="caption" color="text.secondary">Extension request by {ext.requestedBy?.name || "user"} • {ext.requestedAt ? new Date(ext.requestedAt).toLocaleString() : ""}</Typography>
-              <Typography variant="body2" sx={{ mt: 1 }}>{ext.reason}</Typography>
-              {ext.requestedDueDate && <Typography variant="caption" color="text.secondary">Requested new due date: {new Date(ext.requestedDueDate).toLocaleDateString()}</Typography>}
-            </Box>
+          {task.description && (
+            <Typography variant="body2" sx={{ mt: 1 }}>
+              {task.description}
+            </Typography>
           )}
+
+          {/* chips */}
+          <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap" }}>
+            <Chip label={task.priority} color={priorityColors[task.priority]} size="small" />
+            <Chip label={task.status} color={statusColors[task.status]} size="small" />
+            <Chip
+              icon={<AccessTimeIcon />}
+              label={`${formatDate(task.dueDate)} • ${dueStatus.message}`}
+              variant="outlined"
+              size="small"
+            />
+          </Stack>
+
+          {/* actions */}
+          <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap" }}>
+            {isAssignedToMe && task.status !== "completed" && (
+              <Button
+                size="small"
+                color="success"
+                variant="contained"
+                onClick={() => onQuickComplete(task._id)}
+              >
+                Mark Complete
+              </Button>
+            )}
+
+            {isAssignedToMe && !ext.requested && (
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => setOpenExtensionModal(true)}
+              >
+                Request Extension
+              </Button>
+            )}
+
+            {isAdminOrManager && hasPendingRequest && (
+              <Button
+                size="small"
+                variant="contained"
+                onClick={() =>
+                  (window.location.href = `/teams/${resolveId(
+                    task.team
+                  )}?tab=extensions`)
+                }
+              >
+                Review Request
+              </Button>
+            )}
+          </Stack>
         </CardContent>
 
-        <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={handleMenuClose}>
-          {task.status !== "completed" && isAssignedToMe && (
-            <MenuItem onClick={() => { onQuickComplete && onQuickComplete(task._id); handleMenuClose(); }}>
-              <CheckCircleIcon fontSize="small" sx={{ mr: 1 }} /> Mark as Complete
+        {/* MENU */}
+        <Menu anchorEl={anchorEl} open={openMenu} onClose={() => setAnchorEl(null)}>
+          {isAssignedToMe && task.status !== "completed" && (
+            <MenuItem onClick={() => onQuickComplete(task._id)}>
+              <CheckCircleIcon fontSize="small" sx={{ mr: 1 }} /> Complete
             </MenuItem>
           )}
-          <MenuItem onClick={() => { window.open(getICSUrl(), "_blank"); handleMenuClose(); }}>
-            <ScheduleIcon fontSize="small" sx={{ mr: 1 }} /> Download Calendar File
+          <MenuItem onClick={() => window.open(getICSUrl(), "_blank")}>
+            <ScheduleIcon fontSize="small" sx={{ mr: 1 }} /> Download ICS
           </MenuItem>
           {task.dueDate && (
-            <MenuItem onClick={() => { window.open("#", "_blank"); handleMenuClose(); }}>
-              <GoogleIcon fontSize="small" sx={{ mr: 1 }} /> Add to Google Calendar
+            <MenuItem onClick={() => window.open(getGoogleUrl(), "_blank")}>
+              <GoogleIcon fontSize="small" sx={{ mr: 1 }} /> Google Calendar
             </MenuItem>
           )}
           {canEdit && (
-            <MenuItem onClick={() => { onEdit && onEdit(task); handleMenuClose(); }}>
-              <EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit Task
+            <MenuItem onClick={() => onEdit(task)}>
+              <EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit
+            </MenuItem>
+          )}
+          {canEdit && (
+            <MenuItem onClick={() => onDelete(task._id)}>
+              <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Delete
             </MenuItem>
           )}
         </Menu>
       </Card>
 
+      {/* EXTENSION MODAL */}
       <ExtensionRequestModal
         open={openExtensionModal}
         onClose={() => setOpenExtensionModal(false)}
         task={task}
-        onSubmitted={() => window.location.reload()} // simple refresh — you can replace with a smarter refresh callback
       />
     </>
   );

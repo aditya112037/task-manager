@@ -1,5 +1,4 @@
-// src/components/Teams/ExtensionRequestModal.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -13,59 +12,91 @@ import {
 } from "@mui/material";
 import { teamTasksAPI } from "../../services/api";
 
-export default function ExtensionRequestModal({
-  open,
-  onClose,
-  task,
-  onSubmitted, // callback to refresh parent list
-}) {
+export default function ExtensionRequestModal({ open, onClose, task }) {
   const [reason, setReason] = useState("");
-  const [requestedDueDate, setRequestedDueDate] = useState(
-    task?.dueDate ? new Date(task.dueDate).toISOString().slice(0, 10) : ""
-  );
+  const [requestedDueDate, setRequestedDueDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  React.useEffect(() => {
-    if (open && task) {
-      setReason(task.extensionRequest?.reason || "");
-      setRequestedDueDate(
-        (task.extensionRequest?.requestedDueDate && new Date(task.extensionRequest.requestedDueDate).toISOString().slice(0,10)) ||
-        (task?.dueDate ? new Date(task.dueDate).toISOString().slice(0,10) : "")
-      );
-      setError(null);
-    }
+  /* ---------------------------------------------------
+     RESET & PREFILL ON OPEN
+  --------------------------------------------------- */
+  useEffect(() => {
+    if (!open || !task) return;
+
+    setReason(task.extensionRequest?.reason || "");
+
+    const baseDate =
+      task.extensionRequest?.requestedDueDate || task.dueDate;
+
+    setRequestedDueDate(
+      baseDate ? new Date(baseDate).toISOString().slice(0, 10) : ""
+    );
+
+    setError(null);
   }, [open, task]);
 
+  /* ---------------------------------------------------
+     CLEAN CLOSE
+  --------------------------------------------------- */
+  const handleClose = () => {
+    if (loading) return;
+    setReason("");
+    setRequestedDueDate("");
+    setError(null);
+    onClose();
+  };
+
+  /* ---------------------------------------------------
+     SUBMIT
+  --------------------------------------------------- */
   const handleSubmit = async () => {
-    if (!reason || !requestedDueDate) {
-      setError("Please provide a reason and requested due date.");
+    if (!reason.trim() || !requestedDueDate) {
+      setError("Please provide a reason and a requested due date.");
       return;
     }
+
+    if (task?.dueDate) {
+      const current = new Date(task.dueDate);
+      const requested = new Date(requestedDueDate);
+
+      if (requested <= current) {
+        setError("Requested due date must be later than the current due date.");
+        return;
+      }
+    }
+
     setLoading(true);
     setError(null);
+
     try {
       await teamTasksAPI.requestExtension(task._id, {
         reason,
         requestedDueDate: new Date(requestedDueDate).toISOString(),
       });
-      onSubmitted && onSubmitted();
-      onClose();
+
+      // Socket event will update UI everywhere
+      handleClose();
     } catch (err) {
-      console.error("Request extension error:", err);
+      console.error("Extension request error:", err);
       setError(err.response?.data?.message || "Failed to submit request");
     } finally {
       setLoading(false);
     }
   };
 
+  const hasPending =
+    task?.extensionRequest?.requested &&
+    task?.extensionRequest?.status === "pending";
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>Request Extension</DialogTitle>
+
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
           <Typography variant="subtitle2">Task</Typography>
-          <Typography variant="body1" sx={{ fontWeight: 600 }}>
+          <Typography variant="body1" fontWeight={600}>
             {task?.title}
           </Typography>
 
@@ -77,6 +108,7 @@ export default function ExtensionRequestModal({
             rows={4}
             fullWidth
             required
+            disabled={loading || hasPending}
           />
 
           <TextField
@@ -87,15 +119,28 @@ export default function ExtensionRequestModal({
             InputLabelProps={{ shrink: true }}
             fullWidth
             required
+            disabled={loading || hasPending}
           />
+
+          {hasPending && (
+            <Alert severity="info">
+              You already have a pending extension request for this task.
+            </Alert>
+          )}
 
           {error && <Alert severity="error">{error}</Alert>}
         </Stack>
       </DialogContent>
 
       <DialogActions sx={{ px: 3, py: 2 }}>
-        <Button onClick={onClose} disabled={loading}>Cancel</Button>
-        <Button variant="contained" onClick={handleSubmit} disabled={loading}>
+        <Button onClick={handleClose} disabled={loading}>
+          Cancel
+        </Button>
+        <Button
+          variant="contained"
+          onClick={handleSubmit}
+          disabled={loading || hasPending}
+        >
           {loading ? "Submitting..." : "Submit Request"}
         </Button>
       </DialogActions>

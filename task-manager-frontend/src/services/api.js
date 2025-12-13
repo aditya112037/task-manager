@@ -9,7 +9,7 @@ const api = axios.create({
 });
 
 // -------------------------
-// TOKEN ATTACH - FIXED
+// TOKEN ATTACH
 // -------------------------
 api.interceptors.request.use(
   (config) => {
@@ -67,8 +67,8 @@ export const teamsAPI = {
   deleteTeam: (teamId) => api.delete(`/api/teams/${teamId}`),
 
   joinTeam: (teamId) => api.post(`/api/teams/${teamId}/join`),
-  getInviteLink: (teamId) => api.get(`/api/teams/${teamId}/invite`),
   leaveTeam: (teamId) => api.post(`/api/teams/${teamId}/leave`),
+  getInviteLink: (teamId) => api.get(`/api/teams/${teamId}/invite`),
 
   updateMemberRole: (teamId, userId, role) =>
     api.put(`/api/teams/${teamId}/members/${userId}/role`, { role }),
@@ -78,36 +78,37 @@ export const teamsAPI = {
 };
 
 // -------------------------
-// TEAM TASKS API — FIXED
+// TEAM TASKS API (CLEAN)
 // -------------------------
 export const teamTasksAPI = {
-  // 🆕 Load every team task user has access to (admin/member)
-  getMyTeamTasks: (filters = {}) => api.get("/api/team-tasks/my/all", { params: filters }),
+  // ✅ Load ALL team tasks user has access to
+  getMyTeamTasks: (filters = {}) =>
+    api.get("/api/team-tasks/my/all", { params: filters }),
 
-    getTeamTasks: (teamId) =>
-    api.get(`/api/team-tasks/${teamId}`),
-
-
-  // 🆕 Assigned tasks only — NO teamId needed anymore
-  getMyAssignedTasks: (teamId) =>
-    api.get(`/api/team-tasks/${teamId}`),
-
-
-  // Get all tasks for a specific team (admin/member)
-  getTasks: (teamId, filters = {}) =>
+  // ✅ Load tasks for ONE team
+  getTeamTasks: (teamId, filters = {}) =>
     api.get(`/api/team-tasks/${teamId}`, { params: filters }),
 
-  // Get all tasks assigned to a user (for admin/manager)
+  // ✅ Load tasks for specific user in a team (admin/manager)
   getUserTasks: (teamId, userId) =>
     api.get(`/api/team-tasks/${teamId}/user/${userId}`),
 
+  // -----------------
   // CRUD
-  createTask: (teamId, data) => api.post(`/api/team-tasks/${teamId}`, data),
-  updateTask: (taskId, data) => api.put(`/api/team-tasks/${taskId}`, data),
-  deleteTask: (taskId) => api.delete(`/api/team-tasks/${taskId}`),
+  // -----------------
+  createTask: (teamId, data) =>
+    api.post(`/api/team-tasks/${teamId}`, data),
 
-  // Extension system — FULLY WORKING
- requestExtension: (taskId, payload) =>
+  updateTask: (taskId, data) =>
+    api.put(`/api/team-tasks/${taskId}`, data),
+
+  deleteTask: (taskId) =>
+    api.delete(`/api/team-tasks/${taskId}`),
+
+  // -----------------
+  // EXTENSION SYSTEM
+  // -----------------
+  requestExtension: (taskId, payload) =>
     api.post(`/api/team-tasks/${taskId}/request-extension`, payload),
 
   approveExtension: (taskId) =>
@@ -116,7 +117,6 @@ export const teamTasksAPI = {
   rejectExtension: (taskId) =>
     api.post(`/api/team-tasks/${taskId}/extension/reject`),
 
-  // Pending extension list
   getPendingExtensions: (teamId) =>
     api.get(`/api/team-tasks/${teamId}/extensions/pending`),
 };
@@ -126,11 +126,9 @@ export const teamTasksAPI = {
 // -------------------------
 export const notificationsAPI = {
   getNotifications: () => api.get("/api/notifications"),
-  markAsRead: (notificationId) =>
-    api.put(`/api/notifications/${notificationId}/read`),
+  markAsRead: (id) => api.put(`/api/notifications/${id}/read`),
   markAllAsRead: () => api.put("/api/notifications/read-all"),
-  deleteNotification: (notificationId) =>
-    api.delete(`/api/notifications/${notificationId}`),
+  deleteNotification: (id) => api.delete(`/api/notifications/${id}`),
   clearAll: () => api.delete("/api/notifications"),
 };
 
