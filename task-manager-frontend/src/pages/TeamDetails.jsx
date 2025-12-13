@@ -372,7 +372,7 @@ export default function TeamDetails() {
   const fetchTeamTasks = async () => {
     setLoadingTasks(true);
     try {
-      const res = await teamTasksAPI.getTasks(teamId);
+      const res = await teamTasksAPI.getTeamTasks(teamId);
       let tasks = res.data || [];
 
       // Filter for members
