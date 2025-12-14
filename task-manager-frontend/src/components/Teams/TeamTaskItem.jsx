@@ -8,7 +8,6 @@ import {
   IconButton,
   Box,
   Stack,
-  Tooltip,
   Button,
   Menu,
   MenuItem,
@@ -19,7 +18,6 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import EventIcon from "@mui/icons-material/Event";
 import GoogleIcon from "@mui/icons-material/Google";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import { useTheme } from "@mui/material/styles";
@@ -27,6 +25,13 @@ import ExtensionRequestModal from "./ExtensionRequestModal";
 
 /* ------------------ helpers ------------------ */
 const resolveId = (v) => (typeof v === "object" ? v?._id : v);
+
+const resolveUserName = (u) => {
+  if (!u) return "Unassigned";
+  if (typeof u === "string") return "Assigned";
+  if (typeof u === "object") return u.name || "Assigned";
+  return "Assigned";
+};
 
 export default function TeamTaskItem({
   task,
@@ -70,7 +75,9 @@ export default function TeamTaskItem({
     if (days < 0)
       return {
         color: "error.main",
-        message: `Overdue by ${Math.abs(days)} day${Math.abs(days) !== 1 ? "s" : ""}`,
+        message: `Overdue by ${Math.abs(days)} day${
+          Math.abs(days) !== 1 ? "s" : ""
+        }`,
       };
     if (days === 0) return { color: "warning.main", message: "Due today" };
     if (days <= 2)
@@ -101,10 +108,8 @@ export default function TeamTaskItem({
     )}`;
   };
 
-  /* ------------------ menu ------------------ */
   const openMenu = Boolean(anchorEl);
-  const showMenu =
-    isAssignedToMe || canEdit || Boolean(task.dueDate);
+  const showMenu = isAssignedToMe || canEdit || Boolean(task.dueDate);
 
   return (
     <>
@@ -127,7 +132,10 @@ export default function TeamTaskItem({
             </Typography>
 
             {showMenu && (
-              <IconButton size="small" onClick={(e) => setAnchorEl(e.currentTarget)}>
+              <IconButton
+                size="small"
+                onClick={(e) => setAnchorEl(e.currentTarget)}
+              >
                 <MoreVertIcon />
               </IconButton>
             )}
@@ -139,10 +147,27 @@ export default function TeamTaskItem({
             </Typography>
           )}
 
+          {/* assignment info (FIXED) */}
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ mt: 1, display: "block" }}
+          >
+            Assigned to: {resolveUserName(task.assignedTo)}
+          </Typography>
+
           {/* chips */}
           <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap" }}>
-            <Chip label={task.priority} color={priorityColors[task.priority]} size="small" />
-            <Chip label={task.status} color={statusColors[task.status]} size="small" />
+            <Chip
+              label={task.priority}
+              color={priorityColors[task.priority]}
+              size="small"
+            />
+            <Chip
+              label={task.status}
+              color={statusColors[task.status]}
+              size="small"
+            />
             <Chip
               icon={<AccessTimeIcon />}
               label={`${formatDate(task.dueDate)} • ${dueStatus.message}`}
@@ -191,7 +216,11 @@ export default function TeamTaskItem({
         </CardContent>
 
         {/* MENU */}
-        <Menu anchorEl={anchorEl} open={openMenu} onClose={() => setAnchorEl(null)}>
+        <Menu
+          anchorEl={anchorEl}
+          open={openMenu}
+          onClose={() => setAnchorEl(null)}
+        >
           {isAssignedToMe && task.status !== "completed" && (
             <MenuItem onClick={() => onQuickComplete(task._id)}>
               <CheckCircleIcon fontSize="small" sx={{ mr: 1 }} /> Complete

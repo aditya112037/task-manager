@@ -218,39 +218,35 @@ export default function TeamDetails() {
       showSnack(`Extension requested for task: ${task.title}`, "info");
     };
 
-    const handleExtensionApproved = (task) => {
-      console.log("extensionApproved event in TeamDetails:", task);
-      
-      const taskTeamId = task.team?._id || task.team;
-      if (taskTeamId !== teamId) return;
-      
-      // Update the task
-      setTeamTasks(prev => 
-        prev.map(t => t._id === task._id ? task : t)
-      );
-      
-      // Remove from pending extensions
-      setPendingExtensions(prev => prev.filter(t => t._id !== task._id));
-      
-      showSnack(`Extension approved for task: ${task.title}`, "success");
-    };
+const handleExtensionApproved = (task) => {
+  const taskTeamId = task.team?._id || task.team;
+  if (taskTeamId !== teamId) return;
 
-    const handleExtensionRejected = (task) => {
-      console.log("extensionRejected event in TeamDetails:", task);
-      
-      const taskTeamId = task.team?._id || task.team;
-      if (taskTeamId !== teamId) return;
-      
-      // Update the task
-      setTeamTasks(prev => 
-        prev.map(t => t._id === task._id ? task : t)
-      );
-      
-      // Remove from pending extensions
-      setPendingExtensions(prev => prev.filter(t => t._id !== task._id));
-      
-      showSnack(`Extension rejected for task: ${task.title}`, "warning");
-    };
+  // Update task list
+  setTeamTasks(prev =>
+    prev.map(t => t._id === task._id ? task : t)
+  );
+
+  // 🔥 FORCE remove from pending list
+  setPendingExtensions(prev =>
+    prev.filter(t => t._id !== task._id)
+  );
+};
+
+const handleExtensionRejected = (task) => {
+  const taskTeamId = task.team?._id || task.team;
+  if (taskTeamId !== teamId) return;
+
+  setTeamTasks(prev =>
+    prev.map(t => t._id === task._id ? task : t)
+  );
+
+  // 🔥 FORCE remove
+  setPendingExtensions(prev =>
+    prev.filter(t => t._id !== task._id)
+  );
+};
+
 
     const handleTeamUpdated = (updatedTeam) => {
       console.log("teamUpdated event in TeamDetails:", updatedTeam);
