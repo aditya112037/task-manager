@@ -78,24 +78,14 @@ export const teamsAPI = {
 };
 
 // -------------------------
-// TEAM TASKS API (CLEAN)
+// TEAM TASKS API (SAFE VERSION - ONLY EXISTING ROUTES)
 // -------------------------
 export const teamTasksAPI = {
-  // ✅ Load ALL team tasks user has access to
-  getMyTeamTasks: (filters = {}) =>
-    api.get("/api/team-tasks/my/all", { params: filters }),
-
-  // ✅ Load tasks for ONE team
+  // ✅ ONLY THIS EXISTS in your backend (from TTRoutes.js)
   getTeamTasks: (teamId, filters = {}) =>
     api.get(`/api/team-tasks/${teamId}`, { params: filters }),
 
-  // ✅ Load tasks for specific user in a team (admin/manager)
-  getUserTasks: (teamId, userId) =>
-    api.get(`/api/team-tasks/${teamId}/user/${userId}`),
-
-  // -----------------
-  // CRUD
-  // -----------------
+  // ✅ CRUD OPERATIONS (ALL EXIST)
   createTask: (teamId, data) =>
     api.post(`/api/team-tasks/${teamId}`, data),
 
@@ -105,9 +95,7 @@ export const teamTasksAPI = {
   deleteTask: (taskId) =>
     api.delete(`/api/team-tasks/${taskId}`),
 
-  // -----------------
-  // EXTENSION SYSTEM
-  // -----------------
+  // ✅ EXTENSION SYSTEM (ALL EXIST)
   requestExtension: (taskId, payload) =>
     api.post(`/api/team-tasks/${taskId}/request-extension`, payload),
 
@@ -119,6 +107,10 @@ export const teamTasksAPI = {
 
   getPendingExtensions: (teamId) =>
     api.get(`/api/team-tasks/${teamId}/extensions/pending`),
+  
+  // 🚨 REMOVED - THESE ROUTES DON'T EXIST (causing 404s):
+  // getMyTeamTasks: (filters = {}) => api.get("/api/team-tasks/my/all", { params: filters }),
+  // getUserTasks: (teamId, userId) => api.get(`/api/team-tasks/${teamId}/user/${userId}`),
 };
 
 // -------------------------
@@ -132,20 +124,19 @@ export const notificationsAPI = {
   clearAll: () => api.delete("/api/notifications"),
 };
 
-// -------------------- COMMENTS --------------------
+// -------------------- COMMENTS API (CRITICAL FIX) --------------------
 export const commentsAPI = {
-  getByTask(taskId) {
-    return api.get(`/team-tasks/${taskId}/comments`);
-  },
+  // ✅ CORRECT: Matches backend route /api/comments/:taskId
+  getByTask: (taskId) =>
+    api.get(`/api/comments/${taskId}`),
 
-  create(taskId, data) {
-    return api.post(`/team-tasks/${taskId}/comments`, data);
-  },
+  // ✅ CORRECT: Matches backend route POST /api/comments/:taskId
+  create: (taskId, data) =>
+    api.post(`/api/comments/${taskId}`, data),
 
-  delete(commentId) {
-    return api.delete(`/team-tasks/comments/${commentId}`);
-  },
+  // ✅ CORRECT: Matches backend route DELETE /api/comments/:commentId
+  delete: (commentId) =>
+    api.delete(`/api/comments/${commentId}`),
 };
-
 
 export default api;

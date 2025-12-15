@@ -20,6 +20,27 @@ function findMember(team, userId) {
   });
 }
 
+/* ---------------- GET ALL TEAM TASKS ---------------- */
+router.get("/:teamId", protect, async (req, res) => {
+  try {
+    const team = await Team.findById(req.params.teamId);
+    if (!team) return res.status(404).json({ message: "Team not found" });
+
+    const member = findMember(team, req.user._id);
+    if (!member) return res.status(403).json({ message: "Not authorized" });
+
+    const tasks = await TTask.find({ team: team._id })
+      .populate("assignedTo", "name photo")
+      .populate("createdBy", "name photo")
+      .sort({ createdAt: -1 });
+
+    res.json(tasks);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 /* ---------------- GET PENDING EXTENSIONS ---------------- */
 router.get("/:teamId/extensions/pending", protect, async (req, res) => {
   try {
@@ -38,79 +59,6 @@ router.get("/:teamId/extensions/pending", protect, async (req, res) => {
       .populate("extensionRequest.requestedBy", "name photo");
 
     res.json(tasks);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-/* ---------------- APPROVE EXTENSION ---------------- */
-router.post("/:taskId/extension/approve", protect, async (req, res) => {
-  try {
-    const task = await TTask.findById(req.params.taskId).populate("team");
-    if (!task) return res.status(404).json({ message: "Task not found" });
-
-    const member = findMember(task.team, req.user._id);
-    if (!member || !["admin", "manager"].includes(member.role))
-      return res.status(403).json({ message: "Not authorized" });
-
-    if (task.extensionRequest?.status !== "pending")
-      return res.status(400).json({ message: "No pending request" });
-
-    task.dueDate = task.extensionRequest.requestedDueDate;
-    task.extensionRequest.status = "approved";
-    task.extensionRequest.reviewedBy = req.user._id;
-    task.extensionRequest.reviewedAt = new Date();
-    await task.save();
-
-    await TaskComment.create({
-      task: task._id,
-      team: task.team._id,
-      type: "system",
-      action: "extension_approved",
-    });
-
-    emitToTeam(task.team._id, "extensionApproved", task);
-    emitToTeam(task.team._id, "taskUpdated", task);
-    emitToTeam(task.team._id, "commentCreated", { taskId: task._id });
-
-    res.json(task);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ message: "Server error" });
-  }
-});
-
-/* ---------------- REJECT EXTENSION ---------------- */
-router.post("/:taskId/extension/reject", protect, async (req, res) => {
-  try {
-    const task = await TTask.findById(req.params.taskId).populate("team");
-    if (!task) return res.status(404).json({ message: "Task not found" });
-
-    const member = findMember(task.team, req.user._id);
-    if (!member || !["admin", "manager"].includes(member.role))
-      return res.status(403).json({ message: "Not authorized" });
-
-    if (task.extensionRequest?.status !== "pending")
-      return res.status(400).json({ message: "No pending request" });
-
-    task.extensionRequest.status = "rejected";
-    task.extensionRequest.reviewedBy = req.user._id;
-    task.extensionRequest.reviewedAt = new Date();
-    await task.save();
-
-    await TaskComment.create({
-      task: task._id,
-      team: task.team._id,
-      type: "system",
-      action: "extension_rejected",
-    });
-
-    emitToTeam(task.team._id, "extensionRejected", task);
-    emitToTeam(task.team._id, "taskUpdated", task);
-    emitToTeam(task.team._id, "commentCreated", { taskId: task._id });
-
-    res.json(task);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -247,6 +195,79 @@ router.post("/:taskId/request-extension", protect, async (req, res) => {
     });
 
     emitToTeam(task.team._id, "extensionRequested", task);
+    emitToTeam(task.team._id, "commentCreated", { taskId: task._id });
+
+    res.json(task);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+/* ---------------- APPROVE EXTENSION ---------------- */
+router.post("/:taskId/extension/approve", protect, async (req, res) => {
+  try {
+    const task = await TTask.findById(req.params.taskId).populate("team");
+    if (!task) return res.status(404).json({ message: "Task not found" });
+
+    const member = findMember(task.team, req.user._id);
+    if (!member || !["admin", "manager"].includes(member.role))
+      return res.status(403).json({ message: "Not authorized" });
+
+    if (task.extensionRequest?.status !== "pending")
+      return res.status(400).json({ message: "No pending request" });
+
+    task.dueDate = task.extensionRequest.requestedDueDate;
+    task.extensionRequest.status = "approved";
+    task.extensionRequest.reviewedBy = req.user._id;
+    task.extensionRequest.reviewedAt = new Date();
+    await task.save();
+
+    await TaskComment.create({
+      task: task._id,
+      team: task.team._id,
+      type: "system",
+      action: "extension_approved",
+    });
+
+    emitToTeam(task.team._id, "extensionApproved", task);
+    emitToTeam(task.team._id, "taskUpdated", task);
+    emitToTeam(task.team._id, "commentCreated", { taskId: task._id });
+
+    res.json(task);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+/* ---------------- REJECT EXTENSION ---------------- */
+router.post("/:taskId/extension/reject", protect, async (req, res) => {
+  try {
+    const task = await TTask.findById(req.params.taskId).populate("team");
+    if (!task) return res.status(404).json({ message: "Task not found" });
+
+    const member = findMember(task.team, req.user._id);
+    if (!member || !["admin", "manager"].includes(member.role))
+      return res.status(403).json({ message: "Not authorized" });
+
+    if (task.extensionRequest?.status !== "pending")
+      return res.status(400).json({ message: "No pending request" });
+
+    task.extensionRequest.status = "rejected";
+    task.extensionRequest.reviewedBy = req.user._id;
+    task.extensionRequest.reviewedAt = new Date();
+    await task.save();
+
+    await TaskComment.create({
+      task: task._id,
+      team: task.team._id,
+      type: "system",
+      action: "extension_rejected",
+    });
+
+    emitToTeam(task.team._id, "extensionRejected", task);
+    emitToTeam(task.team._id, "taskUpdated", task);
     emitToTeam(task.team._id, "commentCreated", { taskId: task._id });
 
     res.json(task);
