@@ -12,6 +12,7 @@ import {
   Menu,
   MenuItem,
   Alert,
+  Collapse,
 } from "@mui/material";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import EditIcon from "@mui/icons-material/Edit";
@@ -20,8 +21,11 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import GoogleIcon from "@mui/icons-material/Google";
 import ScheduleIcon from "@mui/icons-material/Schedule";
+import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
+import ChatBubbleIcon from "@mui/icons-material/ChatBubble";
 import { useTheme } from "@mui/material/styles";
 import ExtensionRequestModal from "./ExtensionRequestModal";
+import TaskComments from "../Comments/TaskComments";
 
 /* ------------------ helpers ------------------ */
 const resolveId = (v) => (typeof v === "object" ? v?._id : v);
@@ -42,10 +46,12 @@ export default function TeamTaskItem({
   onQuickComplete,
   currentUserId,
   isAdminOrManager = false,
+  teamId,
 }) {
   const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState(null);
   const [openExtensionModal, setOpenExtensionModal] = useState(false);
+  const [showComments, setShowComments] = useState(false);
 
   const priorityColors = { high: "error", medium: "warning", low: "success" };
   const statusColors = {
@@ -212,7 +218,27 @@ export default function TeamTaskItem({
                 Review Request
               </Button>
             )}
+
+            {/* Comments toggle button */}
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={showComments ? <ChatBubbleIcon /> : <ChatBubbleOutlineIcon />}
+              onClick={() => setShowComments((v) => !v)}
+            >
+              {showComments ? "Hide Comments" : "Comments"}
+            </Button>
           </Stack>
+
+          {/* Comments section */}
+          <Collapse in={showComments}>
+            <Box sx={{ mt: 3, pt: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
+              <TaskComments
+                taskId={task._id}
+                myRole={isAdminOrManager ? "admin" : "member"}
+              />
+            </Box>
+          </Collapse>
         </CardContent>
 
         {/* MENU */}

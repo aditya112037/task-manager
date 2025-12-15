@@ -132,4 +132,20 @@ export const notificationsAPI = {
   clearAll: () => api.delete("/api/notifications"),
 };
 
+// -------------------- COMMENTS --------------------
+export const commentsAPI = {
+  getByTask(taskId) {
+    return api.get(`/team-tasks/${taskId}/comments`);
+  },
+
+  create(taskId, data) {
+    return api.post(`/team-tasks/${taskId}/comments`, data);
+  },
+
+  delete(commentId) {
+    return api.delete(`/team-tasks/comments/${commentId}`);
+  },
+};
+
+
 export default api;

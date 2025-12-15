@@ -1,4 +1,4 @@
-// TeamDetails.jsx - Fixed Version
+// TeamDetails.jsx - Fixed Version with Comments
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Box,
@@ -198,6 +198,21 @@ export default function TeamDetails() {
       showSnack(`Extension rejected for task: ${task.title}`, "warning");
     };
 
+    // Comment events - FRONTEND READY
+    const handleCommentCreated = ({ taskId, comment }) => {
+      // Dispatch custom event for TaskComments component
+      window.dispatchEvent(
+        new CustomEvent("comment:new", { detail: { taskId, comment } })
+      );
+    };
+
+    const handleCommentDeleted = ({ taskId, commentId }) => {
+      // Dispatch custom event for TaskComments component
+      window.dispatchEvent(
+        new CustomEvent("comment:delete", { detail: { taskId, commentId } })
+      );
+    };
+
     const handleTeamUpdated = (updatedTeam) => {
       if (String(updatedTeam._id) !== String(teamId)) return;
       setTeam(updatedTeam);
@@ -237,6 +252,8 @@ export default function TeamDetails() {
     socket.on("extensionRequested", handleExtensionRequested);
     socket.on("extensionApproved", handleExtensionApproved);
     socket.on("extensionRejected", handleExtensionRejected);
+    socket.on("commentCreated", handleCommentCreated);
+    socket.on("commentDeleted", handleCommentDeleted);
     socket.on("teamUpdated", handleTeamUpdated);
     socket.on("memberUpdated", handleMemberUpdated);
     socket.on("connect_error", handleConnectError);
@@ -255,6 +272,8 @@ export default function TeamDetails() {
         socket.off("extensionRequested", handleExtensionRequested);
         socket.off("extensionApproved", handleExtensionApproved);
         socket.off("extensionRejected", handleExtensionRejected);
+        socket.off("commentCreated", handleCommentCreated);
+        socket.off("commentDeleted", handleCommentDeleted);
         socket.off("teamUpdated", handleTeamUpdated);
         socket.off("memberUpdated", handleMemberUpdated);
         socket.off("connect_error", handleConnectError);
@@ -807,6 +826,7 @@ export default function TeamDetails() {
                   canEdit={canEditTasks || resolveUserId(t.assignedTo) === resolveUserId(user?._id)}
                   isAdminOrManager={canEditTasks}
                   currentUserId={resolveUserId(user?._id)}
+                  teamId={teamId}
                   onEdit={() => {
                     setEditingTask(t);
                     setShowTaskForm(true);
