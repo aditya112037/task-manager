@@ -2,29 +2,25 @@ const express = require("express");
 const router = express.Router();
 const TTask = require("../models/TTask");
 const Team = require("../models/team");
-const Notification = require("../models/Notification");
 const TaskComment = require("../models/TaskComment");
 const { protect } = require("../middleware/auth");
 
-// Socket.IO
+// Socket helper
 const io = global._io;
 const emitToTeam = (teamId, event, payload) => {
-  if (io) io.to(String(teamId)).emit(event, payload);
+  if (!io) return;
+  io.to(`team_${teamId}`).emit(event, payload);
 };
 
-/* ---------------------------------------------------
-   🔧 Helper: Safe Member Lookup
---------------------------------------------------- */
+/* ---------------- Helper ---------------- */
 function findMember(team, userId) {
   return team.members.find((m) => {
-    const memberId = m.user?._id || m.user;
-    return String(memberId) === String(userId);
+    const id = m.user?._id || m.user;
+    return String(id) === String(userId);
   });
 }
 
-/* ---------------------------------------------------
-   1️⃣ GET PENDING EXTENSIONS
---------------------------------------------------- */
+/* ---------------- GET PENDING EXTENSIONS ---------------- */
 router.get("/:teamId/extensions/pending", protect, async (req, res) => {
   try {
     const team = await Team.findById(req.params.teamId);
@@ -35,7 +31,7 @@ router.get("/:teamId/extensions/pending", protect, async (req, res) => {
       return res.status(403).json({ message: "Not authorized" });
 
     const tasks = await TTask.find({
-      team: req.params.teamId,
+      team: team._id,
       "extensionRequest.status": "pending",
     })
       .populate("assignedTo", "name photo")
@@ -48,9 +44,7 @@ router.get("/:teamId/extensions/pending", protect, async (req, res) => {
   }
 });
 
-/* ---------------------------------------------------
-   2️⃣ APPROVE EXTENSION
---------------------------------------------------- */
+/* ---------------- APPROVE EXTENSION ---------------- */
 router.post("/:taskId/extension/approve", protect, async (req, res) => {
   try {
     const task = await TTask.findById(req.params.taskId).populate("team");
@@ -59,6 +53,9 @@ router.post("/:taskId/extension/approve", protect, async (req, res) => {
     const member = findMember(task.team, req.user._id);
     if (!member || !["admin", "manager"].includes(member.role))
       return res.status(403).json({ message: "Not authorized" });
+
+    if (task.extensionRequest?.status !== "pending")
+      return res.status(400).json({ message: "No pending request" });
 
     task.dueDate = task.extensionRequest.requestedDueDate;
     task.extensionRequest.status = "approved";
@@ -84,9 +81,7 @@ router.post("/:taskId/extension/approve", protect, async (req, res) => {
   }
 });
 
-/* ---------------------------------------------------
-   3️⃣ REJECT EXTENSION
---------------------------------------------------- */
+/* ---------------- REJECT EXTENSION ---------------- */
 router.post("/:taskId/extension/reject", protect, async (req, res) => {
   try {
     const task = await TTask.findById(req.params.taskId).populate("team");
@@ -95,6 +90,9 @@ router.post("/:taskId/extension/reject", protect, async (req, res) => {
     const member = findMember(task.team, req.user._id);
     if (!member || !["admin", "manager"].includes(member.role))
       return res.status(403).json({ message: "Not authorized" });
+
+    if (task.extensionRequest?.status !== "pending")
+      return res.status(400).json({ message: "No pending request" });
 
     task.extensionRequest.status = "rejected";
     task.extensionRequest.reviewedBy = req.user._id;
@@ -119,13 +117,12 @@ router.post("/:taskId/extension/reject", protect, async (req, res) => {
   }
 });
 
-/* ---------------------------------------------------
-   4️⃣ CREATE TASK
---------------------------------------------------- */
+/* ---------------- CREATE TASK ---------------- */
 router.post("/:teamId", protect, async (req, res) => {
   try {
     const team = await Team.findById(req.params.teamId);
     const member = findMember(team, req.user._id);
+
     if (!member || !["admin", "manager"].includes(member.role))
       return res.status(403).json({ message: "Not allowed" });
 
@@ -153,13 +150,14 @@ router.post("/:teamId", protect, async (req, res) => {
   }
 });
 
-/* ---------------------------------------------------
-   5️⃣ UPDATE TASK (WITH COMMENTS)
---------------------------------------------------- */
+/* ---------------- UPDATE TASK ---------------- */
 router.put("/:taskId", protect, async (req, res) => {
   try {
     const task = await TTask.findById(req.params.taskId).populate("team");
     if (!task) return res.status(404).json({ message: "Task not found" });
+
+    const member = findMember(task.team, req.user._id);
+    if (!member) return res.status(403).json({ message: "Not authorized" });
 
     const oldStatus = task.status;
     const oldAssigned = task.assignedTo?.toString();
@@ -200,45 +198,62 @@ router.put("/:taskId", protect, async (req, res) => {
   }
 });
 
-/* ---------------------------------------------------
-   6️⃣ DELETE TASK
---------------------------------------------------- */
+/* ---------------- DELETE TASK ---------------- */
 router.delete("/:taskId", protect, async (req, res) => {
-  const task = await TTask.findById(req.params.taskId).populate("team");
-  if (!task) return res.status(404).json({ message: "Task not found" });
+  try {
+    const task = await TTask.findById(req.params.taskId).populate("team");
+    if (!task) return res.status(404).json({ message: "Task not found" });
 
-  await task.deleteOne();
-  emitToTeam(task.team._id, "taskDeleted", task._id);
-  res.json({ message: "Task deleted" });
+    const member = findMember(task.team, req.user._id);
+    if (!member || !["admin", "manager"].includes(member.role))
+      return res.status(403).json({ message: "Not authorized" });
+
+    await task.deleteOne();
+    emitToTeam(task.team._id, "taskDeleted", task._id);
+
+    res.json({ message: "Task deleted" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
 });
 
-/* ---------------------------------------------------
-   7️⃣ REQUEST EXTENSION
---------------------------------------------------- */
+/* ---------------- REQUEST EXTENSION ---------------- */
 router.post("/:taskId/request-extension", protect, async (req, res) => {
-  const task = await TTask.findById(req.params.taskId).populate("team");
-  task.extensionRequest = {
-    requested: true,
-    requestedBy: req.user._id,
-    reason: req.body.reason,
-    requestedDueDate: new Date(req.body.requestedDueDate),
-    requestedAt: new Date(),
-    status: "pending",
-  };
-  await task.save();
+  try {
+    const task = await TTask.findById(req.params.taskId).populate("team");
+    if (!task) return res.status(404).json({ message: "Task not found" });
 
-  await TaskComment.create({
-    task: task._id,
-    team: task.team._id,
-    type: "system",
-    action: "extension_requested",
-    meta: req.body,
-  });
+    if (String(task.assignedTo) !== String(req.user._id))
+      return res.status(403).json({ message: "Not allowed" });
 
-  emitToTeam(task.team._id, "extensionRequested", task);
-  emitToTeam(task.team._id, "commentCreated", { taskId: task._id });
+    task.extensionRequest = {
+      requested: true,
+      requestedBy: req.user._id,
+      reason: req.body.reason,
+      requestedDueDate: new Date(req.body.requestedDueDate),
+      requestedAt: new Date(),
+      status: "pending",
+    };
 
-  res.json(task);
+    await task.save();
+
+    await TaskComment.create({
+      task: task._id,
+      team: task.team._id,
+      type: "system",
+      action: "extension_requested",
+      meta: req.body,
+    });
+
+    emitToTeam(task.team._id, "extensionRequested", task);
+    emitToTeam(task.team._id, "commentCreated", { taskId: task._id });
+
+    res.json(task);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
 });
 
 module.exports = router;

@@ -8,9 +8,7 @@ const { protect } = require("../middleware/auth");
 // socket
 const io = global._io;
 
-/* ---------------------------------------------------
-   Helper: find member
---------------------------------------------------- */
+/* ---------------- Helper ---------------- */
 function findMember(team, userId) {
   return team.members.find((m) => {
     const id = m.user?._id || m.user;
@@ -18,9 +16,7 @@ function findMember(team, userId) {
   });
 }
 
-/* ---------------------------------------------------
-   1️⃣ GET COMMENTS FOR TASK
---------------------------------------------------- */
+/* ---------------- GET COMMENTS ---------------- */
 router.get("/:taskId", protect, async (req, res) => {
   try {
     const task = await TTask.findById(req.params.taskId).populate("team");
@@ -35,18 +31,14 @@ router.get("/:taskId", protect, async (req, res) => {
 
     res.json(comments);
   } catch (err) {
-    console.error("Get comments error:", err);
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 });
 
-/* ---------------------------------------------------
-   2️⃣ CREATE COMMENT
---------------------------------------------------- */
+/* ---------------- CREATE COMMENT ---------------- */
 router.post("/:taskId", protect, async (req, res) => {
   try {
-    const { content } = req.body;
-
     const task = await TTask.findById(req.params.taskId).populate("team");
     if (!task) return res.status(404).json({ message: "Task not found" });
 
@@ -57,7 +49,7 @@ router.post("/:taskId", protect, async (req, res) => {
       task: task._id,
       team: task.team._id,
       author: req.user._id,
-      content,
+      content: req.body.content,
       type: "comment",
     });
 
@@ -70,14 +62,12 @@ router.post("/:taskId", protect, async (req, res) => {
 
     res.status(201).json(populated);
   } catch (err) {
-    console.error("Create comment error:", err);
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 });
 
-/* ---------------------------------------------------
-   3️⃣ DELETE COMMENT (ADMIN / MANAGER)
---------------------------------------------------- */
+/* ---------------- DELETE COMMENT (MODERATOR) ---------------- */
 router.delete("/:commentId", protect, async (req, res) => {
   try {
     const comment = await TaskComment.findById(req.params.commentId);
@@ -86,9 +76,8 @@ router.delete("/:commentId", protect, async (req, res) => {
     const team = await Team.findById(comment.team);
     const member = findMember(team, req.user._id);
 
-    if (!member || !["admin", "manager"].includes(member.role)) {
+    if (!member || !["admin", "manager"].includes(member.role))
       return res.status(403).json({ message: "Not authorized" });
-    }
 
     await comment.deleteOne();
 
@@ -99,7 +88,7 @@ router.delete("/:commentId", protect, async (req, res) => {
 
     res.json({ message: "Comment deleted" });
   } catch (err) {
-    console.error("Delete comment error:", err);
+    console.error(err);
     res.status(500).json({ message: "Server error" });
   }
 });
