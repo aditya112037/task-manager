@@ -97,27 +97,11 @@ const Dashboard = () => {
     });
 
     // Set up socket event listeners
-    const handleTaskCreated = (newTask) => {
-      console.log("taskCreated event received:", newTask);
-      
-      // Update teamTasks state
-      setTeamTasks(prev => {
-        const exists = prev.some(task => task._id === newTask._id);
-        if (exists) return prev;
-        return [...prev, newTask];
-      });
-      
-      // Update assignedTasks if task is assigned to current user
-      if (String(newTask.assignedTo?._id || newTask.assignedTo) === String(user?._id)) {
-        setAssignedTasks(prev => {
-          const exists = prev.some(task => task._id === newTask._id);
-          if (exists) return prev;
-          return [...prev, newTask];
-        });
-      }
-      
-      showSnack(`New task created: ${newTask.title}`, "info");
-    };
+    const handleTaskCreated = async () => {
+  await fetchTeamTasks();
+  await fetchAssignedTasks();
+};
+
 
     const handleTaskUpdated = (updatedTask) => {
       console.log("taskUpdated event received:", updatedTask);
