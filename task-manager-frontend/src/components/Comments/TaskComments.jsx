@@ -100,8 +100,7 @@ export default function TaskComments({ taskId, myRole }) {
       const newComment = res.data;
       
       // Update local state
-      setComments(prev => [...prev, newComment]);
-      
+    
       // Trigger global event for other users
      
     } catch (err) {
@@ -119,7 +118,7 @@ export default function TaskComments({ taskId, myRole }) {
       await commentsAPI.delete(commentId);
       
       // Update local state
-      setComments(prev => prev.filter(c => c._id !== commentId));
+      
       
       // Trigger global event for other users
       
