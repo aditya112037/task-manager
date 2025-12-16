@@ -18,7 +18,7 @@ import SendIcon from "@mui/icons-material/Send";
 import EmojiEmotionsIcon from "@mui/icons-material/EmojiEmotions";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
-import FormatQuoteIcon from "@mui/icons-icons/FormatQuote";
+import FormatQuoteIcon from "@mui/icons-material/FormatQuote";
 import { useState, useRef, useEffect } from "react";
 
 const QUICK_COMMENTS = [
