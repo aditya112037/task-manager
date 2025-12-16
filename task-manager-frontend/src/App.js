@@ -27,6 +27,81 @@ const PublicRoute = ({ children }) => {
   return !user ? children : <Navigate to="/" />;
 };
 
+function AppContent() {
+  const { user } = useAuth();
+  
+  // Initialize socket connection and set up comment listeners
+  useEffect(() => {
+    if (!user?._id) return;
+    
+    // Dynamically import socket service to avoid SSR issues
+    import("./services/socket").then(socketModule => {
+      const { initSocket, getSocket } = socketModule;
+      
+      // Initialize socket
+      initSocket(user._id);
+      const socket = getSocket();
+      
+      if (!socket) {
+        console.error("Socket not initialized");
+        return;
+      }
+
+      // Listen for comment events from backend
+      socket.on("commentCreated", ({ taskId, comment }) => {
+        console.log("commentCreated event received:", taskId, comment);
+        
+        // Dispatch event that TaskComments.jsx will listen for
+        window.dispatchEvent(
+          new CustomEvent("comment:refresh", {
+            detail: { taskId }
+          })
+        );
+        
+        // Also dispatch specific comment for instant UI update
+        window.dispatchEvent(
+          new CustomEvent("comment:new", {
+            detail: { taskId, comment }
+          })
+        );
+      });
+      
+      // Listen for comment deleted events
+      socket.on("commentDeleted", ({ taskId, commentId }) => {
+        console.log("commentDeleted event received:", taskId, commentId);
+        
+        window.dispatchEvent(
+          new CustomEvent("comment:delete", {
+            detail: { taskId, commentId }
+          })
+        );
+      });
+
+      // Handle socket connection events
+      socket.on("connect", () => {
+        console.log("Socket connected");
+      });
+
+      socket.on("disconnect", () => {
+        console.log("Socket disconnected");
+      });
+
+      socket.on("connect_error", (error) => {
+        console.error("Socket connection error:", error);
+      });
+    }).catch(err => {
+      console.error("Failed to load socket module:", err);
+    });
+
+    // Cleanup function
+    return () => {
+      // Cleanup will be handled by the socket service's disconnectSocket
+    };
+  }, [user]);
+
+  return null; // This component doesn't render anything
+}
+
 function App() {
   const [darkMode, setDarkMode] = useState(false);
 
@@ -42,42 +117,45 @@ function App() {
   };
 
   // ⭐ FULL Dark Mode Theme
-const theme = useMemo(
-  () =>
-    createTheme({
-      palette: {
-        mode: darkMode ? "dark" : "light",
-        background: {
-          default: darkMode ? "#121212" : "#f5f5f5",
-          paper: darkMode ? "#1E1E1E" : "#ffffff",
+  const theme = useMemo(
+    () =>
+      createTheme({
+        palette: {
+          mode: darkMode ? "dark" : "light",
+          background: {
+            default: darkMode ? "#121212" : "#f5f5f5",
+            paper: darkMode ? "#1E1E1E" : "#ffffff",
+          },
+          sidebar: {
+            main: darkMode ? "#1E1E1E" : "#1976d2",
+            hover: darkMode ? "#2d2d2d" : "#1565c0",
+            text: darkMode ? "#ffffff" : "#ffffff",
+          },
+          header: {
+            main: darkMode ? "#1F1F1F" : "#1976d2",
+          },
         },
-        sidebar: {
-          main: darkMode ? "#1E1E1E" : "#1976d2",
-          hover: darkMode ? "#2d2d2d" : "#1565c0",
-          text: darkMode ? "#ffffff" : "#ffffff",
-        },
-        header: {
-          main: darkMode ? "#1F1F1F" : "#1976d2",
-        },
-      },
-      components: {
-        MuiCssBaseline: {
-          styleOverrides: {
-            body: {
-              backgroundColor: darkMode ? "#121212" : "#f5f5f5",
-              transition: "background-color 0.3s ease",
+        components: {
+          MuiCssBaseline: {
+            styleOverrides: {
+              body: {
+                backgroundColor: darkMode ? "#121212" : "#f5f5f5",
+                transition: "background-color 0.3s ease",
+              },
             },
           },
         },
-      },
-    }),
-  [darkMode]
-);
+      }),
+    [darkMode]
+  );
 
   return (
     <AuthProvider>
       <ThemeProvider theme={theme}>
         <CssBaseline />
+        
+        {/* Socket Setup Component - runs after auth is initialized */}
+        <AppContent />
 
         <Router>
           <Routes>
@@ -100,16 +178,16 @@ const theme = useMemo(
             />
             <Route path="/oauth-success" element={<OAuthSuccess />} />
 
-              <Route
-  path="/join-team"
-  element={
-    <ProtectedRoute>
-      <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
-        <JoinTeam />
-      </Layout>
-    </ProtectedRoute>
-  }
-/>
+            <Route
+              path="/join-team"
+              element={
+                <ProtectedRoute>
+                  <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                    <JoinTeam />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
 
             <Route path="/join/:inviteCode" element={<JoinTeam />} />
 

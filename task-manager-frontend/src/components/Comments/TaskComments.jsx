@@ -1,5 +1,5 @@
 // src/components/Comments/TaskComments.jsx
-import { Box, Divider, Stack, Typography } from "@mui/material";
+import { Box, Divider, Stack, Typography, CircularProgress } from "@mui/material";
 import { useEffect, useState } from "react";
 import { commentsAPI } from "../../services/api";
 import CommentItem from "./CommentItem";
@@ -7,42 +7,142 @@ import CommentInput from "./CommentInput";
 import SystemComment from "./SystemComment";
 import { useAuth } from "../../context/AuthContext";
 
-/**
- * TEMP: frontend-only mock
- * Backend will replace this later
- */
-const mockStore = {};
-
 export default function TaskComments({ taskId, myRole }) {
   const { user } = useAuth();
   const [comments, setComments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
+  // 1️⃣ ALWAYS load comments from backend on mount
   useEffect(() => {
-    setComments(mockStore[taskId] || []);
+    if (!taskId) return;
+    
+    const loadComments = async () => {
+      try {
+        setLoading(true);
+        const res = await commentsAPI.getByTask(taskId);
+        setComments(res.data || []);
+        setError(null);
+      } catch (err) {
+        console.error("Failed to load comments:", err);
+        setError("Failed to load comments");
+        setComments([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadComments();
   }, [taskId]);
 
-  // REMOVED: Socket event listeners (backend uses socket.io, not DOM events)
-  // Will be re-implemented when socket hookup is done
+  // 2️⃣ Listen for socket events to refresh comments
+  useEffect(() => {
+    if (!taskId) return;
 
-  const addComment = (text) => {
-    const newComment = {
-      _id: Date.now().toString(),
-      task: taskId,
-      type: "comment", // ✅ FIXED: Backend uses "comment" not "user"
-      author: user,    // ✅ FIXED: Backend uses "author" not "user"
-      content: text,   // ✅ FIXED: Backend uses "content" not "text"
-      createdAt: new Date(),
+    // Listen for global comment refresh events
+    const handleCommentRefresh = (e) => {
+      if (e.detail.taskId !== taskId) return;
+      
+      // Refresh comments from backend
+      commentsAPI.getByTask(taskId)
+        .then(res => {
+          setComments(res.data || []);
+        })
+        .catch(err => {
+          console.error("Failed to refresh comments:", err);
+        });
     };
 
-    mockStore[taskId] = [...(mockStore[taskId] || []), newComment];
-    setComments([...mockStore[taskId]]);
+    // Listen for new comment events (optional - if you want to append instead of refresh)
+    const handleNewComment = (e) => {
+      if (e.detail.taskId !== taskId || !e.detail.comment) return;
+      
+      // Check if comment already exists to avoid duplicates
+      setComments(prev => {
+        if (prev.some(c => c._id === e.detail.comment._id)) {
+          return prev;
+        }
+        return [...prev, e.detail.comment];
+      });
+    };
+
+    // Listen for comment delete events
+    const handleDeleteComment = (e) => {
+      if (e.detail.taskId !== taskId) return;
+      
+      setComments(prev => prev.filter(c => c._id !== e.detail.commentId));
+    };
+
+    // Set up event listeners
+    window.addEventListener("comment:refresh", handleCommentRefresh);
+    window.addEventListener("comment:new", handleNewComment);
+    window.addEventListener("comment:delete", handleDeleteComment);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener("comment:refresh", handleCommentRefresh);
+      window.removeEventListener("comment:new", handleNewComment);
+      window.removeEventListener("comment:delete", handleDeleteComment);
+    };
+  }, [taskId]);
+
+  // 3️⃣ Real addComment function that saves to backend
+  const addComment = async (text) => {
+    if (!text.trim()) return;
+    
+    try {
+      // Send to backend
+      const res = await commentsAPI.create(taskId, {
+        content: text,
+        type: "comment"
+      });
+      
+      const newComment = res.data;
+      
+      // Update local state
+      setComments(prev => [...prev, newComment]);
+      
+      // Trigger global event for other users
+      window.dispatchEvent(
+        new CustomEvent("comment:created", {
+          detail: {
+            taskId,
+            comment: newComment
+          }
+        })
+      );
+      
+    } catch (err) {
+      console.error("Failed to add comment:", err);
+      // Show error to user
+      alert("Failed to post comment. Please try again.");
+    }
   };
 
-  const deleteComment = (commentId) => {
-    mockStore[taskId] = mockStore[taskId].filter(
-      (c) => c._id !== commentId
-    );
-    setComments([...mockStore[taskId]]);
+  // 4️⃣ Real deleteComment function
+  const deleteComment = async (commentId) => {
+    if (!window.confirm("Delete this comment?")) return;
+    
+    try {
+      await commentsAPI.delete(commentId);
+      
+      // Update local state
+      setComments(prev => prev.filter(c => c._id !== commentId));
+      
+      // Trigger global event for other users
+      window.dispatchEvent(
+        new CustomEvent("comment:deleted", {
+          detail: {
+            taskId,
+            commentId
+          }
+        })
+      );
+      
+    } catch (err) {
+      console.error("Failed to delete comment:", err);
+      alert("Failed to delete comment. Please try again.");
+    }
   };
 
   return (
@@ -53,42 +153,51 @@ export default function TaskComments({ taskId, myRole }) {
 
       <Divider sx={{ mb: 2 }} />
 
-      <Stack spacing={1.5}>
-        {/* ✅ FIXED: Frontend guard with proper data mapping */}
-        {comments
-          .filter(Boolean) // Filter out null/undefined
-          .map((c) => {
-            // Guard: Check if comment has required properties
-            if (!c || !c.type) {
-              console.warn("Invalid comment in list:", c);
-              return null;
-            }
+      {loading ? (
+        <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
+          <CircularProgress size={24} />
+        </Box>
+      ) : error ? (
+        <Typography color="error" variant="body2" sx={{ py: 2, textAlign: 'center' }}>
+          {error}
+        </Typography>
+      ) : (
+        <Stack spacing={1.5}>
+          {/* ✅ Properly render comments with backend data structure */}
+          {comments
+            .filter(Boolean) // Filter out null/undefined
+            .map((c) => {
+              // Guard: Check if comment has required properties
+              if (!c || !c.type) {
+                console.warn("Invalid comment in list:", c);
+                return null;
+              }
 
-            if (c.type === "system") {
-              return <SystemComment key={c._id || c.id} comment={c} />;
-            }
+              if (c.type === "system") {
+                return <SystemComment key={c._id || c.id} comment={c} />;
+              }
 
-            // ✅ FIXED: Now correctly maps to "comment" type
-            // Backend: type: "comment" | "system"
-            return (
-              <CommentItem
-                key={c._id || c.id}
-                comment={c}
-                myRole={myRole}
-                onDelete={deleteComment}
-              />
-            );
-          })}
-        
-        {/* ✅ OPTIONAL: Empty state UI */}
-        {comments.length === 0 && (
-          <Typography color="text.secondary" variant="body2" sx={{ py: 2, textAlign: 'center' }}>
-            No comments yet. Start the conversation!
-          </Typography>
-        )}
-      </Stack>
+              // User comment
+              return (
+                <CommentItem
+                  key={c._id || c.id}
+                  comment={c}
+                  myRole={myRole}
+                  onDelete={deleteComment}
+                />
+              );
+            })}
+          
+          {/* ✅ Empty state */}
+          {comments.length === 0 && (
+            <Typography color="text.secondary" variant="body2" sx={{ py: 2, textAlign: 'center' }}>
+              No comments yet. Start the conversation!
+            </Typography>
+          )}
+        </Stack>
+      )}
 
-      <CommentInput onSend={addComment} />
+      <CommentInput onSend={addComment} disabled={loading} />
     </Box>
   );
 }
