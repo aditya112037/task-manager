@@ -16,7 +16,7 @@ import {
 } from "@mui/material";
 import SendIcon from "@mui/icons-material/Send";
 import EmojiEmotionsIcon from "@mui/icons-material/EmojiEmotions";
-import AttachFileIcon from "@mui/icons-icons/AttachFile";
+import AttachFileIcon from "@mui/icons-material/AttachFile";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import FormatQuoteIcon from "@mui/icons-icons/FormatQuote";
 import { useState, useRef, useEffect } from "react";
