@@ -195,18 +195,7 @@ export default function SystemComment({ comment }) {
         justifyContent: "center",
         my: 2,
         position: "relative",
-        "&::before": {
-          content: '""',
-          position: "absolute",
-          top: "50%",
-          left: 0,
-          right: 0,
-          height: "1px",
-          backgroundColor: isDarkMode 
-            ? alpha(theme.palette.divider, 0.3)
-            : alpha(theme.palette.divider, 0.5),
-          zIndex: 0,
-        },
+        
       }}
     >
       <Box

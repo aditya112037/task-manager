@@ -103,15 +103,7 @@ export default function TaskComments({ taskId, myRole }) {
       setComments(prev => [...prev, newComment]);
       
       // Trigger global event for other users
-      window.dispatchEvent(
-        new CustomEvent("comment:created", {
-          detail: {
-            taskId,
-            comment: newComment
-          }
-        })
-      );
-      
+     
     } catch (err) {
       console.error("Failed to add comment:", err);
       // Show error to user
@@ -130,14 +122,7 @@ export default function TaskComments({ taskId, myRole }) {
       setComments(prev => prev.filter(c => c._id !== commentId));
       
       // Trigger global event for other users
-      window.dispatchEvent(
-        new CustomEvent("comment:deleted", {
-          detail: {
-            taskId,
-            commentId
-          }
-        })
-      );
+      
       
     } catch (err) {
       console.error("Failed to delete comment:", err);
