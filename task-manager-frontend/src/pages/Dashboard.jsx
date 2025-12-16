@@ -69,22 +69,27 @@ const Dashboard = () => {
   const teamTasksByTeam = useMemo(() => {
     const grouped = {};
     teamTasks.forEach(t => {
+      // ✅ FIXED: Handle both populated team object and team ID string
       const teamId = t.team?._id || t.team;
+      const teamName = t.team?.name || teams.find(team => team._id === teamId)?.name || "Unknown Team";
+      const teamColor = t.team?.color || teams.find(team => team._id === teamId)?.color;
+      const teamIcon = t.team?.icon || teams.find(team => team._id === teamId)?.icon;
+      
       if (!teamId) return;
       
       if (!grouped[teamId]) {
         grouped[teamId] = {
           id: teamId,
-          name: t.team?.name || "Unknown Team",
-          icon: t.team?.icon,
-          color: t.team?.color,
+          name: teamName, // ✅ Now uses actual team name
+          icon: teamIcon,
+          color: teamColor,
           tasks: []
         };
       }
       grouped[teamId].tasks.push(t);
     });
     return grouped;
-  }, [teamTasks]);
+  }, [teamTasks, teams]); // ✅ Added teams dependency
 
   // Join team rooms and set up socket listeners
   useEffect(() => {
@@ -98,25 +103,41 @@ const Dashboard = () => {
 
     // Set up socket event listeners
     const handleTaskCreated = async () => {
-  await fetchTeamTasks();
-  await fetchAssignedTasks();
-};
-
+      await fetchTeamTasks(); // ✅ Refreshes tasks with proper team data
+      await fetchAssignedTasks();
+    };
 
     const handleTaskUpdated = (updatedTask) => {
       console.log("taskUpdated event received:", updatedTask);
       
+      // ✅ FIXED: Merge team info if missing from socket data
+      const enrichTaskWithTeam = (task) => {
+        if (task.team && typeof task.team === 'object' && task.team.name) {
+          return task; // Already has populated team
+        }
+        
+        // Find team info from our local teams data
+        const teamId = task.team?._id || task.team;
+        const team = teams.find(t => t._id === teamId);
+        if (team) {
+          return { ...task, team };
+        }
+        return task;
+      };
+      
+      const enrichedTask = enrichTaskWithTeam(updatedTask);
+      
       // Update teamTasks state
       setTeamTasks(prev => 
-        prev.map(task => task._id === updatedTask._id ? updatedTask : task)
+        prev.map(task => task._id === enrichedTask._id ? enrichedTask : task)
       );
       
       // Update assignedTasks
       setAssignedTasks(prev => 
-        prev.map(task => task._id === updatedTask._id ? updatedTask : task)
+        prev.map(task => task._id === enrichedTask._id ? enrichedTask : task)
       );
       
-      showSnack(`Task updated: ${updatedTask.title}`, "info");
+      showSnack(`Task updated: ${enrichedTask.title}`, "info");
     };
 
     const handleTaskDeleted = (deletedTaskId) => {
@@ -134,24 +155,36 @@ const Dashboard = () => {
     const handleExtensionRequested = (task) => {
       console.log("extensionRequested event received:", task);
       
+      // ✅ FIXED: Merge team info
+      const enrichTaskWithTeam = (task) => {
+        if (task.team && typeof task.team === 'object' && task.team.name) {
+          return task;
+        }
+        const teamId = task.team?._id || task.team;
+        const team = teams.find(t => t._id === teamId);
+        return team ? { ...task, team } : task;
+      };
+      
+      const enrichedTask = enrichTaskWithTeam(task);
+      
       // Update the specific task
       setTeamTasks(prev => 
-        prev.map(t => t._id === task._id ? task : t)
+        prev.map(t => t._id === enrichedTask._id ? enrichedTask : t)
       );
       
       setAssignedTasks(prev => 
-        prev.map(t => t._id === task._id ? task : t)
+        prev.map(t => t._id === enrichedTask._id ? enrichedTask : t)
       );
       
       // Show notification based on user role
-      const team = teams.find(t => t._id === (task.team?._id || task.team));
+      const team = teams.find(t => t._id === (enrichedTask.team?._id || enrichedTask.team));
       const userRole = team?.members?.find(m => 
         String(m.user?._id || m.user) === String(user?._id)
       )?.role;
       
       if (userRole === "admin" || userRole === "manager") {
-        showSnack(`Extension requested for task: ${task.title}`, "info");
-      } else if (String(task.assignedTo?._id || task.assignedTo) === String(user?._id)) {
+        showSnack(`Extension requested for task: ${enrichedTask.title}`, "info");
+      } else if (String(enrichedTask.assignedTo?._id || enrichedTask.assignedTo) === String(user?._id)) {
         showSnack("Your extension request has been submitted", "info");
       }
     };
@@ -159,36 +192,60 @@ const Dashboard = () => {
     const handleExtensionApproved = (task) => {
       console.log("extensionApproved event received:", task);
       
+      // ✅ FIXED: Merge team info
+      const enrichTaskWithTeam = (task) => {
+        if (task.team && typeof task.team === 'object' && task.team.name) {
+          return task;
+        }
+        const teamId = task.team?._id || task.team;
+        const team = teams.find(t => t._id === teamId);
+        return team ? { ...task, team } : task;
+      };
+      
+      const enrichedTask = enrichTaskWithTeam(task);
+      
       // Update the task
       setTeamTasks(prev => 
-        prev.map(t => t._id === task._id ? task : t)
+        prev.map(t => t._id === enrichedTask._id ? enrichedTask : t)
       );
       
       setAssignedTasks(prev => 
-        prev.map(t => t._id === task._id ? task : t)
+        prev.map(t => t._id === enrichedTask._id ? enrichedTask : t)
       );
       
       // If current user requested the extension
-      if (String(task.assignedTo?._id || task.assignedTo) === String(user?._id)) {
-        showSnack(`Extension approved for task: ${task.title}`, "success");
+      if (String(enrichedTask.assignedTo?._id || enrichedTask.assignedTo) === String(user?._id)) {
+        showSnack(`Extension approved for task: ${enrichedTask.title}`, "success");
       }
     };
 
     const handleExtensionRejected = (task) => {
       console.log("extensionRejected event received:", task);
       
+      // ✅ FIXED: Merge team info
+      const enrichTaskWithTeam = (task) => {
+        if (task.team && typeof task.team === 'object' && task.team.name) {
+          return task;
+        }
+        const teamId = task.team?._id || task.team;
+        const team = teams.find(t => t._id === teamId);
+        return team ? { ...task, team } : task;
+      };
+      
+      const enrichedTask = enrichTaskWithTeam(task);
+      
       // Update the task
       setTeamTasks(prev => 
-        prev.map(t => t._id === task._id ? task : t)
+        prev.map(t => t._id === enrichedTask._id ? enrichedTask : t)
       );
       
       setAssignedTasks(prev => 
-        prev.map(t => t._id === task._id ? task : t)
+        prev.map(t => t._id === enrichedTask._id ? enrichedTask : t)
       );
       
       // If current user requested the extension
-      if (String(task.assignedTo?._id || task.assignedTo) === String(user?._id)) {
-        showSnack(`Extension rejected for task: ${task.title}`, "warning");
+      if (String(enrichedTask.assignedTo?._id || enrichedTask.assignedTo) === String(user?._id)) {
+        showSnack(`Extension rejected for task: ${enrichedTask.title}`, "warning");
       }
     };
 
@@ -229,7 +286,7 @@ const Dashboard = () => {
         socket.off("reconnect");
       }
     };
-  }, [teams.length, user?._id]);
+  }, [teams, user?._id]);
 
   // fetch user's teams
   const fetchTeams = useCallback(async () => {
@@ -246,7 +303,7 @@ const Dashboard = () => {
     }
   }, []);
 
-  // fetch all team tasks
+  // ✅ FIXED: fetch all team tasks WITH TEAM DATA
   const fetchTeamTasks = useCallback(async () => {
     setLoading(s => ({ ...s, teamTasks: true }));
     setError(e => ({ ...e, teamTasks: null }));
@@ -257,7 +314,14 @@ const Dashboard = () => {
       for (const team of teams) {
         try {
           const res = await teamTasksAPI.getTeamTasks(team._id);
-          if (Array.isArray(res.data)) allTasks = allTasks.concat(res.data);
+          if (Array.isArray(res.data)) {
+            // ✅ CRITICAL FIX: Attach full team object to each task
+            const tasksWithTeam = res.data.map(task => ({
+              ...task,
+              team: team  // This ensures task.team is a full object with name, color, etc.
+            }));
+            allTasks = allTasks.concat(tasksWithTeam);
+          }
         } catch (err) {
           console.warn(`Failed to load tasks for team ${team._id}`);
           setError(e => ({ ...e, teamTasks: "Failed to load some team tasks" }));
@@ -273,7 +337,7 @@ const Dashboard = () => {
     }
   }, [teams]);
 
-  // fetch "assigned to me" tasks
+  // ✅ FIXED: fetch "assigned to me" tasks WITH TEAM DATA
   const fetchAssignedTasks = useCallback(async () => {
     setLoading(s => ({ ...s, assigned: true }));
     setError(e => ({ ...e, assigned: null }));
@@ -286,7 +350,13 @@ const Dashboard = () => {
           const res = await teamTasksAPI.getTeamTasks(team._id);
           const tasks = res.data || [];
 
-          const mine = tasks.filter(
+          // Attach team data before filtering
+          const tasksWithTeam = tasks.map(task => ({
+            ...task,
+            team: team  // ✅ Attach team object
+          }));
+
+          const mine = tasksWithTeam.filter(
             t => String(t.assignedTo?._id || t.assignedTo) === String(user?._id)
           );
 
@@ -684,7 +754,7 @@ const Dashboard = () => {
                           </Box>
                           <Box>
                             <Typography variant="h6" fontWeight={700}>
-                              {g.name}
+                              {g.name} {/* ✅ Now shows actual team name instead of "Unknown Team" */}
                             </Typography>
                             <Typography variant="body2" color="text.secondary">
                               {g.tasks.length} task{g.tasks.length > 1 ? 's' : ''} • {role ? `Your role: ${role}` : 'Member'} • Live Updates
