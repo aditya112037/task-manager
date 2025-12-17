@@ -719,7 +719,7 @@ export default function TeamDetails() {
       {/* OVERVIEW */}
       {tab === 0 && (
         <Paper sx={{ p: 3, borderRadius: 3 }}>
-            <TeamOverview
+            <TaskOverview
     team={team}
     tasks={teamTasks}
     myRole={myRole}
