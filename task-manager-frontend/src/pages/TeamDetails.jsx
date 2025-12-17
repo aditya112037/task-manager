@@ -35,6 +35,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { teamsAPI, teamTasksAPI } from "../services/api";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import TeamTaskForm from "../components/Teams/TeamTaskForm";
+import TeamOverview from "../components/Teams/Overview/overview";
 import { useAuth } from "../context/AuthContext";
 import { initSocket, getSocket, disconnectSocket } from "../services/socket";
 /* ---------------------------------------------------
