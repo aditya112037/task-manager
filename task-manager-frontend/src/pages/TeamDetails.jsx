@@ -31,14 +31,13 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ExitToAppIcon from "@mui/icons-material/ExitToApp";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { teamsAPI, teamTasksAPI } from "../services/api";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import TeamTaskForm from "../components/Teams/TeamTaskForm";
 import { useAuth } from "../context/AuthContext";
 import { initSocket, getSocket, disconnectSocket } from "../services/socket";
-
+import TeamOverview from "../components/Teams/Overview/overview";
 /* ---------------------------------------------------
    SAFE MEMBER RESOLVER (prevents all crashes)
 --------------------------------------------------- */
@@ -720,23 +719,12 @@ export default function TeamDetails() {
       {/* OVERVIEW */}
       {tab === 0 && (
         <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Typography variant="h6" fontWeight={700}>Overview</Typography>
-          <Stack spacing={2} sx={{ mt: 2 }}>
-            <Box>
-              <Typography color="text.secondary">Total Members</Typography>
-              <Typography variant="h5">{team.members?.length || 0}</Typography>
-            </Box>
-            <Box>
-              <Typography color="text.secondary">Total Tasks</Typography>
-              <Typography variant="h5">{teamTasks.length}</Typography>
-            </Box>
-            <Box>
-              <Typography color="text.secondary">Completed Tasks</Typography>
-              <Typography variant="h5">
-                {teamTasks.filter((t) => t.status === "completed").length}
-              </Typography>
-            </Box>
-          </Stack>
+                <TeamOverview
+                  team={team}
+                  tasks={teamTasks}
+                  myRole={myRole}
+                />
+
           <Button sx={{ mt: 3 }} variant="outlined" startIcon={<ContentCopyIcon />} onClick={handleCopyInviteLink}>
             Copy Invite Link
           </Button>

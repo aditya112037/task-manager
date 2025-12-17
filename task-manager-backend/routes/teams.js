@@ -279,6 +279,9 @@ router.get("/my/tasks", protect, async (req, res) => {
   }
 });
 
+
+
+
 // ----------------------------------------------------
 // NEW: TRANSFER ADMIN ROLE (ADMIN ONLY)
 // ----------------------------------------------------
@@ -328,6 +331,119 @@ router.put("/:teamId/transfer-admin/:userId", protect, async (req, res) => {
     });
   } catch (err) {
     console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+
+
+
+// ----------------------------------------------------
+// TEAM OVERVIEW ANALYTICS (NEW)
+// ----------------------------------------------------
+router.get("/:teamId/overview", protect, async (req, res) => {
+  try {
+    const teamId = req.params.teamId;
+
+    // 1️⃣ Verify team + membership
+    const team = await Team.findById(teamId).populate("members.user", "_id name photo");
+    if (!team) return res.status(404).json({ message: "Team not found" });
+
+    const isMember = team.members.some(
+      m => String(m.user?._id || m.user) === String(req.user._id)
+    );
+    if (!isMember) return res.status(403).json({ message: "Not authorized" });
+
+    const now = new Date();
+    const riskWindow = new Date(now.getTime() + 48 * 60 * 60 * 1000);
+
+    // 2️⃣ Fetch tasks
+    const tasks = await TTask.find({ team: teamId })
+      .populate("assignedTo", "name photo")
+      .lean();
+
+    // 3️⃣ KPIs
+    const total = tasks.length;
+    const completed = tasks.filter(t => t.status === "completed").length;
+    const overdue = tasks.filter(
+      t => t.status !== "completed" && t.dueDate && t.dueDate < now
+    ).length;
+    const atRisk = tasks.filter(
+      t =>
+        t.status !== "completed" &&
+        t.dueDate &&
+        t.dueDate >= now &&
+        t.dueDate <= riskWindow
+    ).length;
+
+    // 4️⃣ Workload per member
+    const workloadMap = {};
+    tasks.forEach(t => {
+      if (!t.assignedTo) return;
+
+      const id = t.assignedTo._id.toString();
+      if (!workloadMap[id]) {
+        workloadMap[id] = {
+          userId: id,
+          name: t.assignedTo.name,
+          photo: t.assignedTo.photo,
+          active: 0,
+          overdue: 0,
+        };
+      }
+
+      if (t.status !== "completed") {
+        workloadMap[id].active += 1;
+        if (t.dueDate && t.dueDate < now) {
+          workloadMap[id].overdue += 1;
+        }
+      }
+    });
+
+    const workload = Object.values(workloadMap);
+
+    // 5️⃣ Delivery health
+    let onTime = 0;
+    let late = 0;
+
+    tasks.forEach(t => {
+      if (t.status === "completed" && t.completedAt && t.dueDate) {
+        if (t.completedAt <= t.dueDate) onTime++;
+        else late++;
+      }
+    });
+
+    // 6️⃣ Status distribution
+    const statusDistribution = {
+      todo: 0,
+      "in-progress": 0,
+      completed: 0,
+    };
+
+    tasks.forEach(t => {
+      statusDistribution[t.status] += 1;
+    });
+
+    // 7️⃣ Recent activity (last 10)
+    const activity = await TaskComment.find({
+      team: teamId,
+      type: "system",
+    })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .populate("user", "name photo")
+      .lean();
+
+    // 8️⃣ Response
+    res.json({
+      kpis: { total, completed, overdue, atRisk },
+      workload,
+      delivery: { onTime, late, overdue },
+      statusDistribution,
+      activity,
+    });
+  } catch (err) {
+    console.error("Team overview error:", err);
     res.status(500).json({ message: "Server error" });
   }
 });
