@@ -42,11 +42,11 @@ const TeamAnalytics = ({ team, tasks = [], myRole }) => {
       {isManagerView && (
         <Box sx={styles.topRowContainer}>
           <Grid container spacing={3}>
-            <Grid item xs={12} md = {4}>
-              <Box sx={styles.chartPaper}>
-                <WorkloadChart data={workload} />
-              </Box>
-            </Grid>
+            <Grid item xs={12} md={4}>
+  <Box sx={styles.chartPaper}>
+    <WorkloadChart data={workload} />
+  </Box>
+</Grid>
           </Grid>
         </Box>
       )}
