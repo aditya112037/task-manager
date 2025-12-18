@@ -42,7 +42,7 @@ const TeamAnalytics = ({ team, tasks = [], myRole }) => {
       {isManagerView && (
         <Box sx={styles.topRowContainer}>
           <Grid container spacing={3}>
-            <Grid item xs={12}>
+            <Grid item xs={12} md = {4}>
               <Box sx={styles.chartPaper}>
                 <WorkloadChart data={workload} />
               </Box>
@@ -63,7 +63,7 @@ const TeamAnalytics = ({ team, tasks = [], myRole }) => {
   }}
 >
         {/* Task Status Distribution - Always visible */}
-        <Grid item xs={12} md={4}>
+        <Grid item xs={12}>
           <Box sx={styles.donutPaper}>
             <StatusDonut data={statusDist} />
           </Box>

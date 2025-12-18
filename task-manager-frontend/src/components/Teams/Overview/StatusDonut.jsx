@@ -42,12 +42,12 @@ const StatusDonut = ({ data = {} }) => {
                   dataKey="value"
                   nameKey="name"
                   cx="50%"
-                  cy="50%"
+                  cy="48%"
                   innerRadius="55%"
-                  outerRadius="72%"
+                  outerRadius="78%"
                   paddingAngle={2}
                   labelLine={false}
-                  label={(entry) => `${entry.name}: ${entry.value}`}
+                  
                 >
                   {chartData.map((entry, index) => (
                     <Cell
