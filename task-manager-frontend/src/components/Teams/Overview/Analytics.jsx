@@ -62,8 +62,7 @@ const Analytics = ({ team, tasks = [], myRole }) => {
       </Box>
 
       {/* ================= ANALYTICS GRID (ONE FLOW) ================= */}
-      {/* ================= ANALYTICS GRID ================= */}
-<Grid
+        <Grid
   container
   spacing={isManagerView ? 3 : 5}
   columnSpacing={isManagerView ? 3 : 5}
@@ -103,8 +102,17 @@ const Analytics = ({ team, tasks = [], myRole }) => {
       </Box>
     </Grid>
   )}
-</Grid>
 
+    
+        {/* AT RISK */}
+        {isManagerView && (
+          <Grid item xs={12} md={6} lg={3}>
+            <Box sx={styles.atRiskPaper}>
+              <AtRiskPanel tasks={atRiskTasks} />
+            </Box>
+          </Grid>
+        )}</Grid>
+      
 
       {/* ================= ACTIVITY FEED ================= */}
       <Box sx={{ mt: 4, maxWidth: 1200, mx: "auto" }}>
