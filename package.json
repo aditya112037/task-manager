@@ -5,6 +5,7 @@
     "nodemailer": "^7.0.10",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
+    "recharts": "^3.6.0",
     "resend": "^6.5.2",
     "socket.io": "^4.8.1"
   }
