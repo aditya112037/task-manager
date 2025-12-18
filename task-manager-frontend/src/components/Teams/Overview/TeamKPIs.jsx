@@ -4,6 +4,7 @@ import AssignmentIcon from "@mui/icons-material/Assignment";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import HourglassBottomIcon from "@mui/icons-material/HourglassBottom";
+import {styles} from "./overview.styles";
 
 /*
   Team KPI Row
