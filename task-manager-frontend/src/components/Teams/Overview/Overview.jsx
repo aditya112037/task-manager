@@ -23,7 +23,7 @@ import ActivityFeed from "./ActivityFeed";
   - myRole: "admin" | "manager" | "member"
 */
 
-const TaskOverview = ({ team, tasks, myRole }) => {
+const TeamOverview = ({ team, tasks, myRole }) => {
   const taskStats = getTaskStats(tasks);
   const workload = getWorkloadByMember(tasks, team.members || []);
   const deliveryHealth = getDeliveryHealth(tasks);
@@ -63,4 +63,4 @@ const TaskOverview = ({ team, tasks, myRole }) => {
   );
 };
 
-export default TaskOverview;
+export default TeamOverview;
