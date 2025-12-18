@@ -1,5 +1,5 @@
 import React from "react";
-import { Paper, Typography, Box } from "@mui/material";
+import { Paper, Typography, Box, alpha } from "@mui/material";
 import {
   PieChart,
   Pie,
