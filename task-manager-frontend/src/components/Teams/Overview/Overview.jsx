@@ -1,176 +1,66 @@
 import React from "react";
+import { Box, Grid } from "@mui/material";
+
 import {
-  Box,
-  Paper,
-  Typography,
-  Grid,
-  Divider,
-} from "@mui/material";
+  getTaskStats,
+  getWorkloadByMember,
+  getDeliveryHealth,
+  getStatusDistribution,
+} from "./overview.utils";
+
+import TeamKPIs from "./TeamKPIs";
+import StatusDonut from "./StatusDonut";
+import WorkloadChart from "./WorkloadChart";
+import DeliveryHealth from "./DeliveryHealth";
+import ActivityFeed from "./ActivityFeed";
 
 /*
-  Team Overview Skeleton
-  ----------------------
+  Team Overview
+  -------------
   Props:
   - team: Team object
   - tasks: Array of team tasks
   - myRole: "admin" | "manager" | "member"
 */
 
-const TaskOverview = ({ team, tasks, myRole }) => {
+const TeamOverview = ({ team, tasks, myRole }) => {
+  const taskStats = getTaskStats(tasks);
+  const workload = getWorkloadByMember(tasks, team.members || []);
+  const deliveryHealth = getDeliveryHealth(tasks);
+  const statusDist = getStatusDistribution(tasks);
+
   return (
     <Box sx={{ width: "100%" }}>
       
       {/* ================================
-          KPI SECTION (TOP)
+          KPI ROW
       ================================= */}
-      <Grid container spacing={2}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Paper sx={{ p: 2, borderRadius: 2 }}>
-            <Typography variant="body2" color="text.secondary">
-              Total Tasks
-            </Typography>
-            <Typography variant="h5" fontWeight={700}>
-              —
-            </Typography>
-          </Paper>
+      <TeamKPIs stats={taskStats} />
+
+      {/* ================================
+          ANALYTICS GRID
+      ================================= */}
+      <Grid container spacing={3} sx={{ mt: 1 }}>
+        
+        <Grid item xs={12} md={4}>
+          <StatusDonut data={statusDist} />
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
-          <Paper sx={{ p: 2, borderRadius: 2 }}>
-            <Typography variant="body2" color="text.secondary">
-              Completed
-            </Typography>
-            <Typography variant="h5" fontWeight={700}>
-              —
-            </Typography>
-          </Paper>
+        <Grid item xs={12} md={4}>
+          <WorkloadChart data={workload} />
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
-          <Paper sx={{ p: 2, borderRadius: 2 }}>
-            <Typography variant="body2" color="text.secondary">
-              Overdue
-            </Typography>
-            <Typography variant="h5" fontWeight={700}>
-              —
-            </Typography>
-          </Paper>
+        <Grid item xs={12} md={4}>
+          <DeliveryHealth data={deliveryHealth} />
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
-          <Paper sx={{ p: 2, borderRadius: 2 }}>
-            <Typography variant="body2" color="text.secondary">
-              At Risk
-            </Typography>
-            <Typography variant="h5" fontWeight={700}>
-              —
-            </Typography>
-          </Paper>
+        <Grid item xs={12}>
+          <ActivityFeed teamId={team._id} />
         </Grid>
+
       </Grid>
-
-      {/* ================================
-          WORKLOAD SECTION
-      ================================= */}
-      <Paper sx={{ p: 3, borderRadius: 3, mt: 3 }}>
-        <Typography variant="h6" fontWeight={700}>
-          Team Workload
-        </Typography>
-
-        <Typography
-          variant="body2"
-          color="text.secondary"
-          sx={{ mt: 1 }}
-        >
-          Tasks assigned per team member
-        </Typography>
-
-        <Box
-          sx={{
-            mt: 3,
-            height: 240,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "text.secondary",
-          }}
-        >
-          Workload chart goes here
-        </Box>
-      </Paper>
-
-      {/* ================================
-          DELIVERY + STATUS
-      ================================= */}
-      <Grid container spacing={2} sx={{ mt: 3 }}>
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, borderRadius: 3 }}>
-            <Typography variant="h6" fontWeight={700}>
-              Delivery Health
-            </Typography>
-
-            <Box
-              sx={{
-                mt: 3,
-                height: 200,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "text.secondary",
-              }}
-            >
-              Delivery chart goes here
-            </Box>
-          </Paper>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, borderRadius: 3 }}>
-            <Typography variant="h6" fontWeight={700}>
-              Task Status
-            </Typography>
-
-            <Box
-              sx={{
-                mt: 3,
-                height: 200,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "text.secondary",
-              }}
-            >
-              Status donut goes here
-            </Box>
-          </Paper>
-        </Grid>
-      </Grid>
-
-      {/* ================================
-          ACTIVITY FEED
-      ================================= */}
-      <Paper sx={{ p: 3, borderRadius: 3, mt: 3 }}>
-        <Typography variant="h6" fontWeight={700}>
-          Recent Activity
-        </Typography>
-
-        <Divider sx={{ my: 2 }} />
-
-        <Box
-          sx={{
-            height: 200,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "text.secondary",
-          }}
-        >
-          Activity feed goes here
-        </Box>
-      </Paper>
-
     </Box>
   );
 };
 
-export default TaskOverview;
+export default TeamOverview;
