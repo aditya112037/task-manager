@@ -9,6 +9,9 @@ import {
 import { getWorkloadByMember } from "./overview.utils";
 import WorkloadChart from "./WorkloadChart";
 
+import { getDeliveryHealth } from "./overview.utils";
+import DeliveryHealth from "./DeliveryHealth";
+
 import TeamKPIs from "./TeamKPIs";
 import StatusDonut from "./StatusDonut";
 
@@ -25,6 +28,7 @@ const TeamAnalytics = ({ team, tasks = [], myRole }) => {
   const stats = getTaskStats(tasks);
   const statusDist = getStatusDistribution(tasks);
   const workload = getWorkloadByMember(tasks, team?.members || []);
+  const deliveryHealth = getDeliveryHealth(tasks);
 
 
   return (
@@ -49,6 +53,13 @@ const TeamAnalytics = ({ team, tasks = [], myRole }) => {
           <StatusDonut data={statusDist} />
         </Grid>
       </Grid>
+
+      {/* ================= DELIVERY HEALTH ================= */}
+<Grid container spacing={3} sx={{ mt: 3 }}>
+  <Grid item xs={12} md={6}>
+    <DeliveryHealth data={deliveryHealth} />
+  </Grid>
+</Grid>
 
     </Box>
   );

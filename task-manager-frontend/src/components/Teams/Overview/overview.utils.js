@@ -63,6 +63,41 @@ export const getWorkloadByMember = (tasks = [], members = []) => {
   return Object.values(map);
 };
 
+// ---------------- DELIVERY HEALTH ----------------
+export const getDeliveryHealth = (tasks = []) => {
+  const now = new Date();
+
+  let completed = 0;
+  let overdue = 0;
+  let onTrack = 0;
+
+  tasks.forEach((task) => {
+    if (task.status === "completed") {
+      completed += 1;
+      return;
+    }
+
+    if (task.dueDate) {
+      const due = new Date(task.dueDate);
+      if (due < now) {
+        overdue += 1;
+      } else {
+        onTrack += 1;
+      }
+    } else {
+      // No due date = assume on track
+      onTrack += 1;
+    }
+  });
+
+  return {
+    completed,
+    overdue,
+    onTrack,
+    total: tasks.length,
+  };
+};
+
 
 /* ---------------- STATUS DISTRIBUTION ---------------- */
 
