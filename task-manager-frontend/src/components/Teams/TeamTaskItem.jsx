@@ -46,7 +46,6 @@ export default function TeamTaskItem({
   onQuickComplete,
   currentUserId,
   isAdminOrManager = false,
-  teamId,
 }) {
   const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState(null);
@@ -63,8 +62,15 @@ export default function TeamTaskItem({
   const isAssignedToMe =
     resolveId(task.assignedTo) === resolveId(currentUserId);
 
-  const ext = task.extensionRequest || {};
-  const hasPendingRequest = ext.requested && ext.status === "pending";
+  /* ------------------ PERMISSION RULES ------------------ */
+
+  const isUnassigned = !task.assignedTo;
+
+  const canCompleteTask =
+    task.status !== "completed" &&
+    (isAdminOrManager || isAssignedToMe || isUnassigned);
+
+  const canDeleteTask = isAdminOrManager;
 
   /* ------------------ due date logic ------------------ */
   const getDueDateStatus = () => {
@@ -81,9 +87,7 @@ export default function TeamTaskItem({
     if (days < 0)
       return {
         color: "error.main",
-        message: `Overdue by ${Math.abs(days)} day${
-          Math.abs(days) !== 1 ? "s" : ""
-        }`,
+        message: `Overdue by ${Math.abs(days)} day${Math.abs(days) !== 1 ? "s" : ""}`,
       };
     if (days === 0) return { color: "warning.main", message: "Due today" };
     if (days <= 2)
@@ -109,13 +113,11 @@ export default function TeamTaskItem({
 
     return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
       task.title
-    )}&details=${encodeURIComponent(task.description || "")}&dates=${f(s)}/${f(
-      e
-    )}`;
+    )}&details=${encodeURIComponent(task.description || "")}&dates=${f(s)}/${f(e)}`;
   };
 
   const openMenu = Boolean(anchorEl);
-  const showMenu = isAssignedToMe || canEdit || Boolean(task.dueDate);
+  const showMenu = canCompleteTask || canDeleteTask || Boolean(task.dueDate);
 
   return (
     <>
@@ -138,10 +140,7 @@ export default function TeamTaskItem({
             </Typography>
 
             {showMenu && (
-              <IconButton
-                size="small"
-                onClick={(e) => setAnchorEl(e.currentTarget)}
-              >
+              <IconButton size="small" onClick={(e) => setAnchorEl(e.currentTarget)}>
                 <MoreVertIcon />
               </IconButton>
             )}
@@ -153,7 +152,6 @@ export default function TeamTaskItem({
             </Typography>
           )}
 
-          {/* assignment info (FIXED) */}
           <Typography
             variant="caption"
             color="text.secondary"
@@ -162,18 +160,9 @@ export default function TeamTaskItem({
             Assigned to: {resolveUserName(task.assignedTo)}
           </Typography>
 
-          {/* chips */}
           <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap" }}>
-            <Chip
-              label={task.priority}
-              color={priorityColors[task.priority]}
-              size="small"
-            />
-            <Chip
-              label={task.status}
-              color={statusColors[task.status]}
-              size="small"
-            />
+            <Chip label={task.priority} color={priorityColors[task.priority]} size="small" />
+            <Chip label={task.status} color={statusColors[task.status]} size="small" />
             <Chip
               icon={<AccessTimeIcon />}
               label={`${formatDate(task.dueDate)} • ${dueStatus.message}`}
@@ -182,9 +171,9 @@ export default function TeamTaskItem({
             />
           </Stack>
 
-          {/* actions */}
+          {/* ACTIONS */}
           <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap" }}>
-            {isAssignedToMe && task.status !== "completed" && (
+            {canCompleteTask && (
               <Button
                 size="small"
                 color="success"
@@ -195,7 +184,7 @@ export default function TeamTaskItem({
               </Button>
             )}
 
-            {isAssignedToMe && !ext.requested && (
+            {isAssignedToMe && !task.extensionRequest?.requested && (
               <Button
                 size="small"
                 variant="outlined"
@@ -205,21 +194,6 @@ export default function TeamTaskItem({
               </Button>
             )}
 
-            {isAdminOrManager && hasPendingRequest && (
-              <Button
-                size="small"
-                variant="contained"
-                onClick={() =>
-                  (window.location.href = `/teams/${resolveId(
-                    task.team
-                  )}?tab=extensions`)
-                }
-              >
-                Review Request
-              </Button>
-            )}
-
-            {/* Comments toggle button */}
             <Button
               size="small"
               variant="outlined"
@@ -230,7 +204,6 @@ export default function TeamTaskItem({
             </Button>
           </Stack>
 
-          {/* Comments section */}
           <Collapse in={showComments}>
             <Box sx={{ mt: 3, pt: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
               <TaskComments
@@ -242,30 +215,30 @@ export default function TeamTaskItem({
         </CardContent>
 
         {/* MENU */}
-        <Menu
-          anchorEl={anchorEl}
-          open={openMenu}
-          onClose={() => setAnchorEl(null)}
-        >
-          {isAssignedToMe && task.status !== "completed" && (
+        <Menu anchorEl={anchorEl} open={openMenu} onClose={() => setAnchorEl(null)}>
+          {canCompleteTask && (
             <MenuItem onClick={() => onQuickComplete(task._id)}>
               <CheckCircleIcon fontSize="small" sx={{ mr: 1 }} /> Complete
             </MenuItem>
           )}
+
           <MenuItem onClick={() => window.open(getICSUrl(), "_blank")}>
             <ScheduleIcon fontSize="small" sx={{ mr: 1 }} /> Download ICS
           </MenuItem>
+
           {task.dueDate && (
             <MenuItem onClick={() => window.open(getGoogleUrl(), "_blank")}>
               <GoogleIcon fontSize="small" sx={{ mr: 1 }} /> Google Calendar
             </MenuItem>
           )}
+
           {canEdit && (
             <MenuItem onClick={() => onEdit(task)}>
               <EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit
             </MenuItem>
           )}
-          {canEdit && (
+
+          {canDeleteTask && (
             <MenuItem onClick={() => onDelete(task._id)}>
               <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Delete
             </MenuItem>
@@ -273,7 +246,6 @@ export default function TeamTaskItem({
         </Menu>
       </Card>
 
-      {/* EXTENSION MODAL */}
       <ExtensionRequestModal
         open={openExtensionModal}
         onClose={() => setOpenExtensionModal(false)}
