@@ -41,11 +41,8 @@ const TeamAnalytics = ({ team, tasks = [], myRole }) => {
   <Grid item xs={12} md={6}>
     <WorkloadChart data={workload} />
   </Grid>
+    </Grid>
 
-  <Grid item xs={12} md={6}>
-    <StatusDonut data={statusDist} />
-  </Grid>
-</Grid>
 
       {/* ================= STATUS DONUT ================= */}
       <Grid container spacing={3} sx={{ mt: 3 }}>
