@@ -137,3 +137,20 @@ export const getActivityFeed = (tasks = [], limit = 10) => {
     .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
     .slice(0, limit);
 };
+
+// ---------------- AT RISK TASKS ----------------
+export const getAtRiskTasks = (tasks = [], hours = 48) => {
+  const now = new Date();
+  const threshold = new Date(
+    now.getTime() + hours * 60 * 60 * 1000
+  );
+
+  return tasks.filter((task) => {
+    if (task.status === "completed") return false;
+    if (!task.dueDate) return false;
+
+    const due = new Date(task.dueDate);
+
+    return due > now && due <= threshold;
+  });
+};

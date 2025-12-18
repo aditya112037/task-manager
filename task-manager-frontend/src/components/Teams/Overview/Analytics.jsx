@@ -6,6 +6,10 @@ import {
   getStatusDistribution,
 } from "./overview.utils";
 
+import { getAtRiskTasks } from "./overview.utils";
+import AtRiskPanel from "./AtRiskPanel";
+
+
 import { getActivityFeed } from "./overview.utils";
 import ActivityFeed from "./ActivityFeed";
 
@@ -34,6 +38,8 @@ const TeamAnalytics = ({ team, tasks = [], myRole }) => {
   const workload = getWorkloadByMember(tasks, team?.members || []);
   const deliveryHealth = getDeliveryHealth(tasks);
   const activities = getActivityFeed(tasks, 10);
+  const atRiskTasks = getAtRiskTasks(tasks, 48);
+
 
 
 
@@ -63,6 +69,11 @@ const TeamAnalytics = ({ team, tasks = [], myRole }) => {
     <DeliveryHealth data={deliveryHealth} />
   </Grid>
 </Grid>
+
+  <Grid item xs={12} md={6}>
+    <AtRiskPanel tasks={atRiskTasks} />
+  </Grid>
+
 
     {/* ================= ACTIVITY FEED ================= */}
 <Grid container spacing={3} sx={{ mt: 3 }}>
