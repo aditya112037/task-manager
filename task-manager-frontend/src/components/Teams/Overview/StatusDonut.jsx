@@ -44,7 +44,7 @@ const StatusDonut = ({ data = {} }) => {
                   cx="50%"
                   cy="50%"
                   innerRadius="55%"
-                  outerRadius="80%"
+                  outerRadius="72%"
                   paddingAngle={2}
                   labelLine={false}
                   label={(entry) => `${entry.name}: ${entry.value}`}
@@ -66,7 +66,7 @@ const StatusDonut = ({ data = {} }) => {
                   layout="horizontal"
                   verticalAlign="bottom"
                   align="center"
-                  wrapperStyle={{ paddingTop: 20 }}
+                  wrapperStyle={{ marginTop: -10 }}
                 />
               </PieChart>
             </ResponsiveContainer>

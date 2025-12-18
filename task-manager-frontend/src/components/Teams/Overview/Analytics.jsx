@@ -34,7 +34,9 @@ const TeamAnalytics = ({ team, tasks = [], myRole }) => {
   return (
     <Box sx={styles.container}>
       {/* ================= FULL WIDTH KPIs ================= */}
-      <TeamKPIs stats={stats} />
+      <Box sx={{ maxWidth: 1200, mx: "auto" }}>
+  <TeamKPIs stats={stats} />
+</Box>
 
       {/* ================= FIRST ROW: WORKLOAD ONLY (Full Width for Managers) ================= */}
       {isManagerView && (
@@ -50,7 +52,16 @@ const TeamAnalytics = ({ team, tasks = [], myRole }) => {
       )}
 
       {/* ================= SECOND ROW: STATUS, DELIVERY, AT RISK ================= */}
-      <Grid container spacing={3} sx={styles.middleRowContainer}>
+      <Grid
+  container
+  spacing={3}
+  sx={{
+    mt: 3,
+    maxWidth: 1200,
+    mx: "auto",
+    alignItems: "stretch",
+  }}
+>
         {/* Task Status Distribution - Always visible */}
         <Grid item xs={12} md={4}>
           <Box sx={styles.donutPaper}>
