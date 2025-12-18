@@ -4,6 +4,8 @@ import {
   getTaskStats,
   getStatusDistribution,
 } from "./overview.utils";
+import StatusDonut from "./StatusDonut";
+
 
 /*
   Team Analytics (SAFE BASE)
@@ -29,19 +31,11 @@ const TeamAnalytics = ({ team, tasks = [], myRole }) => {
       </Grid>
 
       {/* ================= STATUS BREAKDOWN ================= */}
-      <Paper sx={{ p: 3, mt: 3, borderRadius: 3 }}>
-        <Typography variant="h6" fontWeight={700}>
-          Task Status Breakdown
-        </Typography>
-
-        <Box sx={{ mt: 2 }}>
-          {Object.entries(statusDist).map(([status, count]) => (
-            <Typography key={status} sx={{ mt: 0.5 }}>
-              {status.toUpperCase()}: <strong>{count}</strong>
-            </Typography>
-          ))}
-        </Box>
-      </Paper>
+      <Grid container spacing={3} sx={{ mt: 3 }}>
+  <Grid item xs={12} md={6}>
+    <StatusDonut data={statusDist} />
+  </Grid>
+</Grid>
     </Box>
   );
 };
