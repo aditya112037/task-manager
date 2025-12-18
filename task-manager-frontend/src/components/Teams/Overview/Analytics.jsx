@@ -8,11 +8,11 @@ import {
   getStatusDistribution,
 } from "./overview.utils";
 
-import TeamKPIs from "./TeamKPIs";
-import StatusDonut from "./StatusDonut";
-import WorkloadChart from "./WorkloadChart";
-import DeliveryHealth from "./DeliveryHealth";
-import ActivityFeed from "./ActivityFeed";
+import {TeamKPIs} from "./TeamKPIs";
+import {StatusDonut} from "./StatusDonut";
+import {WorkloadChart} from "./WorkloadChart";
+import {DeliveryHealth} from "./DeliveryHealth";
+import {ActivityFeed} from "./ActivityFeed";
 
 const TeamAnalytics = ({ team, tasks, myRole }) => {
   const taskStats = getTaskStats(tasks);
