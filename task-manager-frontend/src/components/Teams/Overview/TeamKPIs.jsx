@@ -4,18 +4,7 @@ import AssignmentIcon from "@mui/icons-material/Assignment";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import HourglassBottomIcon from "@mui/icons-material/HourglassBottom";
-import {styles} from "./overview.styles";
-
-/*
-  Team KPI Row
-  ------------
-  stats = {
-    total,
-    completed,
-    overdue,
-    pending
-  }
-*/
+import { styles } from "./overview.styles";
 
 const TeamKPIs = ({ stats }) => {
   const completionRate =
@@ -24,57 +13,61 @@ const TeamKPIs = ({ stats }) => {
       : Math.round((stats.completed / stats.total) * 100);
 
   return (
-    <Grid container spacing={2}>
-      <KpiCard
-        label="Total Tasks"
-        value={stats.total}
-        icon={<AssignmentIcon />}
-        color="#1976d2"
-      />
+    <Grid container spacing={2} sx={styles.kpiGridContainer}>
+      <Grid item xs={12} sm={6} md={3}>
+        <KpiCard
+          label="Total Tasks"
+          value={stats.total}
+          icon={<AssignmentIcon />}
+          color="#1976d2"
+        />
+      </Grid>
 
-      <KpiCard
-        label="Completed"
-        value={`${stats.completed} (${completionRate}%)`}
-        icon={<CheckCircleIcon />}
-        color="#2e7d32"
-      />
+      <Grid item xs={12} sm={6} md={3}>
+        <KpiCard
+          label="Completed"
+          value={`${stats.completed} (${completionRate}%)`}
+          icon={<CheckCircleIcon />}
+          color="#2e7d32"
+        />
+      </Grid>
 
-      <KpiCard
-        label="Overdue"
-        value={stats.overdue}
-        icon={<WarningAmberIcon />}
-        color="#d32f2f"
-      />
+      <Grid item xs={12} sm={6} md={3}>
+        <KpiCard
+          label="Overdue"
+          value={stats.overdue}
+          icon={<WarningAmberIcon />}
+          color="#d32f2f"
+        />
+      </Grid>
 
-      <KpiCard
-        label="Pending"
-        value={stats.pending}
-        icon={<HourglassBottomIcon />}
-        color="#ed6c02"
-      />
+      <Grid item xs={12} sm={6} md={3}>
+        <KpiCard
+          label="Pending"
+          value={stats.pending}
+          icon={<HourglassBottomIcon />}
+          color="#ed6c02"
+        />
+      </Grid>
     </Grid>
   );
 };
 
 /* ---------------- KPI CARD ---------------- */
-
 const KpiCard = ({ label, value, icon, color }) => (
-  <Grid item xs={12} sm={6} md={3}>
-    <Paper sx={styles.kpiCard}>
-      <Box sx={styles.kpiIconContainer(color)}>
-        {icon}
-      </Box>
-
-      <Box>
-        <Typography variant="body2" color="text.secondary">
-          {label}
-        </Typography>
-        <Typography variant="h6" fontWeight={700}>
-          {value}
-        </Typography>
-      </Box>
-    </Paper>
-  </Grid>
+  <Paper sx={styles.kpiCard}>
+    <Box sx={styles.kpiIconContainer(color)}>
+      {icon}
+    </Box>
+    <Box>
+      <Typography variant="body2" color="text.secondary">
+        {label}
+      </Typography>
+      <Typography variant="h6" fontWeight={700}>
+        {value}
+      </Typography>
+    </Box>
+  </Paper>
 );
 
 export default TeamKPIs;

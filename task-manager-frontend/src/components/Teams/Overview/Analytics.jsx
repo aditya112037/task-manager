@@ -33,45 +33,52 @@ const TeamAnalytics = ({ team, tasks = [], myRole }) => {
 
   return (
     <Box sx={styles.container}>
-      {/* ================= KPIs ================= */}
+      {/* ================= FULL WIDTH KPIs ================= */}
       <TeamKPIs stats={stats} />
 
-      {/* ================= WORKLOAD + STATUS (SIDE BY SIDE) ================= */}
-      <Grid container spacing={3} sx={styles.mainChartContainer}>
-        {isManagerView && (
-          <Grid item xs={12} md={6}>
-            <Box sx={styles.chartPaper}>
-              <WorkloadChart data={workload} />
-            </Box>
+      {/* ================= FIRST ROW: WORKLOAD ONLY (Full Width for Managers) ================= */}
+      {isManagerView && (
+        <Box sx={styles.topRowContainer}>
+          <Grid container spacing={3}>
+            <Grid item xs={12}>
+              <Box sx={styles.chartPaper}>
+                <WorkloadChart data={workload} />
+              </Box>
+            </Grid>
           </Grid>
-        )}
+        </Box>
+      )}
 
-        <Grid item xs={12} md={isManagerView ? 6 : 12}>
+      {/* ================= SECOND ROW: STATUS, DELIVERY, AT RISK ================= */}
+      <Grid container spacing={3} sx={styles.middleRowContainer}>
+        {/* Task Status Distribution - Always visible */}
+        <Grid item xs={12} md={4}>
           <Box sx={styles.donutPaper}>
             <StatusDonut data={statusDist} />
           </Box>
         </Grid>
-      </Grid>
 
-      {/* ================= DELIVERY + AT RISK (SIDE BY SIDE) ================= */}
-      {isManagerView && (
-        <Grid container spacing={3} sx={styles.mainChartContainer}>
-          <Grid item xs={12} md={6}>
+        {/* Delivery Health - Only for managers */}
+        {isManagerView && (
+          <Grid item xs={12} md={4}>
             <Box sx={styles.chartPaper}>
               <DeliveryHealth data={deliveryHealth} />
             </Box>
           </Grid>
+        )}
 
-          <Grid item xs={12} md={6}>
+        {/* At Risk Tasks - Only for managers */}
+        {isManagerView && (
+          <Grid item xs={12} md={4}>
             <Box sx={styles.atRiskPaper}>
               <AtRiskPanel tasks={atRiskTasks} />
             </Box>
           </Grid>
-        </Grid>
-      )}
+        )}
+      </Grid>
 
-      {/* ================= ACTIVITY FEED ================= */}
-      <Box sx={{ mt: { xs: 3, md: 4 } }}>
+      {/* ================= ACTIVITY FEED (Full Width) ================= */}
+      <Box sx={styles.activityFeedContainer}>
         <ActivityFeed activities={activities} />
       </Box>
     </Box>

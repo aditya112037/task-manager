@@ -1,4 +1,4 @@
-// overview.styles.js - UPDATED FOR SIDE-BY-SIDE LAYOUT
+// overview.styles.js - UPDATED LAYOUT
 import { alpha } from "@mui/material";
 
 export const styles = {
@@ -10,9 +10,16 @@ export const styles = {
     minHeight: "100vh",
   },
 
-  // ================= KPIs =================
-  kpiContainer: {
+  // ================= FULL WIDTH KPIs =================
+  kpiGridContainer: {
     spacing: { xs: 2, md: 3 },
+    width: "100%",
+  },
+
+  kpiGridItem: {
+    xs: 12,
+    sm: 6,
+    md: 3,
   },
 
   kpiCard: {
@@ -43,9 +50,15 @@ export const styles = {
     flexShrink: 0,
   }),
 
-  // ================= MAIN CHART CONTAINER =================
-  mainChartContainer: {
-    mt: { xs: 2, sm: 3, md: 4 },
+  // ================= TOP ROW: WORKLOAD + STATUS + WORKLOAD =================
+  topRowContainer: {
+    mt: { xs: 3, sm: 4, md: 4 },
+    spacing: { xs: 2, md: 3 },
+  },
+
+  // ================= MIDDLE ROW: DELIVERY + AT RISK + STATUS =================
+  middleRowContainer: {
+    mt: { xs: 2, sm: 3, md: 3 },
     spacing: { xs: 2, md: 3 },
   },
 
@@ -54,7 +67,7 @@ export const styles = {
     p: { xs: 2, sm: 3 },
     borderRadius: 3,
     height: "100%",
-    minHeight: 320,
+    minHeight: 340,
     display: "flex",
     flexDirection: "column",
     backgroundColor: "background.paper",
@@ -78,18 +91,18 @@ export const styles = {
     fontSize: { xs: "0.875rem", sm: "0.9375rem" },
   },
 
-  // ================= DONUT CHART SPECIFIC =================
+  // ================= DONUT CHART =================
   donutContainer: {
     width: "100%",
     height: "100%",
-    minHeight: 320,
+    minHeight: 340,
   },
 
   donutPaper: {
     p: { xs: 2, sm: 3 },
     borderRadius: 3,
     height: "100%",
-    minHeight: 320,
+    minHeight: 340,
     display: "flex",
     flexDirection: "column",
     backgroundColor: "background.paper",
@@ -99,7 +112,7 @@ export const styles = {
   },
 
   donutChartWrapper: {
-    height: 240,
+    height: 260,
     width: "100%",
     display: "flex",
     alignItems: "center",
@@ -194,7 +207,7 @@ export const styles = {
     p: { xs: 2, sm: 3 },
     borderRadius: 3,
     height: "100%",
-    minHeight: 320,
+    minHeight: 340,
     backgroundColor: "background.paper",
     boxShadow: "0 2px 12px rgba(0, 0, 0, 0.05)",
     border: "1px solid",
@@ -223,6 +236,10 @@ export const styles = {
   },
 
   // ================= ACTIVITY FEED =================
+  activityFeedContainer: {
+    mt: { xs: 3, sm: 4, md: 4 },
+  },
+
   activityPaper: {
     p: { xs: 2, sm: 3 },
     borderRadius: 3,
@@ -283,28 +300,6 @@ export const styles = {
     color: "text.secondary",
     textAlign: "center",
     fontSize: { xs: "0.875rem", sm: "0.9375rem" },
-  },
-
-  // ================= RESPONSIVE GRID =================
-  responsiveGrid: {
-    container: {
-      spacing: { xs: 2, sm: 3 },
-      mt: { xs: 2, sm: 3, md: 4 },
-    },
-    item: {
-      xs: 12,
-      md: 6,
-    },
-  },
-
-  // ================= COLORS =================
-  colors: {
-    success: "#2e7d32",
-    warning: "#ed6c02",
-    error: "#d32f2f",
-    info: "#1976d2",
-    primary: "#1976d2",
-    secondary: "#9c27b0",
   },
 };
 
