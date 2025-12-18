@@ -53,7 +53,16 @@ const TeamAnalytics = ({ team, tasks = [], myRole }) => {
         )}
 
         <Grid item xs={12} md={6}>
+            <Box
+  sx={{
+    height: 260,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  }}
+>
           <StatusDonut data={statusDist} />
+          </Box>
         </Grid>
       </Grid>
 
