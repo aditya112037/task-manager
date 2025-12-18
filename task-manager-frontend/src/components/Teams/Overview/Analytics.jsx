@@ -1,4 +1,4 @@
-import React from "react";
+import React , { useMemo } from "react";
 import { Box, Grid } from "@mui/material";
 
 import {
@@ -33,12 +33,36 @@ import StatusDonut from "./StatusDonut";
 */
 
 const TeamAnalytics = ({ team, tasks = [], myRole }) => {
-  const stats = getTaskStats(tasks);
-  const statusDist = getStatusDistribution(tasks);
-  const workload = getWorkloadByMember(tasks, team?.members || []);
-  const deliveryHealth = getDeliveryHealth(tasks);
-  const activities = getActivityFeed(tasks, 10);
-  const atRiskTasks = getAtRiskTasks(tasks, 48);
+  const stats = useMemo(
+  () => getTaskStats(tasks),
+  [tasks]
+);
+const statusDist = useMemo(
+  () => getStatusDistribution(tasks),
+  [tasks]
+);
+
+const workload = useMemo(
+  () => getWorkloadByMember(tasks, team?.members || []),
+  [tasks, team?.members]
+);
+
+const deliveryHealth = useMemo(
+  () => getDeliveryHealth(tasks),
+  [tasks]
+);
+
+const atRiskTasks = useMemo(
+  () => getAtRiskTasks(tasks, 48),
+  [tasks]
+);
+
+const activities = useMemo(
+  () => getActivityFeed(tasks, 10),
+  [tasks]
+);
+  const isManagerView = myRole === "admin" || myRole === "manager";
+
 
 
 
@@ -50,9 +74,12 @@ const TeamAnalytics = ({ team, tasks = [], myRole }) => {
       <TeamKPIs stats={stats} />
 
       <Grid container spacing={3} sx={{ mt: 3 }}>
-  <Grid item xs={12} md={6}>
-    <WorkloadChart data={workload} />
-  </Grid>
+            {isManagerView && (
+            <Grid item xs={12} md={6}>
+                <WorkloadChart data={workload} />
+            </Grid>
+            )}
+
     </Grid>
 
 
@@ -64,12 +91,13 @@ const TeamAnalytics = ({ team, tasks = [], myRole }) => {
       </Grid>
 
       {/* ================= DELIVERY HEALTH ================= */}
+      {isManagerView && (
 <Grid container spacing={3} sx={{ mt: 3 }}>
   <Grid item xs={12} md={6}>
     <DeliveryHealth data={deliveryHealth} />
   </Grid>
 </Grid>
-
+      )}
   <Grid item xs={12} md={6}>
     <AtRiskPanel tasks={atRiskTasks} />
   </Grid>
