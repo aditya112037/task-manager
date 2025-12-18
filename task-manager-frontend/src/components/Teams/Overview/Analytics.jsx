@@ -1,46 +1,64 @@
 import React from "react";
-import { Box, Grid } from "@mui/material";
-
+import { Box, Grid, Paper, Typography } from "@mui/material";
 import {
   getTaskStats,
-  getWorkloadByMember,
-  getDeliveryHealth,
   getStatusDistribution,
 } from "./overview.utils";
 
+/*
+  Team Analytics (SAFE BASE)
+  -------------------------
+  Props:
+  - team
+  - tasks
+  - myRole
+*/
 
-const TeamAnalytics = ({ team, tasks, myRole }) => {
-  const taskStats = getTaskStats(tasks);
-  const workload = getWorkloadByMember(tasks, team.members || []);
-  const deliveryHealth = getDeliveryHealth(tasks);
+const TeamAnalytics = ({ team, tasks = [], myRole }) => {
+  const stats = getTaskStats(tasks);
   const statusDist = getStatusDistribution(tasks);
 
   return (
     <Box sx={{ width: "100%" }}>
-      {/* KPI ROW */}
-      <TeamKPIs stats={taskStats} />
-
-      {/* CHARTS */}
-      <Grid container spacing={3} sx={{ mt: 1 }}>
-        <Grid item xs={12} md={4}>
-          <StatusDonut data={statusDist} />
-        </Grid>
-
-        <Grid item xs={12} md={4}>
-          <WorkloadChart data={workload} />
-        </Grid>
-
-        <Grid item xs={12} md={4}>
-          <DeliveryHealth data={deliveryHealth} />
-        </Grid>
-
-        {/* ACTIVITY */}
-        <Grid item xs={12}>
-          <ActivityFeed teamId={team._id} />
-        </Grid>
+      {/* ================= KPI ROW ================= */}
+      <Grid container spacing={2}>
+        <KpiCard label="Total Tasks" value={stats.total} />
+        <KpiCard label="Completed" value={stats.completed} />
+        <KpiCard label="Overdue" value={stats.overdue} />
+        <KpiCard label="Pending" value={stats.pending} />
       </Grid>
+
+      {/* ================= STATUS BREAKDOWN ================= */}
+      <Paper sx={{ p: 3, mt: 3, borderRadius: 3 }}>
+        <Typography variant="h6" fontWeight={700}>
+          Task Status Breakdown
+        </Typography>
+
+        <Box sx={{ mt: 2 }}>
+          {Object.entries(statusDist).map(([status, count]) => (
+            <Typography key={status} sx={{ mt: 0.5 }}>
+              {status.toUpperCase()}: <strong>{count}</strong>
+            </Typography>
+          ))}
+        </Box>
+      </Paper>
     </Box>
   );
 };
+
+/* ---------------- KPI CARD ---------------- */
+
+const KpiCard = ({ label, value }) => (
+  <Grid item xs={12} sm={6} md={3}>
+    <Paper sx={{ p: 2, borderRadius: 2 }}>
+      <Typography variant="body2" color="text.secondary">
+        {label}
+      </Typography>
+      <Typography variant="h5" fontWeight={700}>
+        {value}
+      </Typography>
+    </Paper>
+  </Grid>
+);
 
 export default TeamAnalytics;
