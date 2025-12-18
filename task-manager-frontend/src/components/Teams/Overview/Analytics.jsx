@@ -5,6 +5,9 @@ import {
   getStatusDistribution,
 } from "./overview.utils";
 import StatusDonut from "./StatusDonut";
+import TeamKPIs from "./TeamKPIs";
+
+const stats = getTaskStats(tasks);
 
 
 /*
@@ -51,6 +54,8 @@ const KpiCard = ({ label, value }) => (
       <Typography variant="h5" fontWeight={700}>
         {value}
       </Typography>
+      <TeamKPIs stats={stats} />
+
     </Paper>
   </Grid>
 );
