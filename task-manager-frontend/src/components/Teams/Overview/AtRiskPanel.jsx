@@ -5,9 +5,10 @@ import {
   Stack,
   Box,
   Chip,
+  alpha
 } from "@mui/material";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import { styles } from "./overview.styles";
+import  { styles } from "./overview.styles";
 
 const AtRiskPanel = ({ tasks = [] }) => {
   return (
