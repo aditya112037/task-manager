@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
 import { Box, Grid } from "@mui/material";
+import { styles } from "./overview.styles";
 
 import {
   getTaskStats,
@@ -40,12 +41,12 @@ const TeamAnalytics = ({ team, tasks = [], myRole }) => {
   const activities = useMemo(() => getActivityFeed(tasks, 10), [tasks]);
 
   return (
-    <Box sx={{ width: "100%" }}>
+    <Box sx={styles.container}>
       {/* ================= KPIs ================= */}
       <TeamKPIs stats={stats} />
 
       {/* ================= WORKLOAD + STATUS ================= */}
-      <Grid container spacing={3} sx={{ mt: 3 }}>
+      <Grid container spacing={3} sx={styles.chartContainer}>
         {isManagerView && (
           <Grid item xs={12} md={6}>
             <WorkloadChart data={workload} />
@@ -54,13 +55,7 @@ const TeamAnalytics = ({ team, tasks = [], myRole }) => {
 
         <Grid item xs={12} md={6}>
             <Box
-  sx={{
-    height: 260,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-  }}
->
+            sx={styles.donutContainer}>
           <StatusDonut data={statusDist} />
           </Box>
         </Grid>
@@ -68,7 +63,7 @@ const TeamAnalytics = ({ team, tasks = [], myRole }) => {
 
       {/* ================= DELIVERY + AT RISK ================= */}
       {isManagerView && (
-        <Grid container spacing={3} sx={{ mt: 3 }}>
+        <Grid container spacing={3} sx={styles.chartContainer}>
           <Grid item xs={12} md={6}>
             <DeliveryHealth data={deliveryHealth} />
           </Grid>
@@ -80,7 +75,7 @@ const TeamAnalytics = ({ team, tasks = [], myRole }) => {
       )}
 
       {/* ================= ACTIVITY FEED ================= */}
-      <Grid container spacing={3} sx={{ mt: 3 }}>
+      <Grid container spacing={3} sx={styles.chartContainer}>
         <Grid item xs={12}>
           <ActivityFeed activities={activities} />
         </Grid>

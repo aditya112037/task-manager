@@ -59,28 +59,8 @@ const TeamKPIs = ({ stats }) => {
 
 const KpiCard = ({ label, value, icon, color }) => (
   <Grid item xs={12} sm={6} md={3}>
-    <Paper
-      sx={{
-        p: 2,
-        borderRadius: 3,
-        height: "100%",
-        display: "flex",
-        alignItems: "center",
-        gap: 2,
-      }}
-    >
-      <Box
-        sx={{
-          width: 44,
-          height: 44,
-          borderRadius: "50%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          bgcolor: `${color}22`,
-          color,
-        }}
-      >
+    <Paper sx={styles.kpiCard}>
+      <Box sx={styles.kpiIconContainer(color)}>
         {icon}
       </Box>
 
