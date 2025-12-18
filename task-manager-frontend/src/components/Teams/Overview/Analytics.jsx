@@ -62,50 +62,49 @@ const Analytics = ({ team, tasks = [], myRole }) => {
       </Box>
 
       {/* ================= ANALYTICS GRID (ONE FLOW) ================= */}
-      <Grid
-        container
-        spacing={3}
-        sx={{
-          mt: 3,
-          maxWidth: 1200,
-          mx: "auto",
-          alignItems: "stretch",
-        }}
-      >
-        {/* WORKLOAD */}
-        {isManagerView && (
-          <Grid item xs={12} md={6} lg={3}>
-            <Box sx={styles.chartPaper}>
-              <WorkloadChart data={workload} />
-            </Box>
-          </Grid>
-        )}
+      {/* ================= ANALYTICS GRID ================= */}
+<Grid
+  container
+  spacing={isManagerView ? 3 : 5}
+  columnSpacing={isManagerView ? 3 : 5}
+  sx={{
+    mt: 3,
+    maxWidth: 1200,
+    mx: "auto",
+    alignItems: "stretch",
+  }}
+>
+  {/* WORKLOAD */}
+  {isManagerView && (
+    <Grid item xs={12} md={6} lg={4}>
+      <Box sx={styles.chartPaper}>
+        <WorkloadChart data={workload} />
+      </Box>
+    </Grid>
+  )}
 
-        {/* STATUS DISTRIBUTION */}
-        <Grid item xs={12} md={6} lg={3}>
-          <Box sx={styles.donutPaper}>
-            <StatusDonut data={statusDist} />
-          </Box>
-        </Grid>
+  {/* STATUS DISTRIBUTION */}
+  <Grid
+    item
+    xs={12}
+    md={isManagerView ? 6 : 12}
+    lg={isManagerView ? 4 : 6}
+  >
+    <Box sx={styles.donutPaper}>
+      <StatusDonut data={statusDist} />
+    </Box>
+  </Grid>
 
-        {/* DELIVERY HEALTH */}
-        {isManagerView && (
-          <Grid item xs={12} md={6} lg={3}>
-            <Box sx={styles.chartPaper}>
-              <DeliveryHealth data={deliveryHealth} />
-            </Box>
-          </Grid>
-        )}
+  {/* DELIVERY HEALTH */}
+  {isManagerView && (
+    <Grid item xs={12} md={6} lg={4}>
+      <Box sx={styles.chartPaper}>
+        <DeliveryHealth data={deliveryHealth} />
+      </Box>
+    </Grid>
+  )}
+</Grid>
 
-        {/* AT RISK */}
-        {isManagerView && (
-          <Grid item xs={12} md={6} lg={3}>
-            <Box sx={styles.atRiskPaper}>
-              <AtRiskPanel tasks={atRiskTasks} />
-            </Box>
-          </Grid>
-        )}
-      </Grid>
 
       {/* ================= ACTIVITY FEED ================= */}
       <Box sx={{ mt: 4, maxWidth: 1200, mx: "auto" }}>
