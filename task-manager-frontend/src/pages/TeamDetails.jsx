@@ -37,7 +37,7 @@ import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import TeamTaskForm from "../components/Teams/TeamTaskForm";
 import { useAuth } from "../context/AuthContext";
 import { initSocket, getSocket, disconnectSocket } from "../services/socket";
-
+import TeamAnalytics from "../components/Teams/Overview/Analytics";
 /* ---------------------------------------------------
    SAFE MEMBER RESOLVER (prevents all crashes)
 --------------------------------------------------- */
@@ -719,6 +719,11 @@ export default function TeamDetails() {
       {/* OVERVIEW */}
       {tab === 0 && (
         <Paper sx={{ p: 3, borderRadius: 3 }}>
+            <TeamAnalytics
+      team={team}
+      tasks={teamTasks}
+      myRole={myRole}
+    />
 
 
           <Button sx={{ mt: 3 }} variant="outlined" startIcon={<ContentCopyIcon />} onClick={handleCopyInviteLink}>
