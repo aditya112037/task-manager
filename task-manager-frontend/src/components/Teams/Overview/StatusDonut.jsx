@@ -6,66 +6,86 @@ import {
   Cell,
   ResponsiveContainer,
   Tooltip,
+  Legend,
 } from "recharts";
-
-const COLORS = {
-  todo: "#9e9e9e",
-  "in-progress": "#1976d2",
-  completed: "#2e7d32",
-  unknown: "#bdbdbd",
-};
+import { styles, getStatusColor } from "./overview.styles";
 
 const StatusDonut = ({ data = {} }) => {
   const chartData = Object.entries(data).map(([key, value]) => ({
-    name: key,
+    name: key.charAt(0).toUpperCase() + key.slice(1).replace("-", " "),
     value,
+    color: getStatusColor(key),
   }));
 
   const hasData = chartData.some(d => d.value > 0);
+  const total = chartData.reduce((sum, item) => sum + item.value, 0);
 
   return (
-    <Paper sx={{ p: 3, borderRadius: 3, height: "100%" }}>
-      <Typography variant="h6" fontWeight={700}>
-        Task Status
+    <Box sx={styles.donutContainer}>
+      <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>
+        Task Status Distribution
       </Typography>
-
+      
       {!hasData ? (
-        <Box
-          sx={{
-            height: 220,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            color: "text.secondary",
-          }}
-        >
-          No tasks yet
+        <Box sx={styles.emptyStateContainer}>
+          <Typography sx={styles.emptyStateText}>
+            No tasks to display
+          </Typography>
         </Box>
       ) : (
-        <Box sx={{ height: 220 }}>
-          <ResponsiveContainer>
-            <PieChart>
-              <Pie
-                data={chartData}
-                dataKey="value"
-                nameKey="name"
-                innerRadius={60}
-                outerRadius={90}
-                paddingAngle={3}
-              >
-                {chartData.map((entry) => (
-                  <Cell
-                    key={entry.name}
-                    fill={COLORS[entry.name] || COLORS.unknown}
-                  />
-                ))}
-              </Pie>
-              <Tooltip />
-            </PieChart>
-          </ResponsiveContainer>
-        </Box>
+        <>
+          <Box sx={styles.donutChartWrapper}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={chartData}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius="55%"
+                  outerRadius="80%"
+                  paddingAngle={2}
+                  labelLine={false}
+                  label={(entry) => `${entry.name}: ${entry.value}`}
+                >
+                  {chartData.map((entry, index) => (
+                    <Cell
+                      key={`cell-${index}`}
+                      fill={entry.color}
+                      stroke="#fff"
+                      strokeWidth={2}
+                    />
+                  ))}
+                </Pie>
+                <Tooltip 
+                  formatter={(value) => [`${value} tasks`, 'Count']}
+                  labelFormatter={(label) => `Status: ${label}`}
+                />
+                <Legend 
+                  layout="horizontal"
+                  verticalAlign="bottom"
+                  align="center"
+                  wrapperStyle={{ paddingTop: 20 }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </Box>
+          
+          <Box sx={{ 
+            mt: 2, 
+            textAlign: "center",
+            p: 1,
+            backgroundColor: alpha("#f5f5f5", 0.5),
+            borderRadius: 1
+          }}>
+            <Typography variant="body2" color="text.secondary">
+              Total: <strong>{total}</strong> tasks
+            </Typography>
+          </Box>
+        </>
       )}
-    </Paper>
+    </Box>
   );
 };
 

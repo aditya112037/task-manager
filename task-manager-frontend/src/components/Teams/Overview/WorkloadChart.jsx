@@ -6,67 +6,51 @@ import {
   LinearProgress,
   Stack,
 } from "@mui/material";
-
-/*
-  WorkloadChart
-  -------------
-  Props:
-  - data: [{ id, name, count }]
-*/
+import { styles } from "./overview.styles";
 
 const WorkloadChart = ({ data = [] }) => {
-  const max = Math.max(...data.map((d) => d.count), 1);
+  const sortedData = [...data].sort((a, b) => b.count - a.count);
+  const max = Math.max(...sortedData.map((d) => d.count), 1);
 
   return (
-    <Paper sx={{ p: 3, borderRadius: 3 }}>
-      <Typography variant="h6" fontWeight={700}>
+    <Box sx={styles.workloadContainer}>
+      <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>
         Team Workload
       </Typography>
-
-      <Typography
-        variant="body2"
-        color="text.secondary"
-        sx={{ mt: 0.5 }}
-      >
+      
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
         Tasks assigned per member
       </Typography>
 
-      <Stack spacing={2} sx={{ mt: 3 }}>
-        {data.length === 0 && (
-          <Typography color="text.secondary">
-            No workload data available
-          </Typography>
-        )}
-
-        {data.map((item) => (
-          <Box key={item.id}>
-            <Box
-              sx={{
-                display: "flex",
-                justifyContent: "space-between",
-                mb: 0.5,
-              }}
-            >
-              <Typography variant="body2">
-                {item.name}
-              </Typography>
-              <Typography variant="body2" fontWeight={600}>
-                {item.count}
-              </Typography>
-            </Box>
-
-            <LinearProgress
-              variant="determinate"
-              value={(item.count / max) * 100}
-              sx={{
-                height: 8,
-                borderRadius: 4,
-              }}
-            />
+      <Box sx={styles.workloadList}>
+        {sortedData.length === 0 ? (
+          <Box sx={styles.emptyStateContainer}>
+            <Typography sx={styles.emptyStateText}>
+              No workload data available
+            </Typography>
           </Box>
-        ))}
-      </Stack>
-    </Paper>
+        ) : (
+          sortedData.map((item) => (
+            <Box key={item.id} sx={styles.workloadItem}>
+              <Box sx={styles.workloadHeader}>
+                <Typography variant="body2" fontWeight={500}>
+                  {item.name}
+                </Typography>
+                <Typography variant="body2" fontWeight={600} color="primary">
+                  {item.count} task{item.count !== 1 ? 's' : ''}
+                </Typography>
+              </Box>
+
+              <LinearProgress
+                variant="determinate"
+                value={(item.count / max) * 100}
+                sx={styles.workloadProgress}
+              />
+            </Box>
+          ))
+        )}
+      </Box>
+    </Box>
   );
 };
 

@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { Box, Grid } from "@mui/material";
-import { styles } from "./overview.styles";
+import { styles } from "./overview.styles"; // Import the styles
 
 import {
   getTaskStats,
@@ -17,15 +17,6 @@ import WorkloadChart from "./WorkloadChart";
 import DeliveryHealth from "./DeliveryHealth";
 import AtRiskPanel from "./AtRiskPanel";
 import ActivityFeed from "./ActivityFeed";
-
-/*
-  Team Analytics
-  --------------
-  Props:
-  - team
-  - tasks
-  - myRole
-*/
 
 const TeamAnalytics = ({ team, tasks = [], myRole }) => {
   const isManagerView = myRole === "admin" || myRole === "manager";
@@ -45,41 +36,44 @@ const TeamAnalytics = ({ team, tasks = [], myRole }) => {
       {/* ================= KPIs ================= */}
       <TeamKPIs stats={stats} />
 
-      {/* ================= WORKLOAD + STATUS ================= */}
-      <Grid container spacing={3} sx={styles.chartContainer}>
+      {/* ================= WORKLOAD + STATUS (SIDE BY SIDE) ================= */}
+      <Grid container spacing={3} sx={styles.mainChartContainer}>
         {isManagerView && (
           <Grid item xs={12} md={6}>
-            <WorkloadChart data={workload} />
+            <Box sx={styles.chartPaper}>
+              <WorkloadChart data={workload} />
+            </Box>
           </Grid>
         )}
 
-        <Grid item xs={12} md={6}>
-            <Box
-            sx={styles.donutContainer}>
-          <StatusDonut data={statusDist} />
+        <Grid item xs={12} md={isManagerView ? 6 : 12}>
+          <Box sx={styles.donutPaper}>
+            <StatusDonut data={statusDist} />
           </Box>
         </Grid>
       </Grid>
 
-      {/* ================= DELIVERY + AT RISK ================= */}
+      {/* ================= DELIVERY + AT RISK (SIDE BY SIDE) ================= */}
       {isManagerView && (
-        <Grid container spacing={3} sx={styles.chartContainer}>
+        <Grid container spacing={3} sx={styles.mainChartContainer}>
           <Grid item xs={12} md={6}>
-            <DeliveryHealth data={deliveryHealth} />
+            <Box sx={styles.chartPaper}>
+              <DeliveryHealth data={deliveryHealth} />
+            </Box>
           </Grid>
 
           <Grid item xs={12} md={6}>
-            <AtRiskPanel tasks={atRiskTasks} />
+            <Box sx={styles.atRiskPaper}>
+              <AtRiskPanel tasks={atRiskTasks} />
+            </Box>
           </Grid>
         </Grid>
       )}
 
       {/* ================= ACTIVITY FEED ================= */}
-      <Grid container spacing={3} sx={styles.chartContainer}>
-        <Grid item xs={12}>
-          <ActivityFeed activities={activities} />
-        </Grid>
-      </Grid>
+      <Box sx={{ mt: { xs: 3, md: 4 } }}>
+        <ActivityFeed activities={activities} />
+      </Box>
     </Box>
   );
 };

@@ -1,21 +1,22 @@
-// overview.styles.js
+// overview.styles.js - UPDATED FOR SIDE-BY-SIDE LAYOUT
 import { alpha } from "@mui/material";
 
 export const styles = {
   // ================= CONTAINER & LAYOUT =================
   container: {
     width: "100%",
-    p: { xs: 2, sm: 3 },
+    p: { xs: 2, sm: 3, md: 4 },
     backgroundColor: "background.default",
+    minHeight: "100vh",
   },
 
   // ================= KPIs =================
   kpiContainer: {
-    spacing: 2,
+    spacing: { xs: 2, md: 3 },
   },
 
   kpiCard: {
-    p: 2.5,
+    p: { xs: 2, md: 2.5 },
     borderRadius: 3,
     height: "100%",
     display: "flex",
@@ -26,29 +27,34 @@ export const styles = {
       transform: "translateY(-2px)",
       boxShadow: 8,
     },
+    minHeight: 90,
   },
 
   kpiIconContainer: (color) => ({
-    width: 48,
-    height: 48,
+    width: { xs: 44, md: 48 },
+    height: { xs: 44, md: 48 },
     borderRadius: "50%",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: `${color}15`,
     color: color,
-    fontSize: 24,
+    fontSize: { xs: 22, md: 24 },
+    flexShrink: 0,
   }),
 
-  // ================= CHARTS & GRAPHS =================
-  chartContainer: {
-    mt: 3,
+  // ================= MAIN CHART CONTAINER =================
+  mainChartContainer: {
+    mt: { xs: 2, sm: 3, md: 4 },
+    spacing: { xs: 2, md: 3 },
   },
 
+  // ================= CHART PAPERS =================
   chartPaper: {
-    p: 3,
+    p: { xs: 2, sm: 3 },
     borderRadius: 3,
     height: "100%",
+    minHeight: 320,
     display: "flex",
     flexDirection: "column",
     backgroundColor: "background.paper",
@@ -60,36 +66,67 @@ export const styles = {
   chartHeader: {
     variant: "h6",
     fontWeight: 700,
-    mb: 0.5,
+    fontSize: { xs: "1rem", sm: "1.125rem" },
+    mb: 1,
     color: "text.primary",
   },
 
   chartSubtitle: {
     variant: "body2",
     color: "text.secondary",
-    mb: 3,
+    mb: 2,
+    fontSize: { xs: "0.875rem", sm: "0.9375rem" },
   },
 
+  // ================= DONUT CHART SPECIFIC =================
   donutContainer: {
-    height: 260,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
+    width: "100%",
+    height: "100%",
+    minHeight: 320,
   },
 
-  donutChartPaper: {
-    p: 3,
+  donutPaper: {
+    p: { xs: 2, sm: 3 },
     borderRadius: 3,
     height: "100%",
+    minHeight: 320,
+    display: "flex",
+    flexDirection: "column",
     backgroundColor: "background.paper",
     boxShadow: "0 2px 12px rgba(0, 0, 0, 0.05)",
     border: "1px solid",
     borderColor: "divider",
   },
 
+  donutChartWrapper: {
+    height: 240,
+    width: "100%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flex: 1,
+  },
+
   // ================= WORKLOAD CHART =================
+  workloadContainer: {
+    height: "100%",
+    display: "flex",
+    flexDirection: "column",
+  },
+
+  workloadList: {
+    mt: 2,
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "space-around",
+  },
+
   workloadItem: {
-    mb: 2,
+    mb: { xs: 1.5, sm: 2 },
+    "&:last-child": {
+      mb: 0,
+    },
   },
 
   workloadHeader: {
@@ -100,19 +137,27 @@ export const styles = {
   },
 
   workloadProgress: {
-    height: 8,
-    borderRadius: 4,
+    height: 10,
+    borderRadius: 5,
     backgroundColor: alpha("#1976d2", 0.1),
     "& .MuiLinearProgress-bar": {
-      borderRadius: 4,
+      borderRadius: 5,
     },
   },
 
   // ================= DELIVERY HEALTH =================
+  deliveryContainer: {
+    height: "100%",
+    display: "flex",
+    flexDirection: "column",
+  },
+
   deliveryChipContainer: {
-    spacing: 2,
+    spacing: { xs: 1, sm: 2 },
     mt: 3,
     flexWrap: "wrap",
+    display: "flex",
+    gap: { xs: 1, sm: 2 },
   },
 
   deliveryChip: (color) => ({
@@ -121,24 +166,35 @@ export const styles = {
     color: color,
     fontWeight: 600,
     backgroundColor: alpha(color, 0.08),
+    fontSize: { xs: "0.75rem", sm: "0.8125rem" },
+    height: { xs: 32, sm: 36 },
     "& .MuiChip-label": {
-      px: 1,
+      px: { xs: 1, sm: 1.5 },
     },
   }),
 
   totalTasksContainer: {
     mt: 3,
-    p: 2,
+    p: { xs: 1.5, sm: 2 },
     borderRadius: 2,
     backgroundColor: alpha("#1976d2", 0.05),
     border: "1px solid",
     borderColor: alpha("#1976d2", 0.2),
+    flexShrink: 0,
   },
 
   // ================= AT RISK PANEL =================
+  atRiskContainer: {
+    height: "100%",
+    display: "flex",
+    flexDirection: "column",
+  },
+
   atRiskPaper: {
-    p: 3,
+    p: { xs: 2, sm: 3 },
     borderRadius: 3,
+    height: "100%",
+    minHeight: 320,
     backgroundColor: "background.paper",
     boxShadow: "0 2px 12px rgba(0, 0, 0, 0.05)",
     border: "1px solid",
@@ -146,8 +202,16 @@ export const styles = {
     background: `linear-gradient(to bottom right, ${alpha("#fff8e1", 0.3)}, ${alpha("#fff3e0", 0.1)})`,
   },
 
+  atRiskContent: {
+    mt: 2,
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+  },
+
   atRiskTaskItem: {
-    p: 2,
+    p: { xs: 1.5, sm: 2 },
     mb: 2,
     borderRadius: 2,
     backgroundColor: alpha("#fff8e1", 0.3),
@@ -158,18 +222,9 @@ export const styles = {
     },
   },
 
-  dueDateText: {
-    variant: "body2",
-    color: "text.secondary",
-    mt: 0.5,
-    display: "flex",
-    alignItems: "center",
-    gap: 0.5,
-  },
-
   // ================= ACTIVITY FEED =================
   activityPaper: {
-    p: 3,
+    p: { xs: 2, sm: 3 },
     borderRadius: 3,
     backgroundColor: "background.paper",
     boxShadow: "0 2px 12px rgba(0, 0, 0, 0.05)",
@@ -181,6 +236,7 @@ export const styles = {
     variant: "h6",
     fontWeight: 700,
     color: "text.primary",
+    fontSize: { xs: "1rem", sm: "1.125rem" },
   },
 
   activityDivider: {
@@ -189,7 +245,7 @@ export const styles = {
   },
 
   activityItem: {
-    p: 2,
+    p: { xs: 1.5, sm: 2 },
     mb: 1.5,
     borderRadius: 2,
     backgroundColor: alpha("#1976d2", 0.02),
@@ -204,33 +260,21 @@ export const styles = {
     },
   },
 
-  activityText: {
-    variant: "body2",
-    color: "text.primary",
-    mb: 0.5,
-  },
-
-  activityTimestamp: {
-    variant: "caption",
-    color: "text.secondary",
-    display: "flex",
-    alignItems: "center",
-    gap: 0.5,
-  },
-
   // ================= EMPTY STATES =================
   emptyStateContainer: {
-    height: 220,
+    height: "100%",
+    minHeight: 240,
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
     color: "text.secondary",
     gap: 1,
+    p: 2,
   },
 
   emptyStateIcon: {
-    fontSize: 48,
+    fontSize: { xs: 40, sm: 48 },
     color: "action.disabled",
     mb: 1,
   },
@@ -238,13 +282,14 @@ export const styles = {
   emptyStateText: {
     color: "text.secondary",
     textAlign: "center",
+    fontSize: { xs: "0.875rem", sm: "0.9375rem" },
   },
 
-  // ================= RESPONSIVE STYLES =================
+  // ================= RESPONSIVE GRID =================
   responsiveGrid: {
     container: {
-      spacing: 3,
-      mt: 3,
+      spacing: { xs: 2, sm: 3 },
+      mt: { xs: 2, sm: 3, md: 4 },
     },
     item: {
       xs: 12,
@@ -252,7 +297,7 @@ export const styles = {
     },
   },
 
-  // ================= COLORS & THEMES =================
+  // ================= COLORS =================
   colors: {
     success: "#2e7d32",
     warning: "#ed6c02",
@@ -261,22 +306,9 @@ export const styles = {
     primary: "#1976d2",
     secondary: "#9c27b0",
   },
-
-  // ================= SHADOWS & ELEVATION =================
-  shadows: {
-    light: "0 2px 8px rgba(0, 0, 0, 0.08)",
-    medium: "0 4px 16px rgba(0, 0, 0, 0.12)",
-    strong: "0 8px 24px rgba(0, 0, 0, 0.16)",
-  },
-
-  // ================= TRANSITIONS =================
-  transitions: {
-    smooth: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-    quick: "all 0.2s ease",
-  },
 };
 
-// Helper function for status colors
+// Helper functions
 export const getStatusColor = (status) => {
   const colors = {
     "todo": "#9e9e9e",
@@ -289,7 +321,6 @@ export const getStatusColor = (status) => {
   return colors[status] || colors.unknown;
 };
 
-// Helper function for delivery status colors
 export const getDeliveryColor = (type) => {
   const colors = {
     "completed": "#2e7d32",
