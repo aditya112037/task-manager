@@ -111,3 +111,29 @@ export const getStatusDistribution = (tasks = []) => {
     {}
   );
 };
+
+// ---------------- ACTIVITY FEED ----------------
+export const getActivityFeed = (tasks = [], limit = 10) => {
+  const activities = [];
+
+  tasks.forEach((task) => {
+    if (!task.comments || !Array.isArray(task.comments)) return;
+
+    task.comments.forEach((c) => {
+      activities.push({
+        id: c._id,
+        taskId: task._id,
+        taskTitle: task.title,
+        type: c.type,           // system | user
+        action: c.action,       // task_created, status_changed, etc
+        meta: c.meta || {},
+        createdAt: c.createdAt,
+        user: c.user || null,
+      });
+    });
+  });
+
+  return activities
+    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .slice(0, limit);
+};
