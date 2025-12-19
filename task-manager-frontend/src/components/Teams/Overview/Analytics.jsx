@@ -10,7 +10,6 @@ import {
   getAtRiskTasks,
   getActivityFeed,
 } from "./overview.utils";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import TeamKPIs from "./TeamKPIs";
 import StatusDonut from "./StatusDonut";
 import WorkloadChart from "./WorkloadChart";
@@ -98,9 +97,7 @@ const Analytics = ({ team, tasks = [], myRole }) => {
           <ActivityFeed activities={activities} />
         </Box>
 
-          <Button sx={{ mt: 3 }} variant="outlined" startIcon={<ContentCopyIcon />} onClick={handleCopyInviteLink}>
-            Copy Invite Link
-          </Button>
+          
       </Box>
     </>
   );

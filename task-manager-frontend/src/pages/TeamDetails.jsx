@@ -30,7 +30,7 @@ import CloseIcon from "@mui/icons-material/Close"
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ExitToAppIcon from "@mui/icons-material/ExitToApp";
-
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { teamsAPI, teamTasksAPI } from "../services/api";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
@@ -726,7 +726,9 @@ export default function TeamDetails() {
     />
 
 
-          
+          <Button sx={{ mt: 3 }} variant="outlined" startIcon={<ContentCopyIcon />} onClick={handleCopyInviteLink}>
+            Copy Invite Link
+          </Button>
         </Paper>
       )}
 
