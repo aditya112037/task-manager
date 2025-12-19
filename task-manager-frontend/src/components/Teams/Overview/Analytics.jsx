@@ -57,9 +57,20 @@ const Analytics = ({ team, tasks = [], myRole }) => {
   return (
     <Box sx={styles.container}>
       {/* ================= KPI ROW ================= */}
-      <Box sx={{ width: "100%", mb: 3 }}>
-  <TeamKPIs stats={stats} />
+{/* ================= KPI ROW (CENTERED) ================= */}
+<Box
+  sx={{
+    display: "flex",
+    justifyContent: "center",   // ✅ centers KPI block
+    width: "100%",
+    mb: 3,
+  }}
+>
+  <Box sx={{ width: "100%", maxWidth: 1200 }}>
+    <TeamKPIs stats={stats} />
+  </Box>
 </Box>
+
       
       
 
