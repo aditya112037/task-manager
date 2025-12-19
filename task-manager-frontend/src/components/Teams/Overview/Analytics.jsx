@@ -57,9 +57,8 @@ const Analytics = ({ team, tasks = [], myRole }) => {
   return (
     <Box sx={styles.container}>
       {/* ================= KPI ROW ================= */}
-      <Box sx={{ maxWidth: 1200, mx: "auto" }}>
-        <TeamKPIs stats={stats} />
-      </Box>
+      <TeamKPIs stats={stats} />
+      
 
       {/* ================= ANALYTICS GRID (ONE FLOW) ================= */}
         <Grid
