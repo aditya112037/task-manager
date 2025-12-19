@@ -66,7 +66,7 @@ const Analytics = ({ team, tasks = [], myRole }) => {
           mb: 3,
         }}
       >
-        <Box sx={{ width: "100%", maxWidth: 1200 }}>
+        <Box sx={{ width: "100%"}}>
           <TeamKPIs stats={stats} />
         </Box>
       </Box>
