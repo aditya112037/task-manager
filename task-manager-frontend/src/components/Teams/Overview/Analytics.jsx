@@ -55,57 +55,50 @@ const Analytics = ({ team, tasks = [], myRole }) => {
   );
 
   return (
-    <Box sx={styles.container}>
-      {/* ================= KPI ROW ================= */}
-{/* ================= KPI ROW (CENTERED) ================= */}
-<Box
-  sx={{
-    display: "flex",
-    justifyContent: "center",   // ✅ centers KPI block
-    width: "100%",
-    mb: 3,
-  }}
->
-  <Box sx={{ width: "100%", maxWidth: 1200 }}>
-    <TeamKPIs stats={stats} />
-  </Box>
-</Box>
-
-      
-      
-
-      {/* ================= ANALYTICS GRID (ONE FLOW) ================= */}
-<Grid
-  container
-  spacing={3}
-  alignItems="stretch"
-  sx={{ mt: 3 }}
->
-  <Grid item xs={12} md={3}>
-    <WorkloadChart data={workload} />
-  </Grid>
-
-  <Grid item xs={12} md={3}>
-    <StatusDonut data={statusDist} />
-  </Grid>
-
-  <Grid item xs={12} md={3}>
-    <DeliveryHealth data={deliveryHealth} />
-  </Grid>
-
-  {isManagerView && (
-    <Grid item xs={12} md={3}>
-      <AtRiskPanel tasks={atRiskTasks} />
-    </Grid>
-  )}
-</Grid>
-
-
-      {/* ================= ACTIVITY FEED ================= */}
-      <Box sx={{ mt: 4, maxWidth: 1200, mx: "auto" }}>
-        <ActivityFeed activities={activities} />
+    <>
+      {/* ================= KPI HEADER (NO CONTAINER PADDING) ================= */}
+      <Box
+        sx={{
+          width: "100%",
+          display: "flex",
+          justifyContent: "center",
+          mt: 2,
+          mb: 3,
+        }}
+      >
+        <Box sx={{ width: "100%", maxWidth: 1200 }}>
+          <TeamKPIs stats={stats} />
+        </Box>
       </Box>
-    </Box>
+
+      {/* ================= ANALYTICS CONTENT (PADDED) ================= */}
+      <Box sx={styles.container}>
+        <Grid container spacing={3} alignItems="stretch">
+          <Grid item xs={12} md={3}>
+            <WorkloadChart data={workload} />
+          </Grid>
+
+          <Grid item xs={12} md={3}>
+            <StatusDonut data={statusDist} />
+          </Grid>
+
+          <Grid item xs={12} md={3}>
+            <DeliveryHealth data={deliveryHealth} />
+          </Grid>
+
+          {isManagerView && (
+            <Grid item xs={12} md={3}>
+              <AtRiskPanel tasks={atRiskTasks} />
+            </Grid>
+          )}
+        </Grid>
+
+        {/* ================= ACTIVITY FEED ================= */}
+        <Box sx={{ mt: 4, maxWidth: 1200, mx: "auto" }}>
+          <ActivityFeed activities={activities} />
+        </Box>
+      </Box>
+    </>
   );
 };
 
