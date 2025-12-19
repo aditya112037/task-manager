@@ -61,30 +61,34 @@ const Analytics = ({ team, tasks = [], myRole }) => {
       
 
       {/* ================= ANALYTICS GRID (ONE FLOW) ================= */}
-<Grid
-  container
-  spacing={3}
-  alignItems="stretch"
-  sx={{ mt: 3 }}
->
+<Grid container spacing={3} alignItems="stretch" sx={{ mt: 3 }}>
   <Grid item xs={12} md={3}>
-    <WorkloadChart data={workload} />
+    <Box sx={styles.chartPaper}>
+      <WorkloadChart data={workload} />
+    </Box>
   </Grid>
 
   <Grid item xs={12} md={3}>
-    <StatusDonut data={statusDist} />
+    <Box sx={styles.donutPaper}>
+      <StatusDonut data={statusDist} />
+    </Box>
   </Grid>
 
   <Grid item xs={12} md={3}>
-    <DeliveryHealth data={deliveryHealth} />
+    <Box sx={styles.chartPaper}>
+      <DeliveryHealth data={deliveryHealth} />
+    </Box>
   </Grid>
 
   {isManagerView && (
     <Grid item xs={12} md={3}>
-      <AtRiskPanel tasks={atRiskTasks} />
+      <Box sx={styles.atRiskPaper}>
+        <AtRiskPanel tasks={atRiskTasks} />
+      </Box>
     </Grid>
   )}
 </Grid>
+
 
 
       {/* ================= ACTIVITY FEED ================= */}
