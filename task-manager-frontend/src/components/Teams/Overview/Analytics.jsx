@@ -61,57 +61,31 @@ const Analytics = ({ team, tasks = [], myRole }) => {
       
 
       {/* ================= ANALYTICS GRID (ONE FLOW) ================= */}
-        <Grid
+<Grid
   container
-  spacing={isManagerView ? 3 : 5}
-  columnSpacing={isManagerView ? 3 : 5}
-  sx={{
-    mt: 3,
-    maxWidth: 1200,
-    mx: "auto",
-    alignItems: "stretch",
-  }}
+  spacing={3}
+  alignItems="stretch"
+  sx={{ mt: 3 }}
 >
-  {/* WORKLOAD */}
-  {isManagerView && (
-    <Grid item xs={12} md={6} lg={4}>
-      <Box sx={styles.chartPaper}>
-        <WorkloadChart data={workload} />
-      </Box>
-    </Grid>
-  )}
-
-  {/* STATUS DISTRIBUTION */}
-  <Grid
-    item
-    xs={12}
-    md={isManagerView ? 6 : 12}
-    lg={isManagerView ? 4 : 6}
-  >
-    <Box sx={styles.donutPaper}>
-      <StatusDonut data={statusDist} />
-    </Box>
+  <Grid item xs={12} md={3}>
+    <WorkloadChart data={workload} />
   </Grid>
 
-  {/* DELIVERY HEALTH */}
+  <Grid item xs={12} md={3}>
+    <StatusDonut data={statusDist} />
+  </Grid>
+
+  <Grid item xs={12} md={3}>
+    <DeliveryHealth data={deliveryHealth} />
+  </Grid>
+
   {isManagerView && (
-    <Grid item xs={12} md={6} lg={4}>
-      <Box sx={styles.chartPaper}>
-        <DeliveryHealth data={deliveryHealth} />
-      </Box>
+    <Grid item xs={12} md={3}>
+      <AtRiskPanel tasks={atRiskTasks} />
     </Grid>
   )}
+</Grid>
 
-    
-        {/* AT RISK */}
-        {isManagerView && (
-          <Grid item xs={12} md={6} lg={3}>
-            <Box sx={styles.atRiskPaper}>
-              <AtRiskPanel tasks={atRiskTasks} />
-            </Box>
-          </Grid>
-        )}</Grid>
-      
 
       {/* ================= ACTIVITY FEED ================= */}
       <Box sx={{ mt: 4, maxWidth: 1200, mx: "auto" }}>

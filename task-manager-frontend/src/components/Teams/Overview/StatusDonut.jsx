@@ -42,9 +42,9 @@ const StatusDonut = ({ data = {} }) => {
                   dataKey="value"
                   nameKey="name"
                   cx="50%"
-                  cy="48%"
-                  innerRadius="55%"
-                  outerRadius="78%"
+                  cy="50%"
+                  innerRadius="52%"
+                  outerRadius="72%"
                   paddingAngle={2}
                   labelLine={false}
                   
