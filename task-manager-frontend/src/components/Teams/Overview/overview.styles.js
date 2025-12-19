@@ -11,44 +11,50 @@ export const styles = {
   },
 
   // ================= FULL WIDTH KPIs =================
-  kpiGridContainer: {
-    spacing: { xs: 2, md: 3 },
-    width: "100%",
-  },
+// ================= FULL WIDTH KPIs =================
+kpiGridContainer: {
+  width: "100%",
+  m: 0,                     // 🔴 removes Grid negative margins
+  px: { xs: 0, sm: 0 },     // 🔴 prevents side gaps
+  alignItems: "stretch",    // 🔴 equal card heights
+},
 
-  kpiGridItem: {
-    xs: 12,
-    sm: 6,
-    md: 3,
-  },
+kpiGridItem: {
+  display: "flex",          // 🔴 makes card stretch vertically
+},
 
-  kpiCard: {
-    p: { xs: 2, md: 2.5 },
-    borderRadius: 3,
-    height: "100%",
-    display: "flex",
-    alignItems: "center",
-    gap: 2,
-    transition: "all 0.3s ease",
-    "&:hover": {
-      transform: "translateY(-2px)",
-      boxShadow: 8,
-    },
-    minHeight: 90,
-  },
+kpiCard: {
+  p: { xs: 2, md: 2.5 },
+  borderRadius: 3,
+  width: "100%",            // 🔴 force full width inside Grid
+  height: "100%",
+  display: "flex",
+  alignItems: "center",
+  gap: 2,
+  backgroundColor: "background.paper",
+  boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
+  transition: "all 0.25s ease",
+  minHeight: 96,
 
-  kpiIconContainer: (color) => ({
-    width: { xs: 44, md: 48 },
-    height: { xs: 44, md: 48 },
-    borderRadius: "50%",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: `${color}15`,
-    color: color,
-    fontSize: { xs: 22, md: 24 },
-    flexShrink: 0,
-  }),
+  "&:hover": {
+    transform: "translateY(-2px)",
+    boxShadow: "0 6px 18px rgba(0,0,0,0.12)",
+  },
+},
+
+kpiIconContainer: (color) => ({
+  width: 48,
+  height: 48,
+  borderRadius: "50%",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  backgroundColor: `${color}1A`,
+  color,
+  fontSize: 24,
+  flexShrink: 0,
+}),
+
 
   // ================= TOP ROW: WORKLOAD + STATUS + WORKLOAD =================
   topRowContainer: {
