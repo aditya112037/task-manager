@@ -12,16 +12,7 @@ export const styles = {
 
   // ================= FULL WIDTH KPIs =================
 // ================= FULL WIDTH KPIs =================
-kpiGridContainer: {
-  width: "100%",
-  m: 0,                     // 🔴 removes Grid negative margins
-  px: { xs: 0, sm: 0 },     // 🔴 prevents side gaps
-  alignItems: "stretch",    // 🔴 equal card heights
-},
 
-kpiGridItem: {
-  display: "flex",          // 🔴 makes card stretch vertically
-},
 
 kpiCard: {
   p: { xs: 2, md: 2.5 },

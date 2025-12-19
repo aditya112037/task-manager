@@ -57,7 +57,9 @@ const Analytics = ({ team, tasks = [], myRole }) => {
   return (
     <Box sx={styles.container}>
       {/* ================= KPI ROW ================= */}
-      <Grid sx={styles.kpiGridContainer}><TeamKPIs stats={stats} /></Grid>
+      <Box sx={{ width: "100%", mb: 3 }}>
+  <TeamKPIs stats={stats} />
+</Box>
       
       
 
