@@ -23,7 +23,7 @@ const StatusDonut = ({ data = {} }) => {
   return (
     <Box sx={styles.analyticsCard}>
       <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>
-        Task Status Distribution
+        Task Status
       </Typography>
       
       {!hasData ? (
