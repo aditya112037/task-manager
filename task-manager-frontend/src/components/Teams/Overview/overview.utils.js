@@ -141,16 +141,16 @@ export const getActivityFeed = (tasks = [], limit = 10) => {
 // ---------------- AT RISK TASKS ----------------
 export const getAtRiskTasks = (tasks = [], hours = 48) => {
   const now = new Date();
-  const threshold = new Date(
-    now.getTime() + hours * 60 * 60 * 1000
-  );
+  const threshold = new Date(now.getTime() + hours * 60 * 60 * 1000);
 
   return tasks.filter((task) => {
-    if (task.status === "completed") return false;
     if (!task.dueDate) return false;
+    if (task.status === "completed") return false;
 
     const due = new Date(task.dueDate);
 
-    return due > now && due <= threshold;
+    // ✅ Include overdue + upcoming within threshold
+    return due <= threshold;
   });
 };
+
