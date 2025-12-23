@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Box, Grid } from "@mui/material";
+import { Box } from "@mui/material";
 import { styles } from "./overview.styles";
 
 import {
@@ -10,6 +10,7 @@ import {
   getAtRiskTasks,
   getActivityFeed,
 } from "./overview.utils";
+
 import TeamKPIs from "./TeamKPIs";
 import StatusDonut from "./StatusDonut";
 import WorkloadChart from "./WorkloadChart";
@@ -55,49 +56,52 @@ const Analytics = ({ team, tasks = [], myRole }) => {
 
   return (
     <>
-      {/* ================= KPI HEADER (NO CONTAINER PADDING) ================= */}
+      {/* ================= KPI ROW (FULL WIDTH, CENTERED) ================= */}
       <Box
         sx={{
           width: "100%",
           display: "flex",
           justifyContent: "center",
           mt: 2,
-          mb: 3,
+          mb: 4,
         }}
       >
-        <Box sx={{ width: "100%"}}>
+        <Box sx={{ width: "100%", maxWidth: 1400 }}>
           <TeamKPIs stats={stats} />
         </Box>
       </Box>
 
-      {/* ================= ANALYTICS CONTENT (PADDED) ================= */}
+      {/* ================= ANALYTICS GRID (CSS GRID – ONE ROW GUARANTEED) ================= */}
       <Box sx={styles.container}>
-        <Grid container spacing={3} alignItems="stretch">
-          <Grid item xs={12} md={3}>
-            <WorkloadChart data={workload} />
-          </Grid>
+        <Box
+          sx={{
+            display: "grid",
+            gridTemplateColumns: {
+              xs: "1fr",
+              sm: "1fr 1fr",
+              md: isManagerView
+                ? "repeat(4, 1fr)" // ⭐ all in one row
+                : "repeat(3, 1fr)",
+            },
+            gap: 3,
+            alignItems: "stretch",
+          }}
+        >
+          <WorkloadChart data={workload} />
 
-          <Grid item xs={12} md={3}>
-            <StatusDonut data={statusDist} />
-          </Grid>
+          <StatusDonut data={statusDist} />
 
-          <Grid item xs={12} md={3}>
-            <DeliveryHealth data={deliveryHealth} />
-          </Grid>
+          <DeliveryHealth data={deliveryHealth} />
 
           {isManagerView && (
-            <Grid item xs={12} md={3}>
-              <AtRiskPanel tasks={atRiskTasks} />
-            </Grid>
+            <AtRiskPanel tasks={atRiskTasks} />
           )}
-        </Grid>
-
-        {/* ================= ACTIVITY FEED ================= */}
-        <Box sx={{ mt: 4, maxWidth: 1200, mx: "auto" }}>
-          <ActivityFeed activities={activities} />
         </Box>
 
-          
+        {/* ================= ACTIVITY FEED ================= */}
+        <Box sx={{ mt: 5, maxWidth: 1200, mx: "auto" }}>
+          <ActivityFeed activities={activities} />
+        </Box>
       </Box>
     </>
   );
