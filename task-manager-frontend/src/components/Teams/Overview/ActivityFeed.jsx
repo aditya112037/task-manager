@@ -17,21 +17,22 @@ import {
 const renderText = (activity) => {
   switch (activity.action) {
     case "task_created":
-      return `Task created`;
+      return "Task created";
+
     case "status_changed":
-      return `Status changed from ${activity.meta?.from} to ${activity.meta?.to}`;
+      return `Status updated to ${activity.meta?.to}`;
+
     case "assigned":
-      return `Task assigned`;
-    case "extension_requested":
-      return `Extension requested`;
-    case "extension_approved":
-      return `Extension approved`;
-    case "extension_rejected":
-      return `Extension rejected`;
+      return `Assigned to ${activity.meta?.user}`;
+
+    case "overdue":
+      return "Task became overdue";
+
     default:
       return "Activity updated";
   }
 };
+
 
 const ActivityFeed = ({ activities = [] }) => {
   return (

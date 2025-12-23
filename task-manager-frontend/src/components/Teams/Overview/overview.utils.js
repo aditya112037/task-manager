@@ -117,27 +117,69 @@ export const getActivityFeed = (tasks = [], limit = 10) => {
   const activities = [];
 
   tasks.forEach((task) => {
-    if (!task.comments || !Array.isArray(task.comments)) return;
-
-    task.comments.forEach((c) => {
+    // Task created
+    if (task.createdAt) {
       activities.push({
-        id: c._id,
-        taskId: task._id,
+        id: `${task._id}-created`,
         taskTitle: task.title,
-        type: c.type,           // system | user
-        action: c.action,       // task_created, status_changed, etc
-        meta: c.meta || {},
-        createdAt: c.createdAt,
-        user: c.user || null,
+        action: "task_created",
+        createdAt: task.createdAt,
       });
-    });
+    }
+
+    // Status change (updatedAt differs from createdAt)
+    if (
+      task.updatedAt &&
+      task.createdAt &&
+      new Date(task.updatedAt).getTime() !==
+        new Date(task.createdAt).getTime()
+    ) {
+      activities.push({
+        id: `${task._id}-status`,
+        taskTitle: task.title,
+        action: "status_changed",
+        meta: {
+          to: task.status,
+        },
+        createdAt: task.updatedAt,
+      });
+    }
+
+    // Assignment
+    if (task.assignedTo) {
+      activities.push({
+        id: `${task._id}-assigned`,
+        taskTitle: task.title,
+        action: "assigned",
+        meta: {
+          user: task.assignedTo.name || "User",
+        },
+        createdAt: task.updatedAt || task.createdAt,
+      });
+    }
+
+    // Overdue detection
+    if (
+      task.dueDate &&
+      new Date(task.dueDate) < new Date() &&
+      task.status !== "completed"
+    ) {
+      activities.push({
+        id: `${task._id}-overdue`,
+        taskTitle: task.title,
+        action: "overdue",
+        createdAt: task.dueDate,
+      });
+    }
   });
 
+  // Sort newest first
   return activities
-    .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+    .sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+    )
     .slice(0, limit);
 };
-
 // ---------------- AT RISK TASKS ----------------
 export const getAtRiskTasks = (tasks = [], hours = 48) => {
   const now = new Date();

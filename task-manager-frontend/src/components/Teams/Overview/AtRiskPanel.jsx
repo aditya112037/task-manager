@@ -52,7 +52,7 @@ const AtRiskPanel = ({ tasks = [] }) => {
 
                 {t.assignedTo && (
                   <Chip
-                    label={`Assigned to: ${t.assignedTo.name || "User"}`}
+                    label={`Assigned to: ${t.assignedTo.name || "Team"}`}
                     size="small"
                     sx={{ 
                       mt: 1,
