@@ -183,6 +183,21 @@ kpiIconContainer: (color) => ({
     },
   }),
 
+  analyticsCard: {
+  p: { xs: 2, sm: 3 },
+  borderRadius: 3,
+  height: "100%",
+  minHeight: 340,              // ⭐ key fix
+  display: "flex",
+  flexDirection: "column",
+  justifyContent: "space-between", // prevents top cramp
+  backgroundColor: "background.paper",
+  boxShadow: "0 2px 12px rgba(0,0,0,0.05)",
+  border: "1px solid",
+  borderColor: "divider",
+},
+
+
   totalTasksContainer: {
     mt: 3,
     p: { xs: 1.5, sm: 2 },

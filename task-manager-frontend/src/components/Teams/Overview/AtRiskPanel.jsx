@@ -12,7 +12,7 @@ import  { styles } from "./overview.styles";
 
 const AtRiskPanel = ({ tasks = [] }) => {
   return (
-    <Box sx={styles.atRiskContainer}>
+    <Box sx={styles.analyticsCard}>
       <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>
         At Risk Tasks
       </Typography>

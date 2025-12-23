@@ -13,7 +13,7 @@ const WorkloadChart = ({ data = [] }) => {
   const max = Math.max(...sortedData.map((d) => d.count), 1);
 
   return (
-    <Box sx={styles.workloadContainer}>
+    <Box sx={styles.analyticsCard}>
       <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>
         Team Workload
       </Typography>

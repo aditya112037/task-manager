@@ -21,7 +21,7 @@ const StatusDonut = ({ data = {} }) => {
   const total = chartData.reduce((sum, item) => sum + item.value, 0);
 
   return (
-    <Box sx={styles.donutContainer}>
+    <Box sx={styles.analyticsCard}>
       <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>
         Task Status Distribution
       </Typography>
