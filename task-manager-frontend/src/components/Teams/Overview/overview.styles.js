@@ -290,17 +290,18 @@ kpiIconContainer: (color) => ({
   },
 
   // ================= EMPTY STATES =================
-  emptyStateContainer: {
-    height: "100%",
-    minHeight: 240,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    color: "text.secondary",
-    gap: 1,
-    p: 2,
-  },
+emptyStateContainer: {
+  flex: 1,
+  minHeight: 200,
+  display: "flex",
+  flexDirection: "column",
+  alignItems: "center",
+  justifyContent: "center",
+  textAlign: "center",
+  color: "text.secondary",
+  gap: 1.2,
+  px: 2,
+},
 
   emptyStateIcon: {
     fontSize: { xs: 40, sm: 48 },

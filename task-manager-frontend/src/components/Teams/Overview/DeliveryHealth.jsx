@@ -27,7 +27,7 @@ const DeliveryHealth = ({ data }) => {
     : 0;
 
   return (
-    <Box sx={styles.deliveryContainer}>
+    <Box sx={styles.analyticsCard}>
       <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>
         Delivery Health
       </Typography>
