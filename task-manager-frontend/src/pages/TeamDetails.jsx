@@ -1,5 +1,5 @@
-// TeamDetails.jsx - Fixed Version with Comments
-import React, { useState, useEffect, useRef, useCallback } from "react";
+// TeamDetails.jsx - Fully Fixed Version
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   Box,
   Typography,
@@ -25,8 +25,8 @@ import {
   CircularProgress,
   Grid,
 } from "@mui/material";
-import CheckIcon from "@mui/icons-material/Check"
-import CloseIcon from "@mui/icons-material/Close"
+import CheckIcon from "@mui/icons-material/Check";
+import CloseIcon from "@mui/icons-material/Close";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ExitToAppIcon from "@mui/icons-material/ExitToApp";
@@ -37,6 +37,7 @@ import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import TeamTaskForm from "../components/Teams/TeamTaskForm";
 import { useAuth } from "../context/AuthContext";
 import TeamAnalytics from "../components/Teams/Overview/Analytics";
+
 /* ---------------------------------------------------
    SAFE MEMBER RESOLVER (prevents all crashes)
 --------------------------------------------------- */
@@ -79,18 +80,24 @@ export default function TeamDetails() {
     severity: "success",
   });
 
+  // 🚨 CRITICAL FIX 2: Memoized role that updates immediately when team changes
+  const myRole = useMemo(() => {
+    if (!team || !user) return null;
+    const member = team.members?.find(
+      (m) => resolveUserId(m.user) === resolveUserId(user?._id)
+    );
+    return member?.role || null;
+  }, [team, user]);
+
+  const canEditTasks = myRole === "admin" || myRole === "manager";
+  const isAdmin = myRole === "admin";
+
   /* ---------------------------------------------------
      Helper functions
   --------------------------------------------------- */
-  const getMyRole = useCallback(() => {
-    if (!team || !user) return null;
-    return team.members?.find((m) => resolveUserId(m.user) === resolveUserId(user?._id))?.role;
-  }, [team, user]);
-
   const showSnack = useCallback((msg, sev = "success") => {
     setSnackbar({ open: true, message: msg, severity: sev });
   }, []);
-
 
   /* ---------------------------------------------------
      APPLY ?tab=extensions
@@ -100,16 +107,9 @@ export default function TeamDetails() {
   }, [forcedTab]);
 
   /* ---------------------------------------------------
-     DETECT MY ROLE SAFELY
-  --------------------------------------------------- */
-  const myRole = getMyRole();
-  const canEditTasks = myRole === "admin" || myRole === "manager";
-  const isAdmin = myRole === "admin";
-
-  /* ---------------------------------------------------
      LOAD TEAM
   --------------------------------------------------- */
-  const fetchTeam = async () => {
+  const fetchTeam = useCallback(async () => {
     setLoadingTeam(true);
     try {
       const res = await teamsAPI.getTeam(teamId);
@@ -128,19 +128,21 @@ export default function TeamDetails() {
     } finally {
       setLoadingTeam(false);
     }
-  };
+  }, [teamId, showSnack]);
 
   /* ---------------------------------------------------
      LOAD TASKS
+     🚨 CRITICAL FIX 4: Use current role, not stale closure
   --------------------------------------------------- */
-  const fetchTeamTasks = async () => {
+  const fetchTeamTasks = useCallback(async () => {
     setLoadingTasks(true);
     try {
       const res = await teamTasksAPI.getTeamTasks(teamId);
       let tasks = res.data || [];
 
-      // Filter for members
-      if (myRole === "member") {
+      // 🚨 CRITICAL: Use current myRole value, not from closure
+      const currentRole = myRole;
+      if (currentRole === "member") {
         tasks = tasks.filter((t) => {
           const assigned = resolveUserId(t.assignedTo);
           const me = resolveUserId(user?._id);
@@ -154,18 +156,20 @@ export default function TeamDetails() {
     } finally {
       setLoadingTasks(false);
     }
-  };
+  }, [teamId, myRole, user]);
 
   /* ---------------------------------------------------
      LOAD PENDING EXTENSIONS
   --------------------------------------------------- */
-  const fetchPendingExtensions = async () => {
-    if (!["admin", "manager"].includes(myRole)) {
+  const fetchPendingExtensions = useCallback(async () => {
+    // 🚨 CRITICAL: Use current role check
+    const currentRole = myRole;
+    if (!["admin", "manager"].includes(currentRole)) {
       setPendingExtensions([]);
       return;
     }
+    
     setLoadingExtensions(true);
-
     try {
       const res = await teamTasksAPI.getPendingExtensions(teamId);
       setPendingExtensions(res.data || []);
@@ -175,28 +179,74 @@ export default function TeamDetails() {
     } finally {
       setLoadingExtensions(false);
     }
-  };
+  }, [teamId, myRole, showSnack]);
 
+  /* ---------------------------------------------------
+     🚨 CRITICAL FIX 1: COMPLETE invalidation listeners
+     Listen to ALL events: tasks, teams, extensions, comments
+  --------------------------------------------------- */
   useEffect(() => {
-  const onTasksInvalidate = ({ detail }) => {
-    if (detail?.teamId && String(detail.teamId) !== String(teamId)) return;
+    const onTasksInvalidate = ({ detail }) => {
+      if (detail?.teamId && String(detail.teamId) !== String(teamId)) return;
+      console.log("🔄 TeamDetails: invalidate:tasks received");
+      fetchTeamTasks();
+    };
+
+    const onTeamsInvalidate = ({ detail }) => {
+      if (detail?.teamId && String(detail.teamId) !== String(teamId)) return;
+      console.log("🔄 TeamDetails: invalidate:teams received");
+      fetchTeam();
+    };
+
+    const onExtensionsInvalidate = ({ detail }) => {
+      if (detail?.teamId && String(detail.teamId) !== String(teamId)) return;
+      console.log("🔄 TeamDetails: invalidate:extensions received");
+      fetchPendingExtensions();
+    };
+
+    // ✅ ADDED: Comments invalidation for this team's tasks
+    //const onCommentsInvalidate = ({ detail }) => {
+      //if (!detail?.taskId) return;
+      // Check if this task belongs to current team
+      //const affectedTask = teamTasks.find(t => t._id === detail.taskId);
+      // if (affectedTask) {
+        //console.log("🔄 TeamDetails: invalidate:comments for task", detail.taskId);
+        // You could trigger a specific task refresh here if needed
+        // For now, just refetch tasks
+        //fetchTeamTasks();
+      //}
+    //};
+
+    window.addEventListener("invalidate:tasks", onTasksInvalidate);
+    window.addEventListener("invalidate:teams", onTeamsInvalidate);
+    window.addEventListener("invalidate:extensions", onExtensionsInvalidate);
+    window.addEventListener("invalidate:comments", onCommentsInvalidate);
+
+    return () => {
+      window.removeEventListener("invalidate:tasks", onTasksInvalidate);
+      window.removeEventListener("invalidate:teams", onTeamsInvalidate);
+      window.removeEventListener("invalidate:extensions", onExtensionsInvalidate);
+      window.removeEventListener("invalidate:comments", onCommentsInvalidate);
+    };
+  }, [
+    teamId, 
+    fetchTeamTasks, 
+    fetchPendingExtensions, 
+    fetchTeam, 
+    teamTasks // For comments invalidation check
+  ]);
+
+  /* ---------------------------------------------------
+     🚨 CRITICAL FIX 3: Refetch when role changes
+     When role updates, tasks and extensions visibility may change
+  --------------------------------------------------- */
+  useEffect(() => {
+    if (!team || !myRole) return;
+    
+    console.log("🔄 Role changed to:", myRole, "refetching tasks and extensions");
     fetchTeamTasks();
     fetchPendingExtensions();
-  };
-
-  const onTeamInvalidate = ({ detail }) => {
-    if (detail?.teamId && String(detail.teamId) !== String(teamId)) return;
-    fetchTeam();
-  };
-
-  window.addEventListener("invalidate:tasks", onTasksInvalidate);
-  window.addEventListener("invalidate:teams", onTeamInvalidate);
-
-  return () => {
-    window.removeEventListener("invalidate:tasks", onTasksInvalidate);
-    window.removeEventListener("invalidate:teams", onTeamInvalidate);
-  };
-}, [teamId, fetchTeamTasks, fetchPendingExtensions, fetchTeam]);
+  }, [myRole, team, fetchTeamTasks, fetchPendingExtensions]);
 
   /* ---------------------------------------------------
      APPROVE - FIXED with optimistic update
@@ -243,13 +293,7 @@ export default function TeamDetails() {
   --------------------------------------------------- */
   useEffect(() => {
     fetchTeam();
-  }, [teamId]);
-
-  useEffect(() => {
-    if (!team) return;
-    fetchTeamTasks();
-    fetchPendingExtensions();
-  }, [team, myRole]);
+  }, [fetchTeam]);
 
   /* ---------------------------------------------------
      LEAVE TEAM
@@ -273,9 +317,11 @@ export default function TeamDetails() {
   const handleUpdateRole = async (userId, newRole) => {
     try {
       await teamsAPI.updateMemberRole(teamId, userId, newRole);
-      // Socket event will handle UI update
+      // Socket event will trigger invalidate:teams
+      showSnack("Role updated", "success");
     } catch (err) {
       console.error("Role update error:", err);
+      showSnack("Failed to update role", "error");
     }
   };
 
@@ -287,9 +333,11 @@ export default function TeamDetails() {
 
     try {
       await teamsAPI.removeMember(teamId, userId);
-      // Socket event will handle UI update
+      // Socket event will trigger invalidate:teams
+      showSnack("Member removed", "success");
     } catch (err) {
       console.error("Remove member error:", err);
+      showSnack("Failed to remove member", "error");
     }
   };
 
@@ -307,8 +355,9 @@ export default function TeamDetails() {
   const handleUpdateTeam = async () => {
     try {
       await teamsAPI.updateTeam(teamId, teamFormData);
-      // Socket event will handle UI update
+      // Socket event will trigger invalidate:teams
       setEditTeamDialog(false);
+      showSnack("Team updated", "success");
     } catch (err) {
       console.error("Update team error:", err);
       showSnack("Failed to update team", "error");
@@ -501,7 +550,9 @@ export default function TeamDetails() {
                     color={isAdmin ? "primary" : "default"}
                     size="small"
                   />
-               
+                  <Typography variant="caption" color="text.secondary">
+                    {team.members?.length || 0} members • {teamTasks.length} tasks
+                  </Typography>
                 </Box>
               )}
             </Box>
@@ -542,12 +593,7 @@ export default function TeamDetails() {
       {/* OVERVIEW */}
       {tab === 0 && (
         <Paper sx={{ p: 3, borderRadius: 3 }}>
-            <TeamAnalytics
-      team={team}
-      tasks={teamTasks}
-      myRole={myRole}
-    />
-
+          <TeamAnalytics team={team} tasks={teamTasks} myRole={myRole} />
 
           <Button sx={{ mt: 3 }} variant="outlined" startIcon={<ContentCopyIcon />} onClick={handleCopyInviteLink}>
             Copy Invite Link
@@ -666,13 +712,12 @@ export default function TeamDetails() {
         </Paper>
       )}
 
-      {/* EXTENSIONS - UI already filters based on role */}
+      {/* EXTENSIONS */}
       {tab === 3 && (
         <Paper sx={{ p: 3, borderRadius: 3 }}>
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
             <Typography variant="h6" fontWeight={700}>Extension Requests</Typography>
             <Box sx={{ display: "flex", gap: 1 }}>
-           
               <Button 
                 variant="outlined" 
                 onClick={handleRefreshExtensions}

@@ -27,74 +27,6 @@ const PublicRoute = ({ children }) => {
   return !user ? children : <Navigate to="/" />;
 };
 
-function AppContent() {
-  const { user } = useAuth();
-
-  useEffect(() => {
-    if (!user?._id) return;
-
-    let socket;
-
-    import("./services/socket")
-      .then(({ initSocket, getSocket, connectSocket }) => {
-        initSocket(user._id);
-        socket = getSocket();
-
-        if (!socket) return;
-
-        connectSocket();
-
-        // 🔴 TASKS INVALIDATION
-        socket.on("invalidate:tasks", ({ teamId }) => {
-          window.dispatchEvent(
-            new CustomEvent("invalidate:tasks", { detail: { teamId } })
-          );
-        });
-
-        // 🔴 TEAMS / ROLES INVALIDATION
-        socket.on("invalidate:team", ({ teamId }) => {
-          window.dispatchEvent(
-            new CustomEvent("invalidate:teams", { detail: { teamId } })
-          );
-        });
-
-        // 🔴 COMMENTS INVALIDATION
-        socket.on("invalidate:comments", ({ taskId }) => {
-          window.dispatchEvent(
-            new CustomEvent("invalidate:comments", { detail: { taskId } })
-          );
-        });
-
-        // 🔵 CONNECTION LOGGING (UX ONLY)
-        socket.on("connect", () => {
-          console.log("✅ Socket connected");
-        });
-
-        socket.on("disconnect", (reason) => {
-          console.log("❌ Socket disconnected:", reason);
-        });
-
-        socket.on("connect_error", (err) => {
-          console.error("⚠️ Socket connection error:", err);
-        });
-      })
-      .catch((err) => {
-        console.error("Failed to initialize socket:", err);
-      });
-
-    return () => {
-      if (socket) {
-        socket.off("invalidate:tasks");
-        socket.off("invalidate:team");
-        socket.off("invalidate:comments");
-      }
-    };
-  }, [user]);
-
-  return null;
-}
-
-
 function App() {
   const [darkMode, setDarkMode] = useState(false);
 
@@ -147,8 +79,7 @@ function App() {
       <ThemeProvider theme={theme}>
         <CssBaseline />
         
-        {/* Socket Setup Component - runs after auth is initialized */}
-        <AppContent />
+        
 
         <Router>
           <Routes>

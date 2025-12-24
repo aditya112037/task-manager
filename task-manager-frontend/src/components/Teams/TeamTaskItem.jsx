@@ -1,5 +1,5 @@
 // components/Teams/TeamTaskItem.jsx
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import {
   Card,
   CardContent,
@@ -32,9 +32,8 @@ const resolveId = (v) => (typeof v === "object" ? v?._id : v);
 
 const resolveUserName = (u) => {
   if (!u) return "Unassigned";
-  if (typeof u === "string") return "Assigned";
-  if (typeof u === "object") return u.name || "Assigned";
-  return "Assigned";
+  if (typeof u === "object") return u.name || "User";
+  return "User";
 };
 
 export default function TeamTaskItem({
@@ -52,19 +51,10 @@ export default function TeamTaskItem({
   const [openExtensionModal, setOpenExtensionModal] = useState(false);
   const [showComments, setShowComments] = useState(false);
 
-  const priorityColors = { high: "error", medium: "warning", low: "success" };
-  const statusColors = {
-    todo: "default",
-    "in-progress": "info",
-    completed: "success",
-  };
-
-  const isAssignedToMe =
-    resolveId(task.assignedTo) === resolveId(currentUserId);
-
-  /* ------------------ PERMISSION RULES ------------------ */
-
-  const isUnassigned = !task.assignedTo;
+  /* ------------------ derived permissions ------------------ */
+  const assignedUserId = resolveId(task.assignedTo);
+  const isAssignedToMe = assignedUserId === resolveId(currentUserId);
+  const isUnassigned = !assignedUserId;
 
   const canCompleteTask =
     task.status !== "completed" &&
@@ -72,8 +62,21 @@ export default function TeamTaskItem({
 
   const canDeleteTask = isAdminOrManager;
 
+  /* ------------------ status colors ------------------ */
+  const priorityColors = {
+    high: "error",
+    medium: "warning",
+    low: "success",
+  };
+
+  const statusColors = {
+    todo: "default",
+    "in-progress": "info",
+    completed: "success",
+  };
+
   /* ------------------ due date logic ------------------ */
-  const getDueDateStatus = () => {
+  const dueStatus = useMemo(() => {
     if (!task.dueDate)
       return { color: "text.secondary", message: "No due date" };
 
@@ -94,26 +97,25 @@ export default function TeamTaskItem({
       return { color: "warning.light", message: `Due in ${days} days` };
 
     return { color: "text.secondary", message: `Due in ${days} days` };
-  };
-
-  const dueStatus = getDueDateStatus();
+  }, [task.dueDate, task.status]);
 
   const formatDate = (d) =>
     d ? new Date(d).toLocaleDateString() : "No due date";
 
+  /* ------------------ calendar links ------------------ */
   const getICSUrl = () =>
     `${process.env.REACT_APP_API_URL}/api/ics/${task._id}`;
 
   const getGoogleUrl = () => {
     if (!task.dueDate) return "#";
-    const s = new Date(task.dueDate);
-    const e = new Date(s.getTime() + 30 * 60 * 1000);
-    const f = (d) =>
+    const start = new Date(task.dueDate);
+    const end = new Date(start.getTime() + 30 * 60 * 1000);
+    const fmt = (d) =>
       d.toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
 
     return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
       task.title
-    )}&details=${encodeURIComponent(task.description || "")}&dates=${f(s)}/${f(e)}`;
+    )}&details=${encodeURIComponent(task.description || "")}&dates=${fmt(start)}/${fmt(end)}`;
   };
 
   const openMenu = Boolean(anchorEl);
@@ -133,7 +135,7 @@ export default function TeamTaskItem({
         )}
 
         <CardContent>
-          {/* header */}
+          {/* HEADER */}
           <Box sx={{ display: "flex", justifyContent: "space-between" }}>
             <Typography variant="h6" fontWeight={700}>
               {task.icon || "📋"} {task.title}
@@ -161,8 +163,16 @@ export default function TeamTaskItem({
           </Typography>
 
           <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap" }}>
-            <Chip label={task.priority} color={priorityColors[task.priority]} size="small" />
-            <Chip label={task.status} color={statusColors[task.status]} size="small" />
+            <Chip
+              label={task.priority}
+              color={priorityColors[task.priority]}
+              size="small"
+            />
+            <Chip
+              label={task.status}
+              color={statusColors[task.status]}
+              size="small"
+            />
             <Chip
               icon={<AccessTimeIcon />}
               label={`${formatDate(task.dueDate)} • ${dueStatus.message}`}
@@ -204,8 +214,15 @@ export default function TeamTaskItem({
             </Button>
           </Stack>
 
+          {/* COMMENTS */}
           <Collapse in={showComments}>
-            <Box sx={{ mt: 3, pt: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
+            <Box
+              sx={{
+                mt: 3,
+                pt: 2,
+                borderTop: `1px solid ${theme.palette.divider}`,
+              }}
+            >
               <TaskComments
                 taskId={task._id}
                 myRole={isAdminOrManager ? "admin" : "member"}

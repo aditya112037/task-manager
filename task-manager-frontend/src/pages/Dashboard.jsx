@@ -1,5 +1,5 @@
-// src/pages/Dashboard.jsx
-import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
+// src/pages/Dashboard.jsx - Fully Fixed Version
+import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   Box,
   Tabs,
@@ -50,7 +50,21 @@ const Dashboard = () => {
   const handleTabChange = (_, v) => setTab(v);
   const showSnack = (msg, sev = "success") => setSnackbar({ open: true, message: msg, severity: sev });
 
-
+  // ✅ CRITICAL FIX 2: Helper function to get role in a team (no race conditions)
+  const getMyRoleInTeam = useCallback(
+    (teamId) => {
+      const team = teams.find(t => String(t._id) === String(teamId));
+      if (!team || !user) return null;
+      
+      const member = team.members?.find(m => {
+        const uid = m.user?._id || m.user;
+        return String(uid) === String(user._id);
+      });
+      
+      return member?.role || null;
+    },
+    [teams, user]
+  );
 
   // Derive teamTasksByTeam from teamTasks
   const teamTasksByTeam = useMemo(() => {
@@ -76,8 +90,7 @@ const Dashboard = () => {
       grouped[teamId].tasks.push(t);
     });
     return grouped;
-  }, [teamTasks, teams]); // ✅ Added teams dependency
-
+  }, [teamTasks, teams]);
 
   // fetch user's teams
   const fetchTeams = useCallback(async () => {
@@ -94,31 +107,40 @@ const Dashboard = () => {
     }
   }, []);
 
-  // ✅ FIXED: fetch all team tasks WITH TEAM DATA
+  // ✅ PERFORMANCE IMPROVEMENT: Fetch team tasks in parallel
   const fetchTeamTasks = useCallback(async () => {
+    if (teams.length === 0) {
+      setTeamTasks([]);
+      setLoading(s => ({ ...s, teamTasks: false }));
+      return;
+    }
+    
     setLoading(s => ({ ...s, teamTasks: true }));
     setError(e => ({ ...e, teamTasks: null }));
 
     try {
-      let allTasks = [];
-
-      for (const team of teams) {
-        try {
-          const res = await teamTasksAPI.getTeamTasks(team._id);
-          if (Array.isArray(res.data)) {
-            // ✅ CRITICAL FIX: Attach full team object to each task
-            const tasksWithTeam = res.data.map(task => ({
-              ...task,
-              team: team  // This ensures task.team is a full object with name, color, etc.
-            }));
-            allTasks = allTasks.concat(tasksWithTeam);
+      // Fetch all team tasks in parallel for better performance
+      const results = await Promise.all(
+        teams.map(async (team) => {
+          try {
+            const res = await teamTasksAPI.getTeamTasks(team._id);
+            if (Array.isArray(res.data)) {
+              // ✅ CRITICAL FIX: Attach full team object to each task
+              return res.data.map(task => ({
+                ...task,
+                team: team  // This ensures task.team is a full object with name, color, etc.
+              }));
+            }
+            return [];
+          } catch (err) {
+            console.warn(`Failed to load tasks for team ${team._id}:`, err);
+            return [];
           }
-        } catch (err) {
-          console.warn(`Failed to load tasks for team ${team._id}`);
-          setError(e => ({ ...e, teamTasks: "Failed to load some team tasks" }));
-        }
-      }
+        })
+      );
 
+      // Flatten all results into a single array
+      const allTasks = results.flat();
       setTeamTasks(allTasks);
     } catch (err) {
       console.error("fetchTeamTasks error:", err);
@@ -128,36 +150,44 @@ const Dashboard = () => {
     }
   }, [teams]);
 
-  // ✅ FIXED: fetch "assigned to me" tasks WITH TEAM DATA
+  // ✅ PERFORMANCE IMPROVEMENT: Fetch assigned tasks in parallel
   const fetchAssignedTasks = useCallback(async () => {
+    if (teams.length === 0) {
+      setAssignedTasks([]);
+      setLoading(s => ({ ...s, assigned: false }));
+      return;
+    }
+    
     setLoading(s => ({ ...s, assigned: true }));
     setError(e => ({ ...e, assigned: null }));
 
     try {
-      let assigned = [];
+      // Fetch tasks in parallel
+      const results = await Promise.all(
+        teams.map(async (team) => {
+          try {
+            const res = await teamTasksAPI.getTeamTasks(team._id);
+            const tasks = res.data || [];
+            
+            // Attach team data before filtering
+            const tasksWithTeam = tasks.map(task => ({
+              ...task,
+              team: team  // ✅ Attach team object
+            }));
 
-      for (const team of teams) {
-        try {
-          const res = await teamTasksAPI.getTeamTasks(team._id);
-          const tasks = res.data || [];
+            // Filter tasks assigned to current user
+            return tasksWithTeam.filter(
+              t => String(t.assignedTo?._id || t.assignedTo) === String(user?._id)
+            );
+          } catch (err) {
+            console.warn(`Failed assigned tasks for team ${team._id}:`, err);
+            return [];
+          }
+        })
+      );
 
-          // Attach team data before filtering
-          const tasksWithTeam = tasks.map(task => ({
-            ...task,
-            team: team  // ✅ Attach team object
-          }));
-
-          const mine = tasksWithTeam.filter(
-            t => String(t.assignedTo?._id || t.assignedTo) === String(user?._id)
-          );
-
-          assigned = assigned.concat(mine);
-        } catch (err) {
-          console.warn(`Failed assigned tasks for team ${team._id}`);
-          setError(e => ({ ...e, assigned: "Failed to load some assigned tasks" }));
-        }
-      }
-
+      // Flatten all results
+      const assigned = results.flat();
       setAssignedTasks(assigned);
     } catch (err) {
       console.error("fetchAssignedTasks error:", err);
@@ -167,31 +197,39 @@ const Dashboard = () => {
     }
   }, [teams, user]);
 
-
+  // ✅ CRITICAL FIX 1 & 3: Complete invalidation listeners
   useEffect(() => {
-  const onTasksInvalidate = () => {
-    fetchTeamTasks();
-    fetchAssignedTasks();
-  };
+    const onTasksInvalidate = () => {
+      console.log("🔄 Dashboard: invalidate:tasks received");
+      // ✅ FIX 3: Also fetch teams to ensure team data is fresh
+      fetchTeams();
+      fetchTeamTasks();
+      fetchAssignedTasks();
+    };
 
-  const onTeamsInvalidate = () => {
-    fetchTeams();
-  };
+    const onTeamsInvalidate = () => {
+      console.log("🔄 Dashboard: invalidate:teams received");
+      // ✅ FIX 1: Refetch everything when teams change
+      fetchTeams();
+      fetchTeamTasks();
+      fetchAssignedTasks();
+    };
 
-  window.addEventListener("invalidate:tasks", onTasksInvalidate);
-  window.addEventListener("invalidate:teams", onTeamsInvalidate);
+    window.addEventListener("invalidate:tasks", onTasksInvalidate);
+    window.addEventListener("invalidate:teams", onTeamsInvalidate);
 
-  return () => {
-    window.removeEventListener("invalidate:tasks", onTasksInvalidate);
-    window.removeEventListener("invalidate:teams", onTeamsInvalidate);
-  };
-}, [fetchTeamTasks, fetchAssignedTasks, fetchTeams]);
+    return () => {
+      window.removeEventListener("invalidate:tasks", onTasksInvalidate);
+      window.removeEventListener("invalidate:teams", onTeamsInvalidate);
+    };
+  }, [fetchTeamTasks, fetchAssignedTasks, fetchTeams]);
 
   // Fixed handlers - no refetch after mutations
   const handleStatusChange = async (taskId, status) => {
     try {
       await teamTasksAPI.updateTask(taskId, { status });
       // Socket event will handle UI update
+      showSnack("Task status updated", "success");
     } catch (err) {
       console.error("handleStatusChange:", err);
       showSnack(err.response?.data?.message || "Failed to update task", "error");
@@ -203,6 +241,7 @@ const Dashboard = () => {
     try {
       await teamTasksAPI.deleteTask(taskId);
       // Socket event will handle UI update
+      showSnack("Task deleted", "success");
     } catch (err) {
       console.error("handleDeleteTask:", err);
       showSnack(err.response?.data?.message || "Failed to delete", "error");
@@ -213,6 +252,7 @@ const Dashboard = () => {
     try {
       await teamTasksAPI.updateTask(taskId, { status: "completed" });
       // Socket event will handle UI update
+      showSnack("Task completed", "success");
     } catch (err) {
       console.error("handleQuickComplete:", err);
       showSnack(err.response?.data?.message || "Failed to complete", "error");
@@ -257,6 +297,11 @@ const Dashboard = () => {
     if (teams.length > 0) {
       fetchTeamTasks();
       fetchAssignedTasks();
+    } else {
+      // Reset if no teams
+      setTeamTasks([]);
+      setAssignedTasks([]);
+      setLoading(s => ({ ...s, teamTasks: false, assigned: false }));
     }
   }, [teams.length, fetchTeamTasks, fetchAssignedTasks]);
 
@@ -522,13 +567,10 @@ const Dashboard = () => {
               {Object.values(teamTasksByTeam)
                 .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
                 .map((g) => {
-                  // get user's role in that team
-                  const teamRecord = teams.find((t) => String(t._id) === String(g.id));
-                  const role = teamRecord?.members?.find((m) => {
-                    const uid = typeof m.user === "object" ? (m.user._id || m.user) : m.user;
-                    return String(uid) === String(user?._id);
-                  })?.role;
+                  // ✅ CRITICAL FIX 2: Use the helper function instead of inline calculation
+                  const role = getMyRoleInTeam(g.id);
                   const canEdit = ["admin", "manager"].includes(role);
+                  
                   return (
                     <Paper key={g.id} sx={{ mb: 3, borderRadius: 2, overflow: 'hidden' }}>
                       <Box sx={{ 
@@ -626,11 +668,10 @@ const Dashboard = () => {
           ) : (
             <Grid container spacing={3}>
               {teams.map((t) => {
-                const userRole = t.members?.find((m) => {
-                  const uid = typeof m.user === "object" ? (m.user._id || m.user) : m.user;
-                  return String(uid) === String(user?._id);
-                })?.role;
+                // ✅ CRITICAL FIX 2: Use the helper function
+                const userRole = getMyRoleInTeam(t._id);
                 const assignedCount = assignedTasks.filter((a) => String(a.team?._id || a.team) === String(t._id)).length;
+                
                 return (
                   <Grid item xs={12} sm={6} md={4} key={t._id}>
                     <Paper

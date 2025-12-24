@@ -1,5 +1,5 @@
 import { Box, Divider, Stack, Typography, CircularProgress } from "@mui/material";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { commentsAPI } from "../../services/api";
 import CommentItem from "./CommentItem";
 import CommentInput from "./CommentInput";
@@ -13,22 +13,31 @@ export default function TaskComments({ taskId, myRole }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  const firstLoad = useRef(true);
+
   /* ---------------------------------------------------
-     CORE: Load comments from backend (single source of truth)
+     LOAD COMMENTS (single source of truth)
   --------------------------------------------------- */
   const loadComments = useCallback(async () => {
     if (!taskId) return;
 
     try {
-      setLoading(true);
+      if (firstLoad.current) setLoading(true);
+
       const res = await commentsAPI.getByTask(taskId);
-      setComments(res.data || []);
+
+      const sorted = (res.data || []).sort(
+        (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
+      );
+
+      setComments(sorted);
       setError(null);
     } catch (err) {
       console.error("Failed to load comments:", err);
       setComments([]);
       setError("Failed to load comments");
     } finally {
+      firstLoad.current = false;
       setLoading(false);
     }
   }, [taskId]);
@@ -41,8 +50,7 @@ export default function TaskComments({ taskId, myRole }) {
   }, [loadComments]);
 
   /* ---------------------------------------------------
-     INVALIDATION LISTENER (socket-safe)
-     Socket → invalidate → REST re-fetch
+     SOCKET INVALIDATION LISTENER
   --------------------------------------------------- */
   useEffect(() => {
     if (!taskId) return;
@@ -58,7 +66,7 @@ export default function TaskComments({ taskId, myRole }) {
   }, [taskId, loadComments]);
 
   /* ---------------------------------------------------
-     ADD COMMENT (NO optimistic mutation)
+     ADD COMMENT (NO optimistic update, NO manual invalidate)
   --------------------------------------------------- */
   const addComment = async (text) => {
     if (!text.trim()) return;
@@ -68,13 +76,7 @@ export default function TaskComments({ taskId, myRole }) {
         content: text,
         type: "comment",
       });
-
-      // 🔥 trigger global refresh (this + other clients)
-      window.dispatchEvent(
-        new CustomEvent("invalidate:comments", {
-          detail: { taskId },
-        })
-      );
+      // socket will handle refresh
     } catch (err) {
       console.error("Failed to add comment:", err);
       alert("Failed to post comment. Please try again.");
@@ -89,12 +91,7 @@ export default function TaskComments({ taskId, myRole }) {
 
     try {
       await commentsAPI.delete(commentId);
-
-      window.dispatchEvent(
-        new CustomEvent("invalidate:comments", {
-          detail: { taskId },
-        })
-      );
+      // socket will handle refresh
     } catch (err) {
       console.error("Failed to delete comment:", err);
       alert("Failed to delete comment. Please try again.");
@@ -117,48 +114,33 @@ export default function TaskComments({ taskId, myRole }) {
           <CircularProgress size={24} />
         </Box>
       ) : error ? (
-        <Typography
-          color="error"
-          variant="body2"
-          sx={{ py: 2, textAlign: "center" }}
-        >
+        <Typography color="error" variant="body2" sx={{ py: 2, textAlign: "center" }}>
           {error}
         </Typography>
       ) : (
         <Stack spacing={1.5}>
           {comments.length === 0 && (
-            <Typography
-              color="text.secondary"
-              variant="body2"
-              sx={{ py: 2, textAlign: "center" }}
-            >
+            <Typography color="text.secondary" variant="body2" sx={{ py: 2, textAlign: "center" }}>
               No comments yet. Start the conversation!
             </Typography>
           )}
 
-          {comments
-            .filter(Boolean)
-            .map((c) => {
-              if (!c || !c.type) return null;
+          {comments.map((c) => {
+            if (!c?.type) return null;
 
-              if (c.type === "system") {
-                return (
-                  <SystemComment
-                    key={c._id || c.id}
-                    comment={c}
-                  />
-                );
-              }
+            if (c.type === "system") {
+              return <SystemComment key={c._id} comment={c} />;
+            }
 
-              return (
-                <CommentItem
-                  key={c._id || c.id}
-                  comment={c}
-                  myRole={myRole}
-                  onDelete={deleteComment}
-                />
-              );
-            })}
+            return (
+              <CommentItem
+                key={c._id}
+                comment={c}
+                myRole={myRole}
+                onDelete={deleteComment}
+              />
+            );
+          })}
         </Stack>
       )}
 

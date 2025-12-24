@@ -15,26 +15,58 @@ import MoreVertIcon from "@mui/icons-material/MoreVert";
 import ReplyIcon from "@mui/icons-material/Reply";
 import EditIcon from "@mui/icons-material/Edit";
 import FlagIcon from "@mui/icons-material/Flag";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useTheme } from "@mui/material/styles";
+import { useAuth } from "../../context/AuthContext";
 
-export default function CommentItem({ comment, myRole, onDelete, onReply, onEdit }) {
+/* ------------------ helpers ------------------ */
+const resolveId = (v) => (typeof v === "object" ? v?._id : v);
+
+export default function CommentItem({
+  comment,
+  myRole,
+  onDelete,
+  onReply,
+  onEdit,
+}) {
   const theme = useTheme();
+  const { user } = useAuth();
   const isDarkMode = theme.palette.mode === "dark";
+
   const [anchorEl, setAnchorEl] = useState(null);
   const menuOpen = Boolean(anchorEl);
 
-  // ✅ CORRECT: Use comment.type (backend: "comment" | "system")
-  const canDelete = ["admin", "manager"].includes(myRole) && comment.type === "comment";
-  const canEdit = comment.author?._id === localStorage.getItem("userId") || ["admin", "manager"].includes(myRole);
+  /* ------------------ identity ------------------ */
+  const currentUserId = resolveId(user?._id);
+  const authorId = resolveId(comment.author);
 
-  // ✅ SAFE: Use optional chaining to prevent crashes
-  const authorName = comment.author?.name || comment.user?.name || "Unknown User";
-  const authorPhoto = comment.author?.photo || comment.user?.photo;
-  const content = comment.content || comment.text || "";
+  const isOwner = currentUserId && authorId === currentUserId;
+  const isAdminOrManager = ["admin", "manager"].includes(myRole);
 
-  // Format time
+  /* ------------------ permissions ------------------ */
+  const canEdit = isOwner || isAdminOrManager;
+  const canDelete =
+    isAdminOrManager && comment.type === "comment";
+
+  /* ------------------ safe data ------------------ */
+  const authorName =
+    comment.author?.name ||
+    comment.user?.name ||
+    "Unknown User";
+
+  const authorPhoto =
+    comment.author?.photo ||
+    comment.user?.photo ||
+    null;
+
+  const content =
+    comment.content ||
+    comment.text ||
+    "";
+
+  /* ------------------ time formatting ------------------ */
   const formatTime = (timestamp) => {
+    if (!timestamp) return "";
     const date = new Date(timestamp);
     const now = new Date();
     const diffMs = now - date;
@@ -46,134 +78,107 @@ export default function CommentItem({ comment, myRole, onDelete, onReply, onEdit
     if (diffMins < 60) return `${diffMins}m ago`;
     if (diffHours < 24) return `${diffHours}h ago`;
     if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString([], { month: "short", day: "numeric" });
+
+    return date.toLocaleDateString([], {
+      month: "short",
+      day: "numeric",
+    });
   };
 
-  const handleMenuClick = (event) => {
-    event.stopPropagation();
-    setAnchorEl(event.currentTarget);
+  /* ------------------ menu handlers ------------------ */
+  const openMenu = (e) => {
+    e.stopPropagation();
+    setAnchorEl(e.currentTarget);
   };
 
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
+  const closeMenu = () => setAnchorEl(null);
 
   const handleDelete = () => {
-    handleMenuClose();
-    if (window.confirm("Are you sure you want to delete this comment?")) {
+    closeMenu();
+    if (window.confirm("Delete this comment?")) {
       onDelete(comment._id);
     }
   };
 
-  const handleReply = () => {
-    handleMenuClose();
-    onReply && onReply(comment);
+  const handleEdit = () => {
+    closeMenu();
+    onEdit && onEdit(comment);
   };
 
-  const handleEdit = () => {
-    handleMenuClose();
-    onEdit && onEdit(comment);
+  const handleReply = () => {
+    closeMenu();
+    onReply && onReply(comment);
   };
 
   return (
     <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
-      {/* Avatar with status indicator */}
-      <Box sx={{ position: "relative" }}>
-        <Avatar
-          src={authorPhoto}
-          sx={{
-            width: 40,
-            height: 40,
-            border: `2px solid ${isDarkMode ? theme.palette.grey[800] : theme.palette.grey[200]}`,
-            boxShadow: isDarkMode ? "0 2px 8px rgba(0,0,0,0.3)" : "0 2px 8px rgba(0,0,0,0.1)",
-          }}
-        >
-          {authorName[0]?.toUpperCase()}
-        </Avatar>
-        {comment.author?.role === "admin" && (
-          <Box
-            sx={{
-              position: "absolute",
-              bottom: -2,
-              right: -2,
-              width: 14,
-              height: 14,
-              backgroundColor: theme.palette.primary.main,
-              borderRadius: "50%",
-              border: `2px solid ${isDarkMode ? theme.palette.grey[900] : "white"}`,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Box
-              component="span"
-              sx={{
-                fontSize: "8px",
-                color: "white",
-                fontWeight: "bold",
-              }}
-            >
-              A
-            </Box>
-          </Box>
-        )}
-      </Box>
+      {/* Avatar */}
+      <Avatar
+        src={authorPhoto}
+        sx={{
+          width: 40,
+          height: 40,
+          border: `2px solid ${
+            isDarkMode ? theme.palette.grey[800] : theme.palette.grey[200]
+          }`,
+        }}
+      >
+        {authorName[0]?.toUpperCase()}
+      </Avatar>
 
-      {/* Comment Content */}
-      <Box sx={{ flex: 1, position: "relative" }}>
+      {/* Content */}
+      <Box sx={{ flex: 1 }}>
         <Paper
           elevation={0}
           sx={{
             p: 2,
             borderRadius: 3,
-            backgroundColor: isDarkMode ? "rgba(50, 50, 50, 0.7)" : "grey.50",
-            border: `1px solid ${isDarkMode ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.08)"}`,
-            position: "relative",
-            transition: "all 0.2s ease",
-            "&:hover": {
-              backgroundColor: isDarkMode ? "rgba(60, 60, 60, 0.9)" : "grey.100",
-              borderColor: isDarkMode ? "rgba(255, 255, 255, 0.2)" : "rgba(0, 0, 0, 0.12)",
-            },
+            backgroundColor: isDarkMode
+              ? "rgba(50,50,50,0.7)"
+              : "grey.50",
+            border: `1px solid ${
+              isDarkMode
+                ? "rgba(255,255,255,0.1)"
+                : "rgba(0,0,0,0.08)"
+            }`,
           }}
         >
-          {/* Header with name and time */}
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
+          {/* Header */}
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              mb: 1,
+            }}
+          >
             <Box>
-              <Typography
-                fontWeight={600}
-                variant="body2"
-                sx={{
-                  color: isDarkMode ? "rgba(255, 255, 255, 0.95)" : "text.primary",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 1,
-                }}
-              >
+              <Typography fontWeight={600} variant="body2">
                 {authorName}
-                {comment.author?.role === "admin" && (
+                {isAdminOrManager && (
                   <Box
+                    component="span"
                     sx={{
-                      fontSize: "0.7rem",
-                      backgroundColor: theme.palette.primary.main,
-                      color: "white",
-                      px: 1,
+                      ml: 1,
+                      fontSize: "0.65rem",
+                      px: 0.75,
                       py: 0.25,
                       borderRadius: 1,
+                      backgroundColor: theme.palette.primary.main,
+                      color: "white",
                     }}
                   >
-                    Admin
+                    {myRole.toUpperCase()}
                   </Box>
                 )}
               </Typography>
+
               {comment.createdAt && (
-                <Tooltip title={new Date(comment.createdAt).toLocaleString()}>
+                <Tooltip
+                  title={new Date(comment.createdAt).toLocaleString()}
+                >
                   <Typography
                     variant="caption"
-                    sx={{
-                      color: isDarkMode ? "rgba(255, 255, 255, 0.5)" : "text.disabled",
-                      fontSize: "0.7rem",
-                    }}
+                    color="text.disabled"
                   >
                     {formatTime(comment.createdAt)}
                   </Typography>
@@ -181,28 +186,15 @@ export default function CommentItem({ comment, myRole, onDelete, onReply, onEdit
               )}
             </Box>
 
-            {/* Action Menu Button */}
-            <IconButton
-              size="small"
-              onClick={handleMenuClick}
-              sx={{
-                color: isDarkMode ? "rgba(255, 255, 255, 0.5)" : "text.secondary",
-                "&:hover": {
-                  color: isDarkMode ? "rgba(255, 255, 255, 0.8)" : "text.primary",
-                  backgroundColor: isDarkMode ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.04)",
-                },
-              }}
-            >
+            <IconButton size="small" onClick={openMenu}>
               <MoreVertIcon fontSize="small" />
             </IconButton>
           </Box>
 
-          {/* Comment Text */}
+          {/* Text */}
           <Typography
             variant="body2"
             sx={{
-              color: isDarkMode ? "rgba(255, 255, 255, 0.9)" : "text.secondary",
-              lineHeight: 1.5,
               whiteSpace: "pre-wrap",
               wordBreak: "break-word",
             }}
@@ -210,66 +202,30 @@ export default function CommentItem({ comment, myRole, onDelete, onReply, onEdit
             {content}
           </Typography>
 
-          {/* Edited indicator */}
           {comment.edited && (
             <Typography
               variant="caption"
-              sx={{
-                color: isDarkMode ? "rgba(255, 255, 255, 0.4)" : "text.disabled",
-                fontSize: "0.7rem",
-                display: "block",
-                mt: 1,
-                fontStyle: "italic",
-              }}
+              sx={{ display: "block", mt: 1, fontStyle: "italic" }}
             >
               (edited)
             </Typography>
           )}
         </Paper>
 
-        {/* Reply button (optional) */}
+        {/* Reply */}
         {onReply && (
-          <IconButton
-            size="small"
-            onClick={handleReply}
-            sx={{
-              mt: 0.5,
-              ml: 1,
-              fontSize: "0.75rem",
-              color: isDarkMode ? "rgba(255, 255, 255, 0.6)" : "text.secondary",
-              "&:hover": {
-                color: theme.palette.primary.main,
-              },
-            }}
-          >
-            <ReplyIcon fontSize="small" sx={{ mr: 0.5 }} />
-            Reply
+          <IconButton size="small" onClick={handleReply}>
+            <ReplyIcon fontSize="small" />
           </IconButton>
         )}
       </Box>
 
-      {/* Action Menu */}
+      {/* Menu */}
       <Menu
         anchorEl={anchorEl}
         open={menuOpen}
-        onClose={handleMenuClose}
+        onClose={closeMenu}
         onClick={(e) => e.stopPropagation()}
-        anchorOrigin={{
-          vertical: "bottom",
-          horizontal: "right",
-        }}
-        transformOrigin={{
-          vertical: "top",
-          horizontal: "right",
-        }}
-        PaperProps={{
-          sx: {
-            backgroundColor: isDarkMode ? "rgba(40, 40, 40, 0.95)" : "background.paper",
-            border: `1px solid ${isDarkMode ? "rgba(255, 255, 255, 0.1)" : "rgba(0, 0, 0, 0.08)"}`,
-            borderRadius: 2,
-            minWidth: 180,
-          },
-        }}
       >
         {canEdit && (
           <MenuItem onClick={handleEdit}>
@@ -298,7 +254,7 @@ export default function CommentItem({ comment, myRole, onDelete, onReply, onEdit
           </MenuItem>
         )}
 
-        <MenuItem onClick={handleMenuClose}>
+        <MenuItem onClick={closeMenu}>
           <ListItemIcon>
             <FlagIcon fontSize="small" />
           </ListItemIcon>

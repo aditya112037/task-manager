@@ -1,5 +1,7 @@
 import React, { createContext, useState, useContext, useEffect } from "react";
 import { authAPI } from "../services/api";
+import { getSocket } from "../services/socket";
+
 
 const AuthContext = createContext(null);
 
@@ -86,8 +88,13 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    setUser(null);
+    
 
+     const socket = getSocket();
+     if (socket) socket.disconnect(); // ✅ correct place
+
+  localStorage.clear();
+  setUser(null);
     // optional but recommended
     window.location.href = "/login";
   };
