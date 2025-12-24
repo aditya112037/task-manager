@@ -205,17 +205,17 @@ export default function TeamDetails() {
     };
 
     // ✅ ADDED: Comments invalidation for this team's tasks
-    //const onCommentsInvalidate = ({ detail }) => {
-      //if (!detail?.taskId) return;
+    const onCommentsInvalidate = ({ detail }) => {
+      if (!detail?.taskId) return;
       // Check if this task belongs to current team
-      //const affectedTask = teamTasks.find(t => t._id === detail.taskId);
-      // if (affectedTask) {
-        //console.log("🔄 TeamDetails: invalidate:comments for task", detail.taskId);
+        const affectedTask = teamTasks.find(t => t._id === detail.taskId);
+       if (affectedTask) {
+        console.log("🔄 TeamDetails: invalidate:comments for task", detail.taskId);
         // You could trigger a specific task refresh here if needed
         // For now, just refetch tasks
-        //fetchTeamTasks();
-      //}
-    //};
+        fetchTeamTasks();
+      }
+    };
 
     window.addEventListener("invalidate:tasks", onTasksInvalidate);
     window.addEventListener("invalidate:teams", onTeamsInvalidate);
