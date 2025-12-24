@@ -22,7 +22,7 @@ const StatusDonut = ({ data = {} }) => {
 
   return (
     <Box sx={styles.analyticsCard}>
-      <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>
+      <Typography textAlign={"center"} variant="h6" fontWeight={700} sx={{ mb: 1 }}>
         Task Status
       </Typography>
       

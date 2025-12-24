@@ -5,11 +5,24 @@ const Team = require("../models/team");
 const TaskComment = require("../models/TaskComment");
 const { protect } = require("../middleware/auth");
 
-// Socket helper
+// ----------------------------------------------------
+// SOCKET HELPERS (INVALIDATION ONLY)
+// ----------------------------------------------------
 const io = global._io;
-const emitToTeam = (teamId, event, payload) => {
+
+const invalidateTasks = (teamId) => {
   if (!io) return;
-  io.to(`team_${teamId}`).emit(event, payload);
+  io.to(`team_${teamId}`).emit("invalidate:tasks", { teamId });
+};
+
+const invalidateTeam = (teamId) => {
+  if (!io) return;
+  io.to(`team_${teamId}`).emit("invalidate:team", { teamId });
+};
+
+const invalidateComments = (teamId, taskId) => {
+  if (!io) return;
+  io.to(`team_${teamId}`).emit("invalidate:comments", { taskId });
 };
 
 /* ---------------- Helper ---------------- */
@@ -88,8 +101,8 @@ router.post("/:teamId", protect, async (req, res) => {
       meta: { title: task.title },
     });
 
-    emitToTeam(team._id, "taskCreated", task);
-    emitToTeam(team._id, "commentCreated", { taskId: task._id });
+    invalidateTasks(team._id);
+    invalidateComments(team._id, task._id);
 
     res.status(201).json(task);
   } catch (err) {
@@ -108,7 +121,7 @@ router.put("/:taskId", protect, async (req, res) => {
     if (!member) return res.status(403).json({ message: "Not authorized" });
 
     const oldStatus = task.status;
-    const oldAssigned = task.assignedTo?.toString();
+    const oldAssigned = task.assignedTo?.toString() || null;
 
     Object.assign(task, req.body);
     await task.save();
@@ -125,7 +138,7 @@ router.put("/:taskId", protect, async (req, res) => {
 
     if (
       req.body.assignedTo !== undefined &&
-      oldAssigned !== req.body.assignedTo
+      oldAssigned !== String(req.body.assignedTo || null)
     ) {
       await TaskComment.create({
         task: task._id,
@@ -134,10 +147,13 @@ router.put("/:taskId", protect, async (req, res) => {
         action: "assigned",
         meta: { to: req.body.assignedTo },
       });
+
+      // assignment affects visibility → invalidate team too
+      invalidateTeam(task.team._id);
     }
 
-    emitToTeam(task.team._id, "taskUpdated", task);
-    emitToTeam(task.team._id, "commentCreated", { taskId: task._id });
+    invalidateTasks(task.team._id);
+    invalidateComments(task.team._id, task._id);
 
     res.json(task);
   } catch (err) {
@@ -157,7 +173,8 @@ router.delete("/:taskId", protect, async (req, res) => {
       return res.status(403).json({ message: "Not authorized" });
 
     await task.deleteOne();
-    emitToTeam(task.team._id, "taskDeleted", task._id);
+
+    invalidateTasks(task.team._id);
 
     res.json({ message: "Task deleted" });
   } catch (err) {
@@ -194,8 +211,8 @@ router.post("/:taskId/request-extension", protect, async (req, res) => {
       meta: req.body,
     });
 
-    emitToTeam(task.team._id, "extensionRequested", task);
-    emitToTeam(task.team._id, "commentCreated", { taskId: task._id });
+    invalidateTasks(task.team._id);
+    invalidateComments(task.team._id, task._id);
 
     res.json(task);
   } catch (err) {
@@ -221,6 +238,7 @@ router.post("/:taskId/extension/approve", protect, async (req, res) => {
     task.extensionRequest.status = "approved";
     task.extensionRequest.reviewedBy = req.user._id;
     task.extensionRequest.reviewedAt = new Date();
+
     await task.save();
 
     await TaskComment.create({
@@ -230,9 +248,8 @@ router.post("/:taskId/extension/approve", protect, async (req, res) => {
       action: "extension_approved",
     });
 
-    emitToTeam(task.team._id, "extensionApproved", task);
-    emitToTeam(task.team._id, "taskUpdated", task);
-    emitToTeam(task.team._id, "commentCreated", { taskId: task._id });
+    invalidateTasks(task.team._id);
+    invalidateComments(task.team._id, task._id);
 
     res.json(task);
   } catch (err) {
@@ -257,6 +274,7 @@ router.post("/:taskId/extension/reject", protect, async (req, res) => {
     task.extensionRequest.status = "rejected";
     task.extensionRequest.reviewedBy = req.user._id;
     task.extensionRequest.reviewedAt = new Date();
+
     await task.save();
 
     await TaskComment.create({
@@ -266,9 +284,8 @@ router.post("/:taskId/extension/reject", protect, async (req, res) => {
       action: "extension_rejected",
     });
 
-    emitToTeam(task.team._id, "extensionRejected", task);
-    emitToTeam(task.team._id, "taskUpdated", task);
-    emitToTeam(task.team._id, "commentCreated", { taskId: task._id });
+    invalidateTasks(task.team._id);
+    invalidateComments(task.team._id, task._id);
 
     res.json(task);
   } catch (err) {

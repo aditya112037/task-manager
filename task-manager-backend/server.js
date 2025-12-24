@@ -24,7 +24,7 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      if (!origin) return callback(null, true); // allow mobile / postman
+      if (!origin) return callback(null, true);
       if (allowedOrigins.includes(origin)) return callback(null, true);
       return callback(new Error("CORS Not Allowed"));
     },
@@ -37,7 +37,7 @@ app.use(express.json());
 app.use(passport.initialize());
 
 /* ---------------------------------------------------
-   SOCKET.IO — REAL-TIME ENGINE
+   SOCKET.IO — INVALIDATION ENGINE
 --------------------------------------------------- */
 const io = new Server(server, {
   cors: {
@@ -46,11 +46,11 @@ const io = new Server(server, {
   },
 });
 
-// 🔥 expose globally for routes
+// 🔒 Single global socket instance
 global._io = io;
 
-// OPTIONAL helper (recommended)
-global.emitToTeam = (teamId, event, payload) => {
+// 🔒 Optional helper (still useful, but semantic-neutral)
+global.emitToTeam = (teamId, event, payload = {}) => {
   io.to(`team_${teamId}`).emit(event, payload);
 };
 
@@ -64,7 +64,7 @@ io.on("connection", (socket) => {
     if (!teamId) return;
     const room = `team_${teamId}`;
     socket.join(room);
-    console.log(`👥 Joined room: ${room}`);
+    console.log(`👥 Socket ${socket.id} joined ${room}`);
   });
 
   /* ------------------------------
@@ -74,11 +74,14 @@ io.on("connection", (socket) => {
     if (!teamId) return;
     const room = `team_${teamId}`;
     socket.leave(room);
-    console.log(`🚪 Left room: ${room}`);
+    console.log(`🚪 Socket ${socket.id} left ${room}`);
   });
 
-  socket.on("disconnect", () => {
-    console.log("❌ Socket disconnected:", socket.id);
+  /* ------------------------------
+     DISCONNECT
+  ------------------------------ */
+  socket.on("disconnect", (reason) => {
+    console.log("❌ Socket disconnected:", socket.id, reason);
   });
 });
 
@@ -87,7 +90,7 @@ io.on("connection", (socket) => {
 --------------------------------------------------- */
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/auth", require("./routes/googleAuth"));
-app.use("/api/tasks", require("./routes/tasks"));
+app.use("/api/tasks", require("./routes/tasks")); // personal tasks
 app.use("/api/teams", require("./routes/teams"));
 app.use("/api/team-tasks", require("./routes/TTRoutes"));
 app.use("/api/comments", require("./routes/taskComments"));

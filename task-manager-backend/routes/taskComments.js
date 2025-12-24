@@ -5,8 +5,15 @@ const TTask = require("../models/TTask");
 const Team = require("../models/team");
 const { protect } = require("../middleware/auth");
 
-// socket
+// ----------------------------------------------------
+// SOCKET HELPERS (INVALIDATION ONLY)
+// ----------------------------------------------------
 const io = global._io;
+
+const invalidateComments = (teamId, taskId) => {
+  if (!io) return;
+  io.to(`team_${teamId}`).emit("invalidate:comments", { taskId });
+};
 
 /* ---------------- Helper ---------------- */
 function findMember(team, userId) {
@@ -53,12 +60,12 @@ router.post("/:taskId", protect, async (req, res) => {
       type: "comment",
     });
 
+    // IMPORTANT:
+    // We return the created comment (as before),
+    // but DO NOT push it to other clients via socket.
     const populated = await comment.populate("author", "name photo");
 
-    io.to(`team_${task.team._id}`).emit("commentCreated", {
-      taskId: task._id,
-      comment: populated,
-    });
+    invalidateComments(task.team._id, task._id);
 
     res.status(201).json(populated);
   } catch (err) {
@@ -67,24 +74,23 @@ router.post("/:taskId", protect, async (req, res) => {
   }
 });
 
-/* ---------------- DELETE COMMENT (MODERATOR) ---------------- */
+/* ---------------- DELETE COMMENT (ADMIN / MANAGER) ---------------- */
 router.delete("/:commentId", protect, async (req, res) => {
   try {
     const comment = await TaskComment.findById(req.params.commentId);
     if (!comment) return res.status(404).json({ message: "Comment not found" });
 
     const team = await Team.findById(comment.team);
-    const member = findMember(team, req.user._id);
+    if (!team) return res.status(404).json({ message: "Team not found" });
 
+    const member = findMember(team, req.user._id);
     if (!member || !["admin", "manager"].includes(member.role))
       return res.status(403).json({ message: "Not authorized" });
 
+    const taskId = comment.task;
     await comment.deleteOne();
 
-    io.to(`team_${team._id}`).emit("commentDeleted", {
-      commentId: comment._id,
-      taskId: comment.task,
-    });
+    invalidateComments(team._id, taskId);
 
     res.json({ message: "Comment deleted" });
   } catch (err) {
