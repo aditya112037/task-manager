@@ -29,78 +29,71 @@ const PublicRoute = ({ children }) => {
 
 function AppContent() {
   const { user } = useAuth();
-  
-  // Initialize socket connection and set up comment listeners
+
   useEffect(() => {
     if (!user?._id) return;
-    
-    // Dynamically import socket service to avoid SSR issues
-    import("./services/socket").then(socketModule => {
-      const { initSocket, getSocket } = socketModule;
-      
-      // Initialize socket
-      initSocket(user._id);
-      const socket = getSocket();
-      
-      if (!socket) {
-        console.error("Socket not initialized");
-        return;
-      }
 
-      // Listen for comment events from backend
-      socket.on("commentCreated", ({ taskId, comment }) => {
-        console.log("commentCreated event received:", taskId, comment);
-        
-        // Dispatch event that TaskComments.jsx will listen for
-        window.dispatchEvent(
-          new CustomEvent("comment:refresh", {
-            detail: { taskId }
-          })
-        );
-        
-        // Also dispatch specific comment for instant UI update
-        window.dispatchEvent(
-          new CustomEvent("comment:new", {
-            detail: { taskId, comment }
-          })
-        );
-      });
-      
-      // Listen for comment deleted events
-      socket.on("commentDeleted", ({ taskId, commentId }) => {
-        console.log("commentDeleted event received:", taskId, commentId);
-        
-        window.dispatchEvent(
-          new CustomEvent("comment:delete", {
-            detail: { taskId, commentId }
-          })
-        );
-      });
+    let socket;
 
-      // Handle socket connection events
-      socket.on("connect", () => {
-        console.log("Socket connected");
-      });
+    import("./services/socket")
+      .then(({ initSocket, getSocket, connectSocket }) => {
+        initSocket(user._id);
+        socket = getSocket();
 
-      socket.on("disconnect", () => {
-        console.log("Socket disconnected");
+        if (!socket) return;
+
+        connectSocket();
+
+        // 🔴 TASKS INVALIDATION
+        socket.on("invalidate:tasks", ({ teamId }) => {
+          window.dispatchEvent(
+            new CustomEvent("invalidate:tasks", { detail: { teamId } })
+          );
+        });
+
+        // 🔴 TEAMS / ROLES INVALIDATION
+        socket.on("invalidate:team", ({ teamId }) => {
+          window.dispatchEvent(
+            new CustomEvent("invalidate:teams", { detail: { teamId } })
+          );
+        });
+
+        // 🔴 COMMENTS INVALIDATION
+        socket.on("invalidate:comments", ({ taskId }) => {
+          window.dispatchEvent(
+            new CustomEvent("invalidate:comments", { detail: { taskId } })
+          );
+        });
+
+        // 🔵 CONNECTION LOGGING (UX ONLY)
+        socket.on("connect", () => {
+          console.log("✅ Socket connected");
+        });
+
+        socket.on("disconnect", (reason) => {
+          console.log("❌ Socket disconnected:", reason);
+        });
+
+        socket.on("connect_error", (err) => {
+          console.error("⚠️ Socket connection error:", err);
+        });
+      })
+      .catch((err) => {
+        console.error("Failed to initialize socket:", err);
       });
 
-      socket.on("connect_error", (error) => {
-        console.error("Socket connection error:", error);
-      });
-    }).catch(err => {
-      console.error("Failed to load socket module:", err);
-    });
-
-    // Cleanup function
     return () => {
-      // Cleanup will be handled by the socket service's disconnectSocket
+      if (socket) {
+        socket.off("invalidate:tasks");
+        socket.off("invalidate:team");
+        socket.off("invalidate:comments");
+      }
     };
   }, [user]);
 
-  return null; // This component doesn't render anything
+  return null;
 }
+
 
 function App() {
   const [darkMode, setDarkMode] = useState(false);

@@ -23,12 +23,10 @@ import TaskList from "../components/Task/TaskList";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import { teamTasksAPI, teamsAPI } from "../services/api";
 import { useAuth } from "../context/AuthContext";
-import { initSocket, getSocket, disconnectSocket } from "../services/socket";
 
 const Dashboard = () => {
   const theme = useTheme();
   const { user } = useAuth();
-  const socketRef = useRef(null);
 
   const [tab, setTab] = useState(0);
   const [teams, setTeams] = useState([]);
@@ -52,18 +50,7 @@ const Dashboard = () => {
   const handleTabChange = (_, v) => setTab(v);
   const showSnack = (msg, sev = "success") => setSnackbar({ open: true, message: msg, severity: sev });
 
-  // Initialize socket connection
-  useEffect(() => {
-    if (!user?._id) return;
-    
-    initSocket(user._id);
-    socketRef.current = getSocket();
-    
-    return () => {
-      disconnectSocket();
-      socketRef.current = null;
-    };
-  }, [user]);
+
 
   // Derive teamTasksByTeam from teamTasks
   const teamTasksByTeam = useMemo(() => {
@@ -91,202 +78,6 @@ const Dashboard = () => {
     return grouped;
   }, [teamTasks, teams]); // ✅ Added teams dependency
 
-  // Join team rooms and set up socket listeners
-  useEffect(() => {
-    const socket = socketRef.current;
-    if (!socket || teams.length === 0) return;
-
-    // Join all team rooms
-    teams.forEach((team) => {
-      socket.emit("joinTeam", team._id);
-    });
-
-    // Set up socket event listeners
-    const handleTaskCreated = async () => {
-      await fetchTeamTasks(); // ✅ Refreshes tasks with proper team data
-      await fetchAssignedTasks();
-    };
-
-    const handleTaskUpdated = (updatedTask) => {
-      console.log("taskUpdated event received:", updatedTask);
-      
-      // ✅ FIXED: Merge team info if missing from socket data
-      const enrichTaskWithTeam = (task) => {
-        if (task.team && typeof task.team === 'object' && task.team.name) {
-          return task; // Already has populated team
-        }
-        
-        // Find team info from our local teams data
-        const teamId = task.team?._id || task.team;
-        const team = teams.find(t => t._id === teamId);
-        if (team) {
-          return { ...task, team };
-        }
-        return task;
-      };
-      
-      const enrichedTask = enrichTaskWithTeam(updatedTask);
-      
-      // Update teamTasks state
-      setTeamTasks(prev => 
-        prev.map(task => task._id === enrichedTask._id ? enrichedTask : task)
-      );
-      
-      // Update assignedTasks
-      setAssignedTasks(prev => 
-        prev.map(task => task._id === enrichedTask._id ? enrichedTask : task)
-      );
-      
-      showSnack(`Task updated: ${enrichedTask.title}`, "info");
-    };
-
-    const handleTaskDeleted = (deletedTaskId) => {
-      console.log("taskDeleted event received:", deletedTaskId);
-      
-      // Update teamTasks state
-      setTeamTasks(prev => prev.filter(task => task._id !== deletedTaskId));
-      
-      // Update assignedTasks
-      setAssignedTasks(prev => prev.filter(task => task._id !== deletedTaskId));
-      
-      showSnack("Task deleted", "warning");
-    };
-
-    const handleExtensionRequested = (task) => {
-      console.log("extensionRequested event received:", task);
-      
-      // ✅ FIXED: Merge team info
-      const enrichTaskWithTeam = (task) => {
-        if (task.team && typeof task.team === 'object' && task.team.name) {
-          return task;
-        }
-        const teamId = task.team?._id || task.team;
-        const team = teams.find(t => t._id === teamId);
-        return team ? { ...task, team } : task;
-      };
-      
-      const enrichedTask = enrichTaskWithTeam(task);
-      
-      // Update the specific task
-      setTeamTasks(prev => 
-        prev.map(t => t._id === enrichedTask._id ? enrichedTask : t)
-      );
-      
-      setAssignedTasks(prev => 
-        prev.map(t => t._id === enrichedTask._id ? enrichedTask : t)
-      );
-      
-      // Show notification based on user role
-      const team = teams.find(t => t._id === (enrichedTask.team?._id || enrichedTask.team));
-      const userRole = team?.members?.find(m => 
-        String(m.user?._id || m.user) === String(user?._id)
-      )?.role;
-      
-      if (userRole === "admin" || userRole === "manager") {
-        showSnack(`Extension requested for task: ${enrichedTask.title}`, "info");
-      } else if (String(enrichedTask.assignedTo?._id || enrichedTask.assignedTo) === String(user?._id)) {
-        showSnack("Your extension request has been submitted", "info");
-      }
-    };
-
-    const handleExtensionApproved = (task) => {
-      console.log("extensionApproved event received:", task);
-      
-      // ✅ FIXED: Merge team info
-      const enrichTaskWithTeam = (task) => {
-        if (task.team && typeof task.team === 'object' && task.team.name) {
-          return task;
-        }
-        const teamId = task.team?._id || task.team;
-        const team = teams.find(t => t._id === teamId);
-        return team ? { ...task, team } : task;
-      };
-      
-      const enrichedTask = enrichTaskWithTeam(task);
-      
-      // Update the task
-      setTeamTasks(prev => 
-        prev.map(t => t._id === enrichedTask._id ? enrichedTask : t)
-      );
-      
-      setAssignedTasks(prev => 
-        prev.map(t => t._id === enrichedTask._id ? enrichedTask : t)
-      );
-      
-      // If current user requested the extension
-      if (String(enrichedTask.assignedTo?._id || enrichedTask.assignedTo) === String(user?._id)) {
-        showSnack(`Extension approved for task: ${enrichedTask.title}`, "success");
-      }
-    };
-
-    const handleExtensionRejected = (task) => {
-      console.log("extensionRejected event received:", task);
-      
-      // ✅ FIXED: Merge team info
-      const enrichTaskWithTeam = (task) => {
-        if (task.team && typeof task.team === 'object' && task.team.name) {
-          return task;
-        }
-        const teamId = task.team?._id || task.team;
-        const team = teams.find(t => t._id === teamId);
-        return team ? { ...task, team } : task;
-      };
-      
-      const enrichedTask = enrichTaskWithTeam(task);
-      
-      // Update the task
-      setTeamTasks(prev => 
-        prev.map(t => t._id === enrichedTask._id ? enrichedTask : t)
-      );
-      
-      setAssignedTasks(prev => 
-        prev.map(t => t._id === enrichedTask._id ? enrichedTask : t)
-      );
-      
-      // If current user requested the extension
-      if (String(enrichedTask.assignedTo?._id || enrichedTask.assignedTo) === String(user?._id)) {
-        showSnack(`Extension rejected for task: ${enrichedTask.title}`, "warning");
-      }
-    };
-
-    // Register event listeners
-    socket.on("taskCreated", handleTaskCreated);
-    socket.on("taskUpdated", handleTaskUpdated);
-    socket.on("taskDeleted", handleTaskDeleted);
-    socket.on("extensionRequested", handleExtensionRequested);
-    socket.on("extensionApproved", handleExtensionApproved);
-    socket.on("extensionRejected", handleExtensionRejected);
-
-    // Handle socket errors
-    socket.on("connect_error", (error) => {
-      console.error("Socket connection error:", error);
-      showSnack("Connection lost. Attempting to reconnect...", "error");
-    });
-
-    socket.on("reconnect", () => {
-      console.log("Socket reconnected");
-      showSnack("Connection restored", "success");
-      
-      // Rejoin teams after reconnection
-      teams.forEach((team) => {
-        socket.emit("joinTeam", team._id);
-      });
-    });
-
-    // Cleanup function
-    return () => {
-      if (socket) {
-        socket.off("taskCreated", handleTaskCreated);
-        socket.off("taskUpdated", handleTaskUpdated);
-        socket.off("taskDeleted", handleTaskDeleted);
-        socket.off("extensionRequested", handleExtensionRequested);
-        socket.off("extensionApproved", handleExtensionApproved);
-        socket.off("extensionRejected", handleExtensionRejected);
-        socket.off("connect_error");
-        socket.off("reconnect");
-      }
-    };
-  }, [teams, user?._id]);
 
   // fetch user's teams
   const fetchTeams = useCallback(async () => {
@@ -375,6 +166,26 @@ const Dashboard = () => {
       setLoading(s => ({ ...s, assigned: false }));
     }
   }, [teams, user]);
+
+
+  useEffect(() => {
+  const onTasksInvalidate = () => {
+    fetchTeamTasks();
+    fetchAssignedTasks();
+  };
+
+  const onTeamsInvalidate = () => {
+    fetchTeams();
+  };
+
+  window.addEventListener("invalidate:tasks", onTasksInvalidate);
+  window.addEventListener("invalidate:teams", onTeamsInvalidate);
+
+  return () => {
+    window.removeEventListener("invalidate:tasks", onTasksInvalidate);
+    window.removeEventListener("invalidate:teams", onTeamsInvalidate);
+  };
+}, [fetchTeamTasks, fetchAssignedTasks, fetchTeams]);
 
   // Fixed handlers - no refetch after mutations
   const handleStatusChange = async (taskId, status) => {
@@ -550,12 +361,7 @@ const Dashboard = () => {
                     size="small"
                   />
                 )}
-                <Chip 
-                  label={`Live Updates ${socketRef.current?.connected ? "🟢" : "🔴"}`} 
-                  variant="outlined" 
-                  size="small"
-                  color={socketRef.current?.connected ? "success" : "error"}
-                />
+                
               </Box>
             </Box>
             <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
@@ -710,12 +516,7 @@ const Dashboard = () => {
                 <Typography variant="body2" color="text.secondary">
                   Live updates enabled for all teams you're a member of
                 </Typography>
-                <Chip 
-                  label={`Connection: ${socketRef.current?.connected ? "Connected 🟢" : "Disconnected 🔴"}`} 
-                  size="small"
-                  color={socketRef.current?.connected ? "success" : "error"}
-                  variant="outlined"
-                />
+                
               </Paper>
               
               {Object.values(teamTasksByTeam)

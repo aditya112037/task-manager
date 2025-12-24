@@ -36,7 +36,6 @@ import { teamsAPI, teamTasksAPI } from "../services/api";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import TeamTaskForm from "../components/Teams/TeamTaskForm";
 import { useAuth } from "../context/AuthContext";
-import { initSocket, getSocket, disconnectSocket } from "../services/socket";
 import TeamAnalytics from "../components/Teams/Overview/Analytics";
 /* ---------------------------------------------------
    SAFE MEMBER RESOLVER (prevents all crashes)
@@ -53,13 +52,11 @@ export default function TeamDetails() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const socketRef = useRef(null);
 
   const params = new URLSearchParams(location.search);
   const forcedTab = params.get("tab");
 
   const [tab, setTab] = useState(0);
-  const [socketConnected, setSocketConnected] = useState(false);
 
   const [team, setTeam] = useState(null);
   const [loadingTeam, setLoadingTeam] = useState(true);
@@ -94,196 +91,6 @@ export default function TeamDetails() {
     setSnackbar({ open: true, message: msg, severity: sev });
   }, []);
 
-  /* ---------------------------------------------------
-     Initialize Socket - FIXED with better cleanup
-  --------------------------------------------------- */
-  useEffect(() => {
-    if (!user?._id || !teamId) return;
-    
-    initSocket(user._id);
-    const socket = getSocket();
-    socketRef.current = socket;
-
-    // Join the team room
-    socket.emit("joinTeam", teamId);
-    setSocketConnected(socket.connected);
-
-    const onConnect = () => setSocketConnected(true);
-    const onDisconnect = () => setSocketConnected(false);
-
-    socket.on("connect", onConnect);
-    socket.on("disconnect", onDisconnect);
-
-    // Task events
-    const handleTaskCreated = (task) => {
-      const tId = task.team?._id || task.team;
-      if (String(tId) !== String(teamId)) return;
-
-      setTeamTasks(prev => {
-        // FIX: Filter out temp tasks and avoid duplicates
-        const filteredPrev = prev.filter(t => !String(t._id).startsWith("temp-"));
-        const exists = filteredPrev.some(t => t._id === task._id);
-        if (exists) return filteredPrev;
-        return [...filteredPrev, task];
-      });
-      setLoadingTasks(false); // FIX: Ensure loading state is cleared
-      showSnack(`New task created: ${task.title}`, "info");
-    };
-
-    const handleTaskUpdated = (task) => {
-      const tId = task.team?._id || task.team;
-      if (String(tId) !== String(teamId)) return;
-
-      setTeamTasks(prev =>
-        prev.map(t => (t._id === task._id ? task : t))
-      );
-      
-      // Remove from pending extensions if it's there
-      setPendingExtensions(prev =>
-        prev.filter(t => t._id !== task._id)
-      );
-      setLoadingTasks(false); // FIX: Ensure loading state is cleared
-      showSnack(`Task updated: ${task.title}`, "info");
-    };
-
-    const handleTaskDeleted = (taskId) => {
-      setTeamTasks(prev => prev.filter(t => t._id !== taskId));
-      setPendingExtensions(prev => prev.filter(t => t._id !== taskId));
-      showSnack("Task deleted", "warning");
-    };
-
-    // Extension events
-    const handleExtensionRequested = (task) => {
-      const tId = task.team?._id || task.team;
-      if (String(tId) !== String(teamId)) return;
-
-      setTeamTasks(prev =>
-        prev.map(t => (t._id === task._id ? task : t))
-      );
-
-      // FIX: Always update pending extensions, UI will filter based on role
-      setPendingExtensions(prev => {
-        const exists = prev.some(t => t._id === task._id);
-        if (exists) return prev.map(t => t._id === task._id ? task : t);
-        return [...prev, task];
-      });
-      
-      showSnack(`Extension requested for task: ${task.title}`, "info");
-    };
-
-    const handleExtensionApproved = (task) => {
-      const tId = task.team?._id || task.team;
-      if (String(tId) !== String(teamId)) return;
-
-      setTeamTasks(prev =>
-        prev.map(t => (t._id === task._id ? task : t))
-      );
-      setPendingExtensions(prev =>
-        prev.filter(t => t._id !== task._id)
-      );
-      showSnack(`Extension approved for task: ${task.title}`, "success");
-    };
-
-    const handleExtensionRejected = (task) => {
-      const tId = task.team?._id || task.team;
-      if (String(tId) !== String(teamId)) return;
-
-      setTeamTasks(prev =>
-        prev.map(t => (t._id === task._id ? task : t))
-      );
-      setPendingExtensions(prev =>
-        prev.filter(t => t._id !== task._id)
-      );
-      showSnack(`Extension rejected for task: ${task.title}`, "warning");
-    };
-
-    // Comment events - FRONTEND READY
-    const handleCommentCreated = ({ taskId, comment }) => {
-      // Dispatch custom event for TaskComments component
-      window.dispatchEvent(
-        new CustomEvent("comment:new", { detail: { taskId, comment } })
-      );
-    };
-
-    const handleCommentDeleted = ({ taskId, commentId }) => {
-      // Dispatch custom event for TaskComments component
-      window.dispatchEvent(
-        new CustomEvent("comment:delete", { detail: { taskId, commentId } })
-      );
-    };
-
-    const handleTeamUpdated = (updatedTeam) => {
-      if (String(updatedTeam._id) !== String(teamId)) return;
-      setTeam(updatedTeam);
-      setTeamFormData({
-        name: updatedTeam.name,
-        description: updatedTeam.description || "",
-        icon: updatedTeam.icon || "",
-        color: updatedTeam.color || "#1976d2",
-      });
-      showSnack("Team information updated", "info");
-    };
-
-    const handleMemberUpdated = (data) => {
-      const { teamId: eventTeamId } = data;
-      if (String(eventTeamId) !== String(teamId)) return;
-      fetchTeam(); // Refresh team data
-      showSnack("Team membership updated", "info");
-    };
-
-    // Handle errors
-    const handleConnectError = (error) => {
-      console.error("Socket connection error:", error);
-      showSnack("Connection lost. Attempting to reconnect...", "error");
-    };
-
-    const handleReconnect = () => {
-      console.log("Socket reconnected in TeamDetails");
-      setSocketConnected(true);
-      showSnack("Connection restored", "success");
-      socket.emit("joinTeam", teamId);
-    };
-
-    // Register event listeners
-    socket.on("taskCreated", handleTaskCreated);
-    socket.on("taskUpdated", handleTaskUpdated);
-    socket.on("taskDeleted", handleTaskDeleted);
-    socket.on("extensionRequested", handleExtensionRequested);
-    socket.on("extensionApproved", handleExtensionApproved);
-    socket.on("extensionRejected", handleExtensionRejected);
-    socket.on("commentCreated", handleCommentCreated);
-    socket.on("commentDeleted", handleCommentDeleted);
-    socket.on("teamUpdated", handleTeamUpdated);
-    socket.on("memberUpdated", handleMemberUpdated);
-    socket.on("connect_error", handleConnectError);
-    socket.on("reconnect", handleReconnect);
-
-    return () => {
-      if (socket) {
-        socket.emit("leaveTeam", teamId);
-        
-        // FIX: Remove specific listeners instead of all
-        socket.off("connect", onConnect);
-        socket.off("disconnect", onDisconnect);
-        socket.off("taskCreated", handleTaskCreated);
-        socket.off("taskUpdated", handleTaskUpdated);
-        socket.off("taskDeleted", handleTaskDeleted);
-        socket.off("extensionRequested", handleExtensionRequested);
-        socket.off("extensionApproved", handleExtensionApproved);
-        socket.off("extensionRejected", handleExtensionRejected);
-        socket.off("commentCreated", handleCommentCreated);
-        socket.off("commentDeleted", handleCommentDeleted);
-        socket.off("teamUpdated", handleTeamUpdated);
-        socket.off("memberUpdated", handleMemberUpdated);
-        socket.off("connect_error", handleConnectError);
-        socket.off("reconnect", handleReconnect);
-        
-        disconnectSocket();
-        socketRef.current = null;
-        setSocketConnected(false);
-      }
-    };
-  }, [teamId, user?._id]);
 
   /* ---------------------------------------------------
      APPLY ?tab=extensions
@@ -369,6 +176,27 @@ export default function TeamDetails() {
       setLoadingExtensions(false);
     }
   };
+
+  useEffect(() => {
+  const onTasksInvalidate = ({ detail }) => {
+    if (detail?.teamId && String(detail.teamId) !== String(teamId)) return;
+    fetchTeamTasks();
+    fetchPendingExtensions();
+  };
+
+  const onTeamInvalidate = ({ detail }) => {
+    if (detail?.teamId && String(detail.teamId) !== String(teamId)) return;
+    fetchTeam();
+  };
+
+  window.addEventListener("invalidate:tasks", onTasksInvalidate);
+  window.addEventListener("invalidate:teams", onTeamInvalidate);
+
+  return () => {
+    window.removeEventListener("invalidate:tasks", onTasksInvalidate);
+    window.removeEventListener("invalidate:teams", onTeamInvalidate);
+  };
+}, [teamId, fetchTeamTasks, fetchPendingExtensions, fetchTeam]);
 
   /* ---------------------------------------------------
      APPROVE - FIXED with optimistic update
@@ -673,12 +501,7 @@ export default function TeamDetails() {
                     color={isAdmin ? "primary" : "default"}
                     size="small"
                   />
-                  <Chip
-                    label={`Live ${socketConnected ? "🟢" : "🔴"}`}
-                    size="small"
-                    color={socketConnected ? "success" : "error"}
-                    variant="outlined"
-                  />
+               
                 </Box>
               )}
             </Box>
@@ -849,12 +672,7 @@ export default function TeamDetails() {
           <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
             <Typography variant="h6" fontWeight={700}>Extension Requests</Typography>
             <Box sx={{ display: "flex", gap: 1 }}>
-              <Chip 
-                label={`Live ${socketConnected ? "🟢" : "🔴"}`}
-                size="small"
-                color={socketConnected ? "success" : "error"}
-                variant="outlined"
-              />
+           
               <Button 
                 variant="outlined" 
                 onClick={handleRefreshExtensions}
