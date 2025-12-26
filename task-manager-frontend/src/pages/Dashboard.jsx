@@ -1,4 +1,4 @@
-// src/pages/Dashboard.jsx - Fully Fixed Version
+// src/pages/Dashboard.jsx - Fully Fixed Version with Role-Based Task Filtering
 import React, { useEffect, useState, useCallback, useMemo } from "react";
 import {
   Box,
@@ -537,6 +537,22 @@ const Dashboard = () => {
                   const role = getMyRoleInTeam(g.id);
                   const canEdit = ["admin", "manager"].includes(role);
                   
+                  // ✅ CRITICAL FIX: Filter tasks based on role
+                  const visibleTasks = role === "member" 
+                    ? g.tasks.filter(task => {
+                        // Members can only see:
+                        // 1. Tasks assigned to them
+                        // 2. Unassigned tasks (no assignedTo)
+                        const assignedToId = task.assignedTo?._id || task.assignedTo;
+                        return !assignedToId || String(assignedToId) === String(user?._id);
+                      })
+                    : g.tasks; // Admins and managers see all tasks
+
+                  // Update the task count in the header to reflect filtered tasks
+                  const visibleTaskCount = visibleTasks.length;
+                  const totalTaskCount = g.tasks.length;
+                  const hiddenTaskCount = totalTaskCount - visibleTaskCount;
+
                   return (
                     <Paper key={g.id} sx={{ mb: 3, borderRadius: 2, overflow: 'hidden' }}>
                       <Box sx={{ 
@@ -566,7 +582,12 @@ const Dashboard = () => {
                               {g.name}
                             </Typography>
                             <Typography variant="body2" color="text.secondary">
-                              {g.tasks.length} task{g.tasks.length > 1 ? 's' : ''} • {role ? `Your role: ${role}` : 'Member'} • Live Updates
+                              {visibleTaskCount} task{visibleTaskCount > 1 ? 's' : ''} • {role ? `Your role: ${role}` : 'Member'} • Live Updates
+                              {role === "member" && hiddenTaskCount > 0 && (
+                                <Typography component="span" variant="caption" sx={{ ml: 1, color: 'text.secondary' }}>
+                                  ({hiddenTaskCount} hidden)
+                                </Typography>
+                              )}
                             </Typography>
                           </Box>
                         </Box>
@@ -581,19 +602,39 @@ const Dashboard = () => {
                       </Box>
 
                       <Box sx={{ p: 3 }}>
-                        {g.tasks.map((task) => (
-                          <TeamTaskItem
-                            key={task._id}
-                            task={task}
-                            canEdit={canEdit || String((task.assignedTo && (task.assignedTo._id || task.assignedTo))) === String(user?._id)}
-                            currentUserId={user?._id}
-                            isAdminOrManager={canEdit}
-                            onEdit={() => handleEditTask(task)}
-                            onDelete={() => handleDeleteTask(task._id)}
-                            onStatusChange={(id, s) => handleStatusChange(id, s)}
-                            onQuickComplete={() => handleQuickComplete(task._id)}
-                          />
-                        ))}
+                        {visibleTaskCount === 0 ? (
+                          <Box sx={{ 
+                            textAlign: 'center', 
+                            py: 4,
+                            color: theme.palette.text.secondary
+                          }}>
+                            <AssignmentIcon sx={{ fontSize: 48, mb: 2, opacity: 0.5 }} />
+                            <Typography variant="body1" sx={{ mb: 1 }}>
+                              {role === "member" 
+                                ? "No tasks assigned to you in this team"
+                                : "No tasks in this team"}
+                            </Typography>
+                            <Typography variant="body2">
+                              {role === "member" 
+                                ? "Team admins will assign tasks to you here."
+                                : "Create tasks to get started."}
+                            </Typography>
+                          </Box>
+                        ) : (
+                          visibleTasks.map((task) => (
+                            <TeamTaskItem
+                              key={task._id}
+                              task={task}
+                              canEdit={canEdit || String((task.assignedTo && (task.assignedTo._id || task.assignedTo))) === String(user?._id)}
+                              currentUserId={user?._id}
+                              isAdminOrManager={canEdit}
+                              onEdit={() => handleEditTask(task)}
+                              onDelete={() => handleDeleteTask(task._id)}
+                              onStatusChange={(id, s) => handleStatusChange(id, s)}
+                              onQuickComplete={() => handleQuickComplete(task._id)}
+                            />
+                          ))
+                        )}
                       </Box>
                     </Paper>
                   );

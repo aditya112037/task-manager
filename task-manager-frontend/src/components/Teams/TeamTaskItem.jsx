@@ -51,16 +51,26 @@ export default function TeamTaskItem({
   const [openExtensionModal, setOpenExtensionModal] = useState(false);
   const [showComments, setShowComments] = useState(false);
 
-  /* ------------------ derived permissions ------------------ */
+  /* ------------------ identity ------------------ */
   const assignedUserId = resolveId(task.assignedTo);
-  const isAssignedToMe = assignedUserId === resolveId(currentUserId);
+  const myUserId = resolveId(currentUserId);
+
+  const isAssignedToMe = assignedUserId === myUserId;
   const isUnassigned = !assignedUserId;
 
+  const isTempTask =
+    typeof task._id === "string" && task._id.startsWith("temp-");
+
+  /* ------------------ PERMISSION GATES ------------------ */
+  const canInteractWithTask =
+    isAdminOrManager || isAssignedToMe || isUnassigned;
+
   const canCompleteTask =
-    task.status !== "completed" &&
-    (isAdminOrManager || isAssignedToMe || isUnassigned);
+    task.status !== "completed" && canInteractWithTask;
 
   const canDeleteTask = isAdminOrManager;
+
+  const canViewComments = !isTempTask && canInteractWithTask;
 
   /* ------------------ status colors ------------------ */
   const priorityColors = {
@@ -90,7 +100,9 @@ export default function TeamTaskItem({
     if (days < 0)
       return {
         color: "error.main",
-        message: `Overdue by ${Math.abs(days)} day${Math.abs(days) !== 1 ? "s" : ""}`,
+        message: `Overdue by ${Math.abs(days)} day${
+          Math.abs(days) !== 1 ? "s" : ""
+        }`,
       };
     if (days === 0) return { color: "warning.main", message: "Due today" };
     if (days <= 2)
@@ -115,11 +127,14 @@ export default function TeamTaskItem({
 
     return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
       task.title
-    )}&details=${encodeURIComponent(task.description || "")}&dates=${fmt(start)}/${fmt(end)}`;
+    )}&details=${encodeURIComponent(task.description || "")}&dates=${fmt(
+      start
+    )}/${fmt(end)}`;
   };
 
   const openMenu = Boolean(anchorEl);
-  const showMenu = canCompleteTask || canDeleteTask || Boolean(task.dueDate);
+  const showMenu =
+    canCompleteTask || canDeleteTask || Boolean(task.dueDate);
 
   return (
     <>
@@ -127,7 +142,10 @@ export default function TeamTaskItem({
         sx={{
           mb: 2,
           borderRadius: 3,
-          borderLeft: `5px solid ${task.color || theme.palette.primary.main}`,
+          borderLeft: `5px solid ${
+            task.color || theme.palette.primary.main
+          }`,
+          opacity: canInteractWithTask ? 1 : 0.65,
         }}
       >
         {dueStatus.color === "error.main" && (
@@ -142,7 +160,10 @@ export default function TeamTaskItem({
             </Typography>
 
             {showMenu && (
-              <IconButton size="small" onClick={(e) => setAnchorEl(e.currentTarget)}>
+              <IconButton
+                size="small"
+                onClick={(e) => setAnchorEl(e.currentTarget)}
+              >
                 <MoreVertIcon />
               </IconButton>
             )}
@@ -194,54 +215,72 @@ export default function TeamTaskItem({
               </Button>
             )}
 
-            {isAssignedToMe && !task.extensionRequest?.requested && (
+            {isAssignedToMe &&
+              !task.extensionRequest?.requested &&
+              !isTempTask && (
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => setOpenExtensionModal(true)}
+                >
+                  Request Extension
+                </Button>
+              )}
+
+            {canViewComments && (
               <Button
                 size="small"
                 variant="outlined"
-                onClick={() => setOpenExtensionModal(true)}
+                startIcon={
+                  showComments ? (
+                    <ChatBubbleIcon />
+                  ) : (
+                    <ChatBubbleOutlineIcon />
+                  )
+                }
+                onClick={() => setShowComments((v) => !v)}
               >
-                Request Extension
+                {showComments ? "Hide Comments" : "Comments"}
               </Button>
             )}
-
-            <Button
-              size="small"
-              variant="outlined"
-              startIcon={showComments ? <ChatBubbleIcon /> : <ChatBubbleOutlineIcon />}
-              onClick={() => setShowComments((v) => !v)}
-            >
-              {showComments ? "Hide Comments" : "Comments"}
-            </Button>
           </Stack>
 
           {/* COMMENTS */}
-          <Collapse in={showComments}>
-            <Box
-              sx={{
-                mt: 3,
-                pt: 2,
-                borderTop: `1px solid ${theme.palette.divider}`,
-              }}
-            >
-              <TaskComments
-                taskId={task._id}
-                myRole={isAdminOrManager ? "admin" : "member"}
-              />
-            </Box>
-          </Collapse>
+          {canViewComments && (
+            <Collapse in={showComments}>
+              <Box
+                sx={{
+                  mt: 3,
+                  pt: 2,
+                  borderTop: `1px solid ${theme.palette.divider}`,
+                }}
+              >
+                <TaskComments
+                  taskId={task._id}
+                  myRole={isAdminOrManager ? "admin" : "member"}
+                />
+              </Box>
+            </Collapse>
+          )}
         </CardContent>
 
         {/* MENU */}
-        <Menu anchorEl={anchorEl} open={openMenu} onClose={() => setAnchorEl(null)}>
+        <Menu
+          anchorEl={anchorEl}
+          open={openMenu}
+          onClose={() => setAnchorEl(null)}
+        >
           {canCompleteTask && (
             <MenuItem onClick={() => onQuickComplete(task._id)}>
               <CheckCircleIcon fontSize="small" sx={{ mr: 1 }} /> Complete
             </MenuItem>
           )}
 
-          <MenuItem onClick={() => window.open(getICSUrl(), "_blank")}>
-            <ScheduleIcon fontSize="small" sx={{ mr: 1 }} /> Download ICS
-          </MenuItem>
+          {task.dueDate && (
+            <MenuItem onClick={() => window.open(getICSUrl(), "_blank")}>
+              <ScheduleIcon fontSize="small" sx={{ mr: 1 }} /> Download ICS
+            </MenuItem>
+          )}
 
           {task.dueDate && (
             <MenuItem onClick={() => window.open(getGoogleUrl(), "_blank")}>
@@ -263,11 +302,13 @@ export default function TeamTaskItem({
         </Menu>
       </Card>
 
-      <ExtensionRequestModal
-        open={openExtensionModal}
-        onClose={() => setOpenExtensionModal(false)}
-        task={task}
-      />
+      {!isTempTask && (
+        <ExtensionRequestModal
+          open={openExtensionModal}
+          onClose={() => setOpenExtensionModal(false)}
+          task={task}
+        />
+      )}
     </>
   );
 }

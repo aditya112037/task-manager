@@ -1,5 +1,5 @@
 import { Box, Divider, Stack, Typography, CircularProgress } from "@mui/material";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import { commentsAPI } from "../../services/api";
 import CommentItem from "./CommentItem";
 import CommentInput from "./CommentInput";
@@ -15,11 +15,16 @@ export default function TaskComments({ taskId, myRole }) {
 
   const firstLoad = useRef(true);
 
+  // 🚨 CRITICAL: Detect temp task IDs
+  const isTempTask = useMemo(() => {
+    return typeof taskId === "string" && taskId.startsWith("temp-");
+  }, [taskId]);
+
   /* ---------------------------------------------------
      LOAD COMMENTS (single source of truth)
   --------------------------------------------------- */
   const loadComments = useCallback(async () => {
-    if (!taskId) return;
+    if (!taskId || isTempTask) return;
 
     try {
       if (firstLoad.current) setLoading(true);
@@ -40,20 +45,27 @@ export default function TaskComments({ taskId, myRole }) {
       firstLoad.current = false;
       setLoading(false);
     }
-  }, [taskId]);
+  }, [taskId, isTempTask]);
 
   /* ---------------------------------------------------
      INITIAL LOAD
   --------------------------------------------------- */
   useEffect(() => {
+    if (isTempTask) {
+      // ⛔ Do NOT call backend for temp tasks
+      setComments([]);
+      setLoading(false);
+      return;
+    }
+
     loadComments();
-  }, [loadComments]);
+  }, [loadComments, isTempTask]);
 
   /* ---------------------------------------------------
      SOCKET INVALIDATION LISTENER
   --------------------------------------------------- */
   useEffect(() => {
-    if (!taskId) return;
+    if (!taskId || isTempTask) return;
 
     const handleInvalidate = (e) => {
       if (e.detail?.taskId !== taskId) return;
@@ -63,20 +75,20 @@ export default function TaskComments({ taskId, myRole }) {
     window.addEventListener("invalidate:comments", handleInvalidate);
     return () =>
       window.removeEventListener("invalidate:comments", handleInvalidate);
-  }, [taskId, loadComments]);
+  }, [taskId, isTempTask, loadComments]);
 
   /* ---------------------------------------------------
-     ADD COMMENT (NO optimistic update, NO manual invalidate)
+     ADD COMMENT
   --------------------------------------------------- */
   const addComment = async (text) => {
-    if (!text.trim()) return;
+    if (!text.trim() || isTempTask) return;
 
     try {
       await commentsAPI.create(taskId, {
         content: text,
         type: "comment",
       });
-      // socket will handle refresh
+      // ✅ socket will trigger refresh
     } catch (err) {
       console.error("Failed to add comment:", err);
       alert("Failed to post comment. Please try again.");
@@ -91,7 +103,7 @@ export default function TaskComments({ taskId, myRole }) {
 
     try {
       await commentsAPI.delete(commentId);
-      // socket will handle refresh
+      // ✅ socket will trigger refresh
     } catch (err) {
       console.error("Failed to delete comment:", err);
       alert("Failed to delete comment. Please try again.");
@@ -109,18 +121,34 @@ export default function TaskComments({ taskId, myRole }) {
 
       <Divider sx={{ mb: 2 }} />
 
-      {loading ? (
+      {isTempTask ? (
+        <Typography
+          color="text.secondary"
+          variant="body2"
+          sx={{ py: 2, textAlign: "center" }}
+        >
+          Comments will be available once the task is saved.
+        </Typography>
+      ) : loading ? (
         <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
           <CircularProgress size={24} />
         </Box>
       ) : error ? (
-        <Typography color="error" variant="body2" sx={{ py: 2, textAlign: "center" }}>
+        <Typography
+          color="error"
+          variant="body2"
+          sx={{ py: 2, textAlign: "center" }}
+        >
           {error}
         </Typography>
       ) : (
         <Stack spacing={1.5}>
           {comments.length === 0 && (
-            <Typography color="text.secondary" variant="body2" sx={{ py: 2, textAlign: "center" }}>
+            <Typography
+              color="text.secondary"
+              variant="body2"
+              sx={{ py: 2, textAlign: "center" }}
+            >
               No comments yet. Start the conversation!
             </Typography>
           )}
@@ -144,7 +172,10 @@ export default function TaskComments({ taskId, myRole }) {
         </Stack>
       )}
 
-      <CommentInput onSend={addComment} disabled={loading} />
+      <CommentInput
+        onSend={addComment}
+        disabled={loading || isTempTask}
+      />
     </Box>
   );
 }
