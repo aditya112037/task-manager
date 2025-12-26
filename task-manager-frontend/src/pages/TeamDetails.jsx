@@ -314,16 +314,26 @@ export default function TeamDetails() {
   /* ---------------------------------------------------
      UPDATE ROLE
   --------------------------------------------------- */
-  const handleUpdateRole = async (userId, newRole) => {
-    try {
-      await teamsAPI.updateMemberRole(teamId, userId, newRole);
-      // Socket event will trigger invalidate:teams
-      showSnack("Role updated", "success");
-    } catch (err) {
-      console.error("Role update error:", err);
-      showSnack("Failed to update role", "error");
-    }
-  };
+const handleUpdateRole = async (userId, newRole) => {
+  try {
+    await teamsAPI.updateMemberRole(teamId, userId, newRole);
+
+    // ✅ FIX: update local state immediately
+    setTeam(prev => ({
+      ...prev,
+      members: prev.members.map(m =>
+        resolveUserId(m.user) === userId
+          ? { ...m, role: newRole }
+          : m
+      )
+    }));
+
+    showSnack("Role updated", "success");
+  } catch (err) {
+    showSnack("Failed to update role", "error");
+  }
+};
+
 
   /* ---------------------------------------------------
      REMOVE MEMBER

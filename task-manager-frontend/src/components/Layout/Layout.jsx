@@ -124,24 +124,22 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
       <Sidebar open={sidebarOpen} toggleSidebar={toggleSidebar} />
 
       {/* Main Content */}
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          backgroundColor: (theme) => theme.palette.background.default,
-          width: `calc(100% - ${
-            sidebarOpen ? sidebarWidthOpen : sidebarWidthClosed
-          }px)`,
-          marginLeft: `${sidebarOpen ? sidebarWidthOpen : sidebarWidthClosed}px`,
-          transition: (theme) =>
-            theme.transitions.create(["width", "margin"], {
-              easing: theme.transitions.easing.sharp,
-              duration: theme.transitions.duration.enteringScreen,
-            }),
-          overflowY: "auto",
-          minHeight: "100vh",
-        }}
-      >
+<Box
+  component="main"
+  sx={{
+    flexGrow: 1,
+    minHeight: "100vh",
+    backgroundColor: theme => theme.palette.background.default,
+    transition: theme =>
+      theme.transitions.create("margin", {
+        easing: theme.transitions.easing.sharp,
+        duration: theme.transitions.duration.enteringScreen,
+      }),
+    ml: sidebarOpen ? "240px" : "64px",
+    overflowY: "auto",
+  }}
+>
+
         {/* Header */}
         <Header
           toggleDarkMode={toggleDarkMode}
