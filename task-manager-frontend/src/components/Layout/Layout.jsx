@@ -131,9 +131,9 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
     minHeight: "100vh",
     backgroundColor: theme => theme.palette.background.default,
     transition: theme =>
-      theme.transitions.create("margin", {
-        easing: theme.transitions.easing.sharp,
-        duration: theme.transitions.duration.enteringScreen,
+      theme.transitions.create("all", {
+        easing: theme.transitions.easing.easeInOut,
+        duration: theme.transitions.duration.standard,
       }),
     overflowY: "auto",
   }}
