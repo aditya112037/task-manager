@@ -135,7 +135,6 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
         easing: theme.transitions.easing.sharp,
         duration: theme.transitions.duration.enteringScreen,
       }),
-    ml: sidebarOpen ? "240px" : "64px",
     overflowY: "auto",
   }}
 >
