@@ -37,6 +37,7 @@ import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import TeamTaskForm from "../components/Teams/TeamTaskForm";
 import { useAuth } from "../context/AuthContext";
 import TeamAnalytics from "../components/Teams/Overview/Analytics";
+import { joinTeamRoom, leaveTeamRoom } from "../services/socket";
 
 /* ---------------------------------------------------
    SAFE MEMBER RESOLVER (prevents all crashes)
@@ -295,6 +296,15 @@ export default function TeamDetails() {
     fetchTeam();
   }, [fetchTeam]);
 
+  useEffect(() => {
+  if (!teamId) return;
+
+  joinTeamRoom(teamId);
+
+  return () => {
+    leaveTeamRoom(teamId);
+  };
+}, [teamId]);
   /* ---------------------------------------------------
      LEAVE TEAM
   --------------------------------------------------- */

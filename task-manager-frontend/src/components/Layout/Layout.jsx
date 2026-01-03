@@ -27,93 +27,53 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
   /* =====================================================
      SOCKET SETUP (SINGLE SOURCE OF TRUTH)
      ===================================================== */
-  useEffect(() => {
-    if (!user?._id) return;
+useEffect(() => {
+  if (!user?._id) return;
 
-    // 1️⃣ Init + connect socket ONCE per login
-    initSocket(user._id);
-    const socket = getSocket();
-    socketRef.current = socket;
+  initSocket(user._id);
+  const socket = getSocket();
+  socketRef.current = socket;
 
-    if (!socket.connected) {
-      connectSocket();
-    }
+  connectSocket();
 
-    /* ---------------- TASKS ---------------- */
-    socket.on("taskUpdated", ({ teamId }) => {
-      window.dispatchEvent(
-        new CustomEvent("invalidate:tasks", { detail: { teamId } })
-      );
-    });
+  // 🔁 TASKS
+  socket.on("invalidate:tasks", ({ teamId }) => {
+    window.dispatchEvent(
+      new CustomEvent("invalidate:tasks", { detail: { teamId } })
+    );
+  });
 
-    socket.on("taskDeleted", ({ teamId }) => {
-      window.dispatchEvent(
-        new CustomEvent("invalidate:tasks", { detail: { teamId } })
-      );
-    });
+  // 💬 COMMENTS
+  socket.on("invalidate:comments", ({ taskId }) => {
+    window.dispatchEvent(
+      new CustomEvent("invalidate:comments", { detail: { taskId } })
+    );
+  });
 
-    /* ---------------- TEAMS / ROLES ---------------- */
-    socket.on("memberUpdated", ({ teamId }) => {
-      window.dispatchEvent(
-        new CustomEvent("invalidate:teams", { detail: { teamId } })
-      );
-    });
+  // 👥 TEAMS / ROLES
+  socket.on("invalidate:teams", ({ teamId }) => {
+    window.dispatchEvent(
+      new CustomEvent("invalidate:teams", { detail: { teamId } })
+    );
+  });
 
-    socket.on("teamUpdated", ({ teamId }) => {
-      window.dispatchEvent(
-        new CustomEvent("invalidate:teams", { detail: { teamId } })
-      );
-    });
+  socket.on("connect", () => {
+    console.log("✅ Socket connected");
+  });
 
-    /* ---------------- COMMENTS ---------------- */
-    socket.on("commentCreated", ({ taskId }) => {
-      window.dispatchEvent(
-        new CustomEvent("invalidate:comments", { detail: { taskId } })
-      );
-    });
+  socket.on("disconnect", (reason) => {
+    console.warn("❌ Socket disconnected:", reason);
+  });
 
-    socket.on("commentDeleted", ({ taskId }) => {
-      window.dispatchEvent(
-        new CustomEvent("invalidate:comments", { detail: { taskId } })
-      );
-    });
+  return () => {
+    socket.off("invalidate:tasks");
+    socket.off("invalidate:comments");
+    socket.off("invalidate:teams");
+    socket.off("connect");
+    socket.off("disconnect");
+  };
+}, [user?._id]);
 
-    /* ---------------- EXTENSIONS ---------------- */
-    socket.on("extensionUpdated", ({ teamId }) => {
-      window.dispatchEvent(
-        new CustomEvent("invalidate:extensions", { detail: { teamId } })
-      );
-    });
-
-    /* ---------------- CONNECTION LOGS ---------------- */
-    socket.on("connect", () => {
-      console.log("✅ Socket connected");
-    });
-
-    socket.on("disconnect", (reason) => {
-      console.warn("❌ Socket disconnected:", reason);
-    });
-
-    socket.on("connect_error", (err) => {
-      console.error("⚠️ Socket error:", err.message);
-    });
-
-    /* ---------------- CLEANUP (NO DISCONNECT) ---------------- */
-    return () => {
-      if (!socket) return;
-
-      socket.off("taskUpdated");
-      socket.off("taskDeleted");
-      socket.off("memberUpdated");
-      socket.off("teamUpdated");
-      socket.off("commentCreated");
-      socket.off("commentDeleted");
-      socket.off("extensionUpdated");
-      socket.off("connect");
-      socket.off("disconnect");
-      socket.off("connect_error");
-    };
-  }, [user?._id]);
 
   /* =====================================================
      LAYOUT UI

@@ -8,19 +8,13 @@ export const initSocket = (userId) => {
 
   socket = io(process.env.REACT_APP_API_URL, {
     autoConnect: false,
-    reconnection: true,
-    reconnectionAttempts: Infinity,
-    reconnectionDelay: 1000,
     transports: ["websocket"],
-    auth: {
-      userId,
-    },
+    reconnection: true,
+    auth: { userId },
   });
 
   return socket;
 };
-
-export const getSocket = () => socket;
 
 export const connectSocket = () => {
   if (socket && !socket.connected) {
@@ -28,9 +22,16 @@ export const connectSocket = () => {
   }
 };
 
-export const disconnectSocket = () => {
-  if (socket) {
-    socket.disconnect();
-    socket = null;
+export const getSocket = () => socket;
+
+export const joinTeamRoom = (teamId) => {
+  if (socket && socket.connected && teamId) {
+    socket.emit("joinTeam", teamId);
+  }
+};
+
+export const leaveTeamRoom = (teamId) => {
+  if (socket && socket.connected && teamId) {
+    socket.emit("leaveTeam", teamId);
   }
 };

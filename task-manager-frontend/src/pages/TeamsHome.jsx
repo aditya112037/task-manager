@@ -19,6 +19,7 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 import GroupsIcon from "@mui/icons-material/Groups";
 import { teamsAPI } from "../services/api";
+import { joinTeamRoom, leaveTeamRoo } from "../services/socket";
 
 const TeamsHome = () => {
   const theme = useTheme();
@@ -33,6 +34,16 @@ const TeamsHome = () => {
   useEffect(() => {
     loadTeams();
   }, []);
+
+  useEffect(() => {
+  if (!teamId) return;
+
+  joinTeamRoom(teamId);
+
+  return () => {
+    leaveTeamRoom(teamId);
+  };
+}, [teamId]);
 
   const handleJoinSubmit = async () => {
     if (!inviteInput.trim()) {
