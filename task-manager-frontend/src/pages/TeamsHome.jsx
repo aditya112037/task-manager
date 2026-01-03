@@ -19,7 +19,7 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 import GroupsIcon from "@mui/icons-material/Groups";
 import { teamsAPI } from "../services/api";
-import { joinTeamRoom, leaveTeamRoom } from "../services/socket";
+
 
 const TeamsHome = () => {
   const theme = useTheme();
