@@ -10,7 +10,7 @@ const io = global._io;
 
 const invalidateTeam = (teamId) => {
   if (!io) return;
-  io.to(`team_${teamId}`).emit("invalidate:team", { teamId });
+  io.to(`team_${teamId}`).emit("invalidate:teams", { teamId });
 };
 
 const invalidateTasks = (teamId) => {

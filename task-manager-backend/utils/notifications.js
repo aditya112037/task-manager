@@ -1,6 +1,7 @@
 // utils/notifications.js
 const Notification = require("../models/Notification");
 const TTask = require("../models/TTask");
+const User = require("../models/user");
 const Team = require("../models/team");
 
 class NotificationService {
@@ -39,7 +40,11 @@ class NotificationService {
       const tasksDueSoon = await TTask.find({
         dueDate: { $lte: dueSoonDate, $gt: now },
         status: { $in: ["todo", "in-progress"] },
-        lastNotified: { $ne: dueSoonDate } // Don't notify twice for same period
+        $or: [
+        { lastNotified: { $exists: false } },
+        { lastNotified: { $lt: now } }
+      ]
+// Don't notify twice for same period
       }).populate("assignedTo team");
       
       for (const task of tasksDueSoon) {
