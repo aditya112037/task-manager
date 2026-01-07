@@ -6,7 +6,9 @@ const connectDB = require("./config/db");
 const passport = require("./config/google");
 const http = require("http");
 const { Server } = require("socket.io");
-
+const registerConferenceSocket = require("./socket/conference");
+const jwt = require("jsonwebtoken");
+const User = require("./models/user");
 dotenv.config();
 connectDB();
 
@@ -54,6 +56,24 @@ global.emitToTeam = (teamId, event, payload = {}) => {
   io.to(`team_${teamId}`).emit(event, payload);
 };
 
+io.use(async (socket, next) => {
+  try {
+    const token = socket.handshake.auth?.token;
+    if (!token) return next(new Error("Unauthorized"));
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id).select("name email");
+
+    if (!user) return next(new Error("Unauthorized"));
+
+    socket.user = user;
+    next();
+  } catch (err) {
+    next(new Error("Unauthorized"));
+  }
+});
+
+
 io.on("connection", (socket) => {
   console.log("🔥 Socket connected:", socket.id);
 
@@ -80,6 +100,12 @@ io.on("connection", (socket) => {
   /* ------------------------------
      DISCONNECT
   ------------------------------ */
+  socket.on("disconnect", (reason) => {
+    console.log("❌ Socket disconnected:", socket.id, reason);
+  });
+
+    registerConferenceSocket(io, socket);
+
   socket.on("disconnect", (reason) => {
     console.log("❌ Socket disconnected:", socket.id, reason);
   });
