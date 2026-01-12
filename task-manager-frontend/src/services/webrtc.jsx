@@ -520,13 +520,3 @@ export const cleanup = () => {
   
   isScreenSharing = false;
 };
-
-/* ----------------------------------------------------
-   EXPORT SPEAKER DETECTION FUNCTIONS
----------------------------------------------------- */
-export {
-  audioDetectionEnabled,
-  getSpeakingState,
-  getCurrentVolume,
-  setSpeakingState
-};
