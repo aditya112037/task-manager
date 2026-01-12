@@ -78,9 +78,6 @@ function App() {
     <AuthProvider>
       <ThemeProvider theme={theme}>
         <CssBaseline />
-        
-        
-
         <Router>
           <Routes>
             {/* LOGIN / REGISTER - NO SIDEBAR */}
@@ -158,6 +155,10 @@ function App() {
                   </Layout>
                 </ProtectedRoute>
               }
+            />
+            <Route
+              path="/teams/:teamId/conference/:conferenceId"
+              element={<ConferenceRoom />}
             />
           </Routes>
         </Router>

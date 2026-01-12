@@ -1,4 +1,4 @@
-// TeamDetails.jsx - Fully Fixed Version
+// TeamDetails.jsx - Updated with Conference Feature
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   Box,
@@ -31,8 +31,10 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ExitToAppIcon from "@mui/icons-material/ExitToApp";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import VideocamIcon from "@mui/icons-material/Videocam";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { teamsAPI, teamTasksAPI } from "../services/api";
+import { conferenceAPI } from "../services/conferenceAPI"; // New import
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import TeamTaskForm from "../components/Teams/TeamTaskForm";
 import { useAuth } from "../context/AuthContext";
@@ -60,21 +62,31 @@ export default function TeamDetails() {
 
   const [tab, setTab] = useState(0);
 
+  // Team state
   const [team, setTeam] = useState(null);
   const [loadingTeam, setLoadingTeam] = useState(true);
 
+  // Task state
   const [teamTasks, setTeamTasks] = useState([]);
   const [loadingTasks, setLoadingTasks] = useState(true);
 
+  // Extension state
   const [pendingExtensions, setPendingExtensions] = useState([]);
   const [loadingExtensions, setLoadingExtensions] = useState(false);
 
+  // Task form state
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
 
+  // Team edit state
   const [editTeamDialog, setEditTeamDialog] = useState(false);
   const [teamFormData, setTeamFormData] = useState({});
 
+  // Conference state - NEW
+  const [conference, setConference] = useState(null);
+  const [loadingConference, setLoadingConference] = useState(false);
+
+  // Snackbar state
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -183,8 +195,24 @@ export default function TeamDetails() {
   }, [teamId, myRole, showSnack]);
 
   /* ---------------------------------------------------
+     FETCH ACTIVE CONFERENCE (NEW)
+  --------------------------------------------------- */
+  const fetchConference = useCallback(async () => {
+    setLoadingConference(true);
+    try {
+      const res = await conferenceAPI.getActive(teamId);
+      setConference(res.data || null);
+    } catch (err) {
+      console.error("Conference fetch error:", err);
+      setConference(null);
+    } finally {
+      setLoadingConference(false);
+    }
+  }, [teamId]);
+
+  /* ---------------------------------------------------
      🚨 CRITICAL FIX 1: COMPLETE invalidation listeners
-     Listen to ALL events: tasks, teams, extensions, comments
+     Listen to ALL events: tasks, teams, extensions, comments, conferences (NEW)
   --------------------------------------------------- */
   useEffect(() => {
     const onTasksInvalidate = ({ detail }) => {
@@ -212,29 +240,37 @@ export default function TeamDetails() {
         const affectedTask = teamTasks.find(t => t._id === detail.taskId);
        if (affectedTask) {
         console.log("🔄 TeamDetails: invalidate:comments for task", detail.taskId);
-        // You could trigger a specific task refresh here if needed
-        // For now, just refetch tasks
         fetchTeamTasks();
       }
+    };
+
+    // ✅ NEW: Conference invalidation
+    const onConferenceInvalidate = ({ detail }) => {
+      if (detail?.teamId && String(detail.teamId) !== String(teamId)) return;
+      console.log("🔄 TeamDetails: invalidate:conferences received");
+      fetchConference();
     };
 
     window.addEventListener("invalidate:tasks", onTasksInvalidate);
     window.addEventListener("invalidate:teams", onTeamsInvalidate);
     window.addEventListener("invalidate:extensions", onExtensionsInvalidate);
     window.addEventListener("invalidate:comments", onCommentsInvalidate);
+    window.addEventListener("invalidate:conferences", onConferenceInvalidate); // NEW
 
     return () => {
       window.removeEventListener("invalidate:tasks", onTasksInvalidate);
       window.removeEventListener("invalidate:teams", onTeamsInvalidate);
       window.removeEventListener("invalidate:extensions", onExtensionsInvalidate);
       window.removeEventListener("invalidate:comments", onCommentsInvalidate);
+      window.removeEventListener("invalidate:conferences", onConferenceInvalidate); // NEW
     };
   }, [
     teamId, 
     fetchTeamTasks, 
     fetchPendingExtensions, 
-    fetchTeam, 
-    teamTasks // For comments invalidation check
+    fetchTeam,
+    fetchConference, // NEW
+    teamTasks
   ]);
 
   /* ---------------------------------------------------
@@ -248,6 +284,44 @@ export default function TeamDetails() {
     fetchTeamTasks();
     fetchPendingExtensions();
   }, [myRole, team, fetchTeamTasks, fetchPendingExtensions]);
+
+  /* ---------------------------------------------------
+     INITIAL LOAD
+  --------------------------------------------------- */
+  useEffect(() => {
+    fetchTeam();
+    fetchConference(); // NEW: Load conference on initial mount
+  }, [fetchTeam, fetchConference]);
+
+  useEffect(() => {
+    if (!teamId) return;
+    joinTeamRoom(teamId);
+    return () => {
+      leaveTeamRoom(teamId);
+    };
+  }, [teamId]);
+
+  /* ---------------------------------------------------
+     CONFERENCE HANDLERS (NEW)
+  --------------------------------------------------- */
+  const handleStartConference = async () => {
+    try {
+      setLoadingConference(true);
+      const res = await conferenceAPI.create(teamId);
+      showSnack("Conference started!", "success");
+      navigate(`/conference/${res.data._id}`);
+    } catch (err) {
+      console.error("Start conference error:", err);
+      showSnack(err.response?.data?.message || "Failed to start conference", "error");
+      setLoadingConference(false);
+    }
+  };
+
+  const handleJoinConference = () => {
+    if (conference) {
+      navigate(`/conference/${conference._id}`);
+    }
+  };
 
   /* ---------------------------------------------------
      APPROVE - FIXED with optimistic update
@@ -290,22 +364,6 @@ export default function TeamDetails() {
   };
 
   /* ---------------------------------------------------
-     INITIAL LOAD
-  --------------------------------------------------- */
-  useEffect(() => {
-    fetchTeam();
-  }, [fetchTeam]);
-
-  useEffect(() => {
-  if (!teamId) return;
-
-  joinTeamRoom(teamId);
-
-  return () => {
-    leaveTeamRoom(teamId);
-  };
-}, [teamId]);
-  /* ---------------------------------------------------
      LEAVE TEAM
   --------------------------------------------------- */
   const handleLeaveTeam = async () => {
@@ -324,26 +382,25 @@ export default function TeamDetails() {
   /* ---------------------------------------------------
      UPDATE ROLE
   --------------------------------------------------- */
-const handleUpdateRole = async (userId, newRole) => {
-  try {
-    await teamsAPI.updateMemberRole(teamId, userId, newRole);
+  const handleUpdateRole = async (userId, newRole) => {
+    try {
+      await teamsAPI.updateMemberRole(teamId, userId, newRole);
 
-    // ✅ FIX: update local state immediately
-    setTeam(prev => ({
-      ...prev,
-      members: prev.members.map(m =>
-        resolveUserId(m.user) === userId
-          ? { ...m, role: newRole }
-          : m
-      )
-    }));
+      // ✅ FIX: update local state immediately
+      setTeam(prev => ({
+        ...prev,
+        members: prev.members.map(m =>
+          resolveUserId(m.user) === userId
+            ? { ...m, role: newRole }
+            : m
+        )
+      }));
 
-    showSnack("Role updated", "success");
-  } catch (err) {
-    showSnack("Failed to update role", "error");
-  }
-};
-
+      showSnack("Role updated", "success");
+    } catch (err) {
+      showSnack("Failed to update role", "error");
+    }
+  };
 
   /* ---------------------------------------------------
      REMOVE MEMBER
@@ -613,9 +670,64 @@ const handleUpdateRole = async (userId, newRole) => {
       {/* OVERVIEW */}
       {tab === 0 && (
         <Paper sx={{ p: 3, borderRadius: 3 }}>
+          {/* CONFERENCE SECTION - NEW */}
+          <Box sx={{ mb: 4 }}>
+            <Typography variant="h6" fontWeight={700}>
+              Team Conference
+            </Typography>
+
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Real-time audio/video collaboration for this team
+            </Typography>
+
+            {loadingConference ? (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <CircularProgress size={20} />
+                <Typography variant="body2">Checking conference status...</Typography>
+              </Box>
+            ) : conference ? (
+              <Box>
+                <Button
+                  variant="contained"
+                  color="success"
+                  startIcon={<VideocamIcon />}
+                  onClick={handleJoinConference}
+                  sx={{ mb: 1 }}
+                >
+                  Join Active Conference
+                </Button>
+                <Typography variant="caption" color="text.secondary" display="block">
+                  Started by: {conference.createdBy?.name || "Unknown"} •{" "}
+                  {conference.participantsCount || 0} participants
+                </Typography>
+              </Box>
+            ) : ["admin", "manager"].includes(myRole) ? (
+              <Button
+                variant="contained"
+                startIcon={<VideocamIcon />}
+                onClick={handleStartConference}
+                disabled={loadingConference}
+              >
+                Start Conference
+              </Button>
+            ) : (
+              <Typography variant="caption" color="text.secondary">
+                No active conference right now. Only admins and managers can start a conference.
+              </Typography>
+            )}
+          </Box>
+
+          <Divider sx={{ mb: 4 }} />
+
+          {/* ANALYTICS SECTION */}
           <TeamAnalytics team={team} tasks={teamTasks} myRole={myRole} />
 
-          <Button sx={{ mt: 3 }} variant="outlined" startIcon={<ContentCopyIcon />} onClick={handleCopyInviteLink}>
+          <Button 
+            sx={{ mt: 3 }} 
+            variant="outlined" 
+            startIcon={<ContentCopyIcon />} 
+            onClick={handleCopyInviteLink}
+          >
             Copy Invite Link
           </Button>
         </Paper>
