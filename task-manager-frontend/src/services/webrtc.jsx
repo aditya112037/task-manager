@@ -5,6 +5,19 @@ const peers = {};
 let screenShareStream = null;
 let isScreenSharing = false;
 
+// Speaker detection variables
+let audioContext = null;
+let analyser = null;
+let microphoneSource = null;
+let speakingInterval = null;
+let isSpeaking = false;
+let onSpeakingChangeCallback = null;
+let audioDetectionEnabled = false;
+
+/* ----------------------------------------------------
+   CORE WEBRTC FUNCTIONS
+---------------------------------------------------- */
+
 export const setLocalStream = (stream) => {
   localStream = stream;
 };
@@ -85,7 +98,9 @@ export const closeAllPeers = () => {
   });
 };
 
-/* ---------------- AUDIO / VIDEO CONTROLS ---------------- */
+/* ----------------------------------------------------
+   AUDIO / VIDEO CONTROLS
+---------------------------------------------------- */
 
 export const toggleAudio = (enabled) => {
   if (!localStream) return false;
@@ -121,7 +136,225 @@ export const isVideoEnabled = () => {
   return videoTrack ? videoTrack.enabled : false;
 };
 
-/* ---------------- SCREEN SHARE ---------------- */
+/* ----------------------------------------------------
+   SPEAKER DETECTION (PHASE 3)
+---------------------------------------------------- */
+
+/**
+ * Starts real-time audio level detection for speaker detection
+ * @param {MediaStream} stream - The audio stream to analyze
+ * @param {Function} onSpeakingChange - Callback when speaking state changes
+ * @returns {Function} Cleanup function to stop detection
+ */
+export const startSpeakerDetection = (stream, onSpeakingChange) => {
+  if (!stream) {
+    console.error("No audio stream provided for speaker detection");
+    return () => {};
+  }
+
+  try {
+    // Initialize AudioContext
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) {
+      console.warn("Web Audio API not supported in this browser");
+      return () => {};
+    }
+
+    audioContext = new AudioContextClass();
+    analyser = audioContext.createAnalyser();
+    
+    // Configure analyzer
+    analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.8; // Smooth out rapid changes
+    analyser.minDecibels = -45;
+    analyser.maxDecibels = -10;
+
+    // Get audio track from stream
+    const audioTrack = stream.getAudioTracks()[0];
+    if (!audioTrack) {
+      console.warn("No audio track in stream for speaker detection");
+      audioContext.close();
+      return () => {};
+    }
+
+    // Create media stream source
+    microphoneSource = audioContext.createMediaStreamSource(stream);
+    microphoneSource.connect(analyser);
+
+    // Initialize data array and variables
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    let speaking = false;
+    let silenceCounter = 0;
+    const speakingHistory = []; // Track recent speaking state for hysteresis
+    
+    onSpeakingChangeCallback = onSpeakingChange;
+    audioDetectionEnabled = true;
+
+    /**
+     * Calculate audio volume from frequency data
+     * @returns {number} Volume level (0-100)
+     */
+    const calculateVolume = () => {
+      analyser.getByteFrequencyData(dataArray);
+      
+      // Calculate RMS (Root Mean Square) volume
+      let sum = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        sum += dataArray[i] * dataArray[i];
+      }
+      const rms = Math.sqrt(sum / dataArray.length);
+      
+      return rms;
+    };
+
+    /**
+     * Detect if user is speaking based on volume and thresholds
+     * Uses hysteresis to prevent rapid switching
+     */
+    const detectSpeaking = () => {
+      if (!audioDetectionEnabled) return;
+      
+      const volume = calculateVolume();
+      
+      // Adaptive thresholds based on environment
+      const speakingThreshold = 25; // Volume level to start speaking
+      const silenceThreshold = 20;  // Volume level to stop speaking
+      const historyLength = 5;      // Number of frames to consider
+      
+      // Add current volume to history
+      speakingHistory.push(volume > speakingThreshold);
+      if (speakingHistory.length > historyLength) {
+        speakingHistory.shift();
+      }
+      
+      // Determine speaking state based on history (hysteresis)
+      const recentSpeakingFrames = speakingHistory.filter(v => v).length;
+      const shouldBeSpeaking = recentSpeakingFrames > historyLength * 0.6; // 60% of recent frames
+      
+      // Apply silence debounce
+      if (shouldBeSpeaking) {
+        silenceCounter = 0;
+        if (!speaking) {
+          speaking = true;
+          isSpeaking = true;
+          if (onSpeakingChangeCallback) {
+            onSpeakingChangeCallback(true);
+          }
+        }
+      } else {
+        silenceCounter++;
+        // Require 5 frames of silence to stop speaking (prevents brief pauses)
+        if (silenceCounter > 5 && speaking) {
+          speaking = false;
+          isSpeaking = false;
+          if (onSpeakingChangeCallback) {
+            onSpeakingChangeCallback(false);
+          }
+        }
+      }
+    };
+
+    // Start detection interval (60ms = ~16.6fps)
+    speakingInterval = setInterval(detectSpeaking, 60);
+
+    console.log("Speaker detection started");
+    
+    // Return cleanup function
+    return () => {
+      stopSpeakerDetection();
+    };
+
+  } catch (error) {
+    console.error("Failed to start speaker detection:", error);
+    
+    // Clean up on error
+    if (audioContext) {
+      audioContext.close().catch(console.error);
+      audioContext = null;
+    }
+    
+    return () => {};
+  }
+};
+
+/**
+ * Stops speaker detection and cleans up resources
+ */
+export const stopSpeakerDetection = () => {
+  audioDetectionEnabled = false;
+  
+  if (speakingInterval) {
+    clearInterval(speakingInterval);
+    speakingInterval = null;
+  }
+  
+  if (analyser) {
+    analyser.disconnect();
+    analyser = null;
+  }
+  
+  if (microphoneSource) {
+    microphoneSource.disconnect();
+    microphoneSource = null;
+  }
+  
+  if (audioContext) {
+    audioContext.close().catch(console.error);
+    audioContext = null;
+  }
+  
+  isSpeaking = false;
+  onSpeakingChangeCallback = null;
+  
+  console.log("Speaker detection stopped");
+};
+
+/**
+ * Gets current speaking state
+ * @returns {boolean} True if user is currently speaking
+ */
+export const getSpeakingState = () => isSpeaking;
+
+/**
+ * Gets current audio volume level
+ * @returns {number} Current volume level (0-100)
+ */
+export const getCurrentVolume = () => {
+  if (!analyser || !audioDetectionEnabled) return 0;
+  
+  try {
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(dataArray);
+    
+    let sum = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+      sum += dataArray[i] * dataArray[i];
+    }
+    const rms = Math.sqrt(sum / dataArray.length);
+    
+    return Math.min(100, Math.max(0, rms));
+  } catch (error) {
+    console.error("Error getting volume:", error);
+    return 0;
+  }
+};
+
+/**
+ * Manually trigger speaking state (for testing or admin controls)
+ * @param {boolean} speaking - Whether to set as speaking
+ */
+export const setSpeakingState = (speaking) => {
+  const previousState = isSpeaking;
+  isSpeaking = speaking;
+  
+  if (previousState !== speaking && onSpeakingChangeCallback) {
+    onSpeakingChangeCallback(speaking);
+  }
+};
+
+/* ----------------------------------------------------
+   SCREEN SHARE
+---------------------------------------------------- */
 
 export const startScreenShare = async (videoRef) => {
   try {
@@ -234,7 +467,9 @@ export const stopScreenShare = async (videoRef) => {
 
 export const isScreenSharingActive = () => isScreenSharing;
 
-/* ---------------- STREAM MANAGEMENT ---------------- */
+/* ----------------------------------------------------
+   STREAM MANAGEMENT
+---------------------------------------------------- */
 
 export const replaceVideoTrack = async (newVideoTrack) => {
   if (!localStream) return;
@@ -260,7 +495,14 @@ export const replaceVideoTrack = async (newVideoTrack) => {
   });
 };
 
+/* ----------------------------------------------------
+   CLEANUP
+---------------------------------------------------- */
+
 export const cleanup = () => {
+  // Stop speaker detection first
+  stopSpeakerDetection();
+  
   // Close all peer connections
   closeAllPeers();
   
@@ -277,4 +519,14 @@ export const cleanup = () => {
   }
   
   isScreenSharing = false;
+};
+
+/* ----------------------------------------------------
+   EXPORT SPEAKER DETECTION FUNCTIONS
+---------------------------------------------------- */
+export {
+  audioDetectionEnabled,
+  getSpeakingState,
+  getCurrentVolume,
+  setSpeakingState
 };

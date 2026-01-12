@@ -19,7 +19,15 @@ const conferences = new Map();
         userId,
         role,
         name
-      })
+      }),
+      speakerMode: {
+        enabled: false,
+        activeSpeaker: null, // socketId of active speaker
+        speakerTimeout: null, // timeout to clear speaker
+        speakerTimeouts: Map() // per-user timeouts
+      },
+      raisedHands: Set(), // socketIds of users with raised hands
+      adminActions: Map() // Track admin actions
     }
   }
 */
@@ -36,6 +44,47 @@ module.exports = function registerConferenceSocket(io, socket) {
 
   const getConferenceRoom = (conferenceId) =>
     `conference_${conferenceId}`;
+
+  // Get participant from conference
+  const getParticipant = (conferenceId, socketId) => {
+    const conference = conferences.get(conferenceId);
+    if (!conference) return null;
+    return conference.participants.get(socketId);
+  };
+
+  // Check if user is admin in conference
+  const isConferenceAdmin = (conferenceId, socketId) => {
+    const participant = getParticipant(conferenceId, socketId);
+    return participant && ["admin", "manager"].includes(participant.role);
+  };
+
+  // Clear speaker timeout for a user
+  const clearSpeakerTimeout = (conference, socketId) => {
+    if (!conference.speakerMode) return;
+    
+    if (conference.speakerMode.speakerTimeouts.has(socketId)) {
+      clearTimeout(conference.speakerMode.speakerTimeouts.get(socketId));
+      conference.speakerMode.speakerTimeouts.delete(socketId);
+    }
+  };
+
+  // Set new speaker timeout (auto-clear after silence)
+  const setSpeakerTimeout = (conference, socketId) => {
+    clearSpeakerTimeout(conference, socketId);
+    
+    const timeout = setTimeout(() => {
+      if (conference.speakerMode.activeSpeaker === socketId) {
+        conference.speakerMode.activeSpeaker = null;
+        io.to(getConferenceRoom(conference.conferenceId)).emit(
+          "conference:active-speaker",
+          { socketId: null }
+        );
+      }
+      conference.speakerMode.speakerTimeouts.delete(socketId);
+    }, 2000); // 2 seconds of silence
+    
+    conference.speakerMode.speakerTimeouts.set(socketId, timeout);
+  };
 
   /* ---------------------------------------------------
      CREATE CONFERENCE
@@ -71,6 +120,14 @@ module.exports = function registerConferenceSocket(io, socket) {
         createdBy: user._id,
         createdAt: new Date(),
         participants: new Map(),
+        speakerMode: {
+          enabled: false,
+          activeSpeaker: null,
+          speakerTimeout: null,
+          speakerTimeouts: new Map(),
+        },
+        raisedHands: new Set(),
+        adminActions: new Map(),
       });
 
       socket.join(getConferenceRoom(conferenceId));
@@ -81,6 +138,7 @@ module.exports = function registerConferenceSocket(io, socket) {
           userId: user._id,
           role: member.role,
           name: user.name,
+          socketId: socket.id,
         });
 
       socket.emit("conference:created", {
@@ -132,24 +190,41 @@ module.exports = function registerConferenceSocket(io, socket) {
         userId: user._id,
         role: member.role,
         name: user.name,
+        socketId: socket.id,
+      });
+
+      // Emit participant list to all
+      const participants = Array.from(conference.participants.values());
+      io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
+        users: participants,
       });
 
       socket.to(getConferenceRoom(conferenceId)).emit(
         "conference:user-joined",
         {
           socketId: socket.id,
-          user: {
-            id: user._id,
-            name: user.name,
-            role: member.role,
-          },
+          userId: user._id,
+          userName: user.name,
         }
       );
 
+      // Send current conference state to new joiner
       socket.emit("conference:joined", {
         conferenceId,
-        participants: Array.from(conference.participants.values()),
+        participants: participants,
+        raisedHands: Array.from(conference.raisedHands),
+        speakerMode: {
+          enabled: conference.speakerMode.enabled,
+          activeSpeaker: conference.speakerMode.activeSpeaker,
+        },
       });
+
+      // Send current active speaker state
+      if (conference.speakerMode.activeSpeaker) {
+        socket.emit("conference:active-speaker", {
+          socketId: conference.speakerMode.activeSpeaker,
+        });
+      }
     } catch (err) {
       console.error("conference:join error:", err);
     }
@@ -162,13 +237,39 @@ module.exports = function registerConferenceSocket(io, socket) {
     const conference = conferences.get(conferenceId);
     if (!conference) return;
 
+    // Remove from participants
     conference.participants.delete(socket.id);
+    
+    // Remove from raised hands
+    conference.raisedHands.delete(socket.id);
+    
+    // Clear speaker if this user was speaking
+    if (conference.speakerMode.activeSpeaker === socket.id) {
+      conference.speakerMode.activeSpeaker = null;
+      clearSpeakerTimeout(conference, socket.id);
+      
+      io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
+        socketId: null,
+      });
+    }
+
     socket.leave(getConferenceRoom(conferenceId));
+
+    // Update participant list
+    const participants = Array.from(conference.participants.values());
+    io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
+      users: participants,
+    });
 
     socket.to(getConferenceRoom(conferenceId)).emit(
       "conference:user-left",
       { socketId: socket.id }
     );
+
+    // Update raised hands
+    io.to(getConferenceRoom(conferenceId)).emit("conference:hands-updated", {
+      raisedHands: Array.from(conference.raisedHands),
+    });
 
     // Auto-end if empty
     if (conference.participants.size === 0) {
@@ -205,12 +306,285 @@ module.exports = function registerConferenceSocket(io, socket) {
   });
 
   /* ---------------------------------------------------
+     RAISE HAND FEATURE
+  --------------------------------------------------- */
+  socket.on("conference:raise-hand", ({ conferenceId }) => {
+    const conference = conferences.get(conferenceId);
+    if (!conference) return;
+
+    const participant = conference.participants.get(socket.id);
+    if (!participant) return;
+
+    conference.raisedHands.add(socket.id);
+
+    io.to(getConferenceRoom(conferenceId)).emit("conference:hands-updated", {
+      raisedHands: Array.from(conference.raisedHands),
+    });
+  });
+
+  socket.on("conference:lower-hand", ({ conferenceId }) => {
+    const conference = conferences.get(conferenceId);
+    if (!conference) return;
+
+    conference.raisedHands.delete(socket.id);
+
+    io.to(getConferenceRoom(conferenceId)).emit("conference:hands-updated", {
+      raisedHands: Array.from(conference.raisedHands),
+    });
+  });
+
+  /* ---------------------------------------------------
+     SPEAKER MODE FUNCTIONALITY (PHASE 4)
+  --------------------------------------------------- */
+
+  // Toggle speaker mode (admin only)
+  socket.on("conference:toggle-speaker-mode", ({ conferenceId, enabled }) => {
+    const conference = conferences.get(conferenceId);
+    if (!conference) return;
+
+    // Check if user is admin
+    if (!isConferenceAdmin(conferenceId, socket.id)) {
+      return socket.emit("conference:error", {
+        message: "Only admin can toggle speaker mode",
+      });
+    }
+
+    conference.speakerMode.enabled = enabled;
+    
+    if (!enabled) {
+      // Clear active speaker when disabling
+      conference.speakerMode.activeSpeaker = null;
+      // Clear all timeouts
+      conference.speakerMode.speakerTimeouts.forEach(timeout => clearTimeout(timeout));
+      conference.speakerMode.speakerTimeouts.clear();
+    }
+
+    io.to(getConferenceRoom(conferenceId)).emit("conference:speaker-mode-toggled", {
+      enabled,
+      bySocketId: socket.id,
+    });
+
+    // Also emit active speaker update
+    io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
+      socketId: conference.speakerMode.activeSpeaker,
+    });
+  });
+
+  // Speaking detection from client
+  socket.on("conference:speaking", ({ conferenceId, speaking }) => {
+    const conference = conferences.get(conferenceId);
+    if (!conference || !conference.speakerMode.enabled) return;
+
+    const participant = conference.participants.get(socket.id);
+    if (!participant) return;
+
+    if (speaking) {
+      // Set this user as active speaker
+      conference.speakerMode.activeSpeaker = socket.id;
+      
+      // Clear previous timeout and set new one
+      setSpeakerTimeout(conference, socket.id);
+      
+      // Broadcast to all participants
+      io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
+        socketId: socket.id,
+      });
+    } else {
+      // Only clear if this user is the current active speaker
+      if (conference.speakerMode.activeSpeaker === socket.id) {
+        setSpeakerTimeout(conference, socket.id);
+      }
+    }
+  });
+
+  // Admin manually sets speaker
+  socket.on("conference:set-speaker", ({ conferenceId, targetSocketId }) => {
+    const conference = conferences.get(conferenceId);
+    if (!conference) return;
+
+    // Check if user is admin
+    if (!isConferenceAdmin(conferenceId, socket.id)) {
+      return socket.emit("conference:error", {
+        message: "Only admin can set speaker",
+      });
+    }
+
+    // Check if target exists
+    const targetParticipant = conference.participants.get(targetSocketId);
+    if (!targetParticipant) {
+      return socket.emit("conference:error", {
+        message: "Target participant not found",
+      });
+    }
+
+    // Set active speaker
+    conference.speakerMode.activeSpeaker = targetSocketId;
+    
+    // Clear previous timeout and set new one
+    setSpeakerTimeout(conference, targetSocketId);
+    
+    // Broadcast to all
+    io.to(getConferenceRoom(conferenceId)).emit("conference:speaker-assigned", {
+      socketId: targetSocketId,
+      bySocketId: socket.id,
+    });
+
+    io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
+      socketId: targetSocketId,
+    });
+  });
+
+  // Clear active speaker
+  socket.on("conference:clear-speaker", ({ conferenceId }) => {
+    const conference = conferences.get(conferenceId);
+    if (!conference) return;
+
+    // Check if user is admin
+    if (!isConferenceAdmin(conferenceId, socket.id)) {
+      return socket.emit("conference:error", {
+        message: "Only admin can clear speaker",
+      });
+    }
+
+    // Clear active speaker
+    const previousSpeaker = conference.speakerMode.activeSpeaker;
+    conference.speakerMode.activeSpeaker = null;
+    
+    if (previousSpeaker) {
+      clearSpeakerTimeout(conference, previousSpeaker);
+    }
+
+    // Broadcast to all
+    io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
+      socketId: null,
+    });
+  });
+
+  /* ---------------------------------------------------
+     ADMIN ACTIONS
+  --------------------------------------------------- */
+  socket.on("conference:admin-action", async ({ conferenceId, action, targetSocketId, userId }) => {
+    try {
+      const conference = conferences.get(conferenceId);
+      if (!conference) return;
+
+      // Verify admin permissions
+      const adminParticipant = conference.participants.get(socket.id);
+      if (!adminParticipant || !["admin", "manager"].includes(adminParticipant.role)) {
+        return socket.emit("conference:error", {
+          message: "Only admin can perform this action",
+        });
+      }
+
+      const targetParticipant = conference.participants.get(targetSocketId);
+      if (!targetParticipant) {
+        return socket.emit("conference:error", {
+          message: "Target participant not found",
+        });
+      }
+
+      // Perform action
+      switch (action) {
+        case "mute":
+          socket.to(targetSocketId).emit("conference:force-mute");
+          break;
+        
+        case "camera-off":
+          socket.to(targetSocketId).emit("conference:force-camera-off");
+          break;
+        
+        case "lower-hand":
+          conference.raisedHands.delete(targetSocketId);
+          io.to(getConferenceRoom(conferenceId)).emit("conference:hands-updated", {
+            raisedHands: Array.from(conference.raisedHands),
+          });
+          break;
+        
+        case "remove-from-conference":
+          // Remove target from conference
+          conference.participants.delete(targetSocketId);
+          conference.raisedHands.delete(targetSocketId);
+          
+          // If target was active speaker, clear it
+          if (conference.speakerMode.activeSpeaker === targetSocketId) {
+            conference.speakerMode.activeSpeaker = null;
+            io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
+              socketId: null,
+            });
+          }
+          
+          // Notify target
+          io.to(targetSocketId).emit("conference:removed-by-admin");
+          
+          // Update participant list
+          const participants = Array.from(conference.participants.values());
+          io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
+            users: participants,
+          });
+          
+          // Update raised hands
+          io.to(getConferenceRoom(conferenceId)).emit("conference:hands-updated", {
+            raisedHands: Array.from(conference.raisedHands),
+          });
+          break;
+        
+        case "clear-hands":
+          conference.raisedHands.clear();
+          io.to(getConferenceRoom(conferenceId)).emit("conference:hands-updated", {
+            raisedHands: [],
+          });
+          break;
+        
+        default:
+          console.warn(`Unknown admin action: ${action}`);
+      }
+
+      // Log admin action
+      conference.adminActions.set(Date.now(), {
+        action,
+        adminSocketId: socket.id,
+        targetSocketId,
+        timestamp: new Date(),
+      });
+
+    } catch (err) {
+      console.error("conference:admin-action error:", err);
+      socket.emit("conference:error", { message: "Server error" });
+    }
+  });
+
+  /* ---------------------------------------------------
      CLEANUP ON DISCONNECT
   --------------------------------------------------- */
   socket.on("disconnect", () => {
     for (const [conferenceId, conference] of conferences.entries()) {
       if (conference.participants.has(socket.id)) {
+        // Remove from participants
         conference.participants.delete(socket.id);
+        
+        // Remove from raised hands
+        conference.raisedHands.delete(socket.id);
+        
+        // Clear speaker if this user was speaking
+        if (conference.speakerMode.activeSpeaker === socket.id) {
+          conference.speakerMode.activeSpeaker = null;
+          clearSpeakerTimeout(conference, socket.id);
+          
+          io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
+            socketId: null,
+          });
+        }
+
+        // Update participant list
+        const participants = Array.from(conference.participants.values());
+        io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
+          users: participants,
+        });
+
+        // Update raised hands
+        io.to(getConferenceRoom(conferenceId)).emit("conference:hands-updated", {
+          raisedHands: Array.from(conference.raisedHands),
+        });
 
         socket
           .to(getConferenceRoom(conferenceId))

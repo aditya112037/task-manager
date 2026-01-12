@@ -8,7 +8,10 @@ import {
   MenuItem, 
   ListItemIcon,
   Divider,
-  Paper
+  Paper,
+  Chip,
+  Snackbar,
+  Alert
 } from "@mui/material";
 import { useParams, useNavigate } from "react-router-dom";
 import PanToolIcon from "@mui/icons-material/PanTool";
@@ -19,6 +22,8 @@ import HandshakeIcon from "@mui/icons-material/Handshake";
 import PersonRemoveIcon from "@mui/icons-material/PersonRemove";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import GroupsIcon from "@mui/icons-material/Groups";
+import VolumeUpIcon from "@mui/icons-material/VolumeUp";
+import MicExternalOnIcon from "@mui/icons-material/MicExternalOn";
 import { raiseHand, lowerHand, adminAction } from "../services/conferenceSocket";
 import RaiseHandIndicator from "../components/Conference/RaiseHandIndicator";
 import ParticipantsPanel from "../components/Conference/ParticipantsPanel";
@@ -29,6 +34,8 @@ import VideocamIcon from "@mui/icons-material/Videocam";
 import ScreenShareIcon from "@mui/icons-material/ScreenShare";
 import StopScreenShareIcon from "@mui/icons-material/StopScreenShare";
 import ClearAllIcon from "@mui/icons-material/ClearAll";
+import PersonIcon from "@mui/icons-material/Person";
+import PresentToAllIcon from "@mui/icons-material/PresentToAll";
 
 import { getSocket } from "../services/socket";
 import {
@@ -45,6 +52,8 @@ import {
   toggleVideo,
   startScreenShare,
   stopScreenShare,
+  startSpeakerDetection,
+  stopSpeakerDetection,
 } from "../services/webrtc";
 
 import VideoTile from "../components/Conference/VideoTile";
@@ -56,6 +65,7 @@ import { useAuth } from "../context/AuthContext";
 const LAYOUT = {
   GRID: "grid",
   PRESENTATION: "presentation",
+  SPEAKER: "speaker",
 };
 
 export default function ConferenceRoom() {
@@ -81,6 +91,74 @@ export default function ConferenceRoom() {
   const [localStream, setLocalStreamState] = useState(null);
   const [isAdminOrManager, setIsAdminOrManager] = useState(false);
   const [conferenceData, setConferenceData] = useState(null);
+  
+  // SPEAKER MODE STATE
+  const [activeSpeaker, setActiveSpeaker] = useState(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speakerModeEnabled, setSpeakerModeEnabled] = useState(false);
+  const [notification, setNotification] = useState({ open: false, message: "", severity: "info" });
+
+  /* ----------------------------------------------------
+     SHOW NOTIFICATION
+  ---------------------------------------------------- */
+  const showNotification = (message, severity = "info") => {
+    setNotification({ open: true, message, severity });
+  };
+
+  /* ----------------------------------------------------
+     AUTO-MUTE BASED ON SPEAKER MODE
+  ---------------------------------------------------- */
+  useEffect(() => {
+    if (!localStream || !speakerModeEnabled) return;
+    
+    const audioTracks = localStream.getAudioTracks();
+    if (audioTracks.length === 0) return;
+    
+    const shouldBeMuted = activeSpeaker !== socket.id && activeSpeaker !== null;
+    
+    if (shouldBeMuted) {
+      audioTracks.forEach(track => {
+        if (track.enabled) {
+          track.enabled = false;
+          setMicOn(false);
+        }
+      });
+    } else if (activeSpeaker === socket.id) {
+      audioTracks.forEach(track => {
+        if (!track.enabled) {
+          track.enabled = true;
+          setMicOn(true);
+        }
+      });
+    }
+  }, [activeSpeaker, speakerModeEnabled, localStream, socket.id]);
+
+  /* ----------------------------------------------------
+     SPEAKER DETECTION
+  ---------------------------------------------------- */
+  useEffect(() => {
+    if (!localStream || !speakerModeEnabled) return;
+    
+    const cleanup = startSpeakerDetection(localStream, (speaking) => {
+      if (speaking && !isSpeaking) {
+        setIsSpeaking(true);
+        // Emit speaking event to server
+        socket.emit("conference:speaking", {
+          conferenceId,
+          speaking: true,
+        });
+      } else if (!speaking && isSpeaking) {
+        setIsSpeaking(false);
+        // Emit stopped speaking event to server
+        socket.emit("conference:speaking", {
+          conferenceId,
+          speaking: false,
+        });
+      }
+    });
+    
+    return cleanup;
+  }, [localStream, speakerModeEnabled, conferenceId, socket, isSpeaking]);
 
   /* ----------------------------------------------------
      INIT MEDIA + CONFERENCE
@@ -100,28 +178,26 @@ export default function ConferenceRoom() {
           localVideoRef.current.srcObject = stream;
         }
 
-        // Get conference data (you might need to fetch this from your API)
+        // Get conference data
         const confData = await fetchConferenceData(conferenceId);
         setConferenceData(confData);
         
         // Check if current user is admin/manager
         if (confData && currentUser) {
-          // Check if user is conference creator or has admin role
           const isCreator = confData.createdBy === currentUser._id;
-          // You might want to add team-based admin checks here
           setIsAdminOrManager(isCreator);
         }
 
         joinConference(conferenceId, confData);
       } catch (error) {
         console.error("Failed to initialize media:", error);
+        showNotification("Failed to initialize media", "error");
       }
     };
 
     start();
 
     /* ---------------- SIGNALING HANDLERS ---------------- */
-
     const handleUserJoined = async ({ userId, userName, socketId }) => {
       const pc = createPeer(userId, socket);
 
@@ -189,6 +265,11 @@ export default function ConferenceRoom() {
         delete copy[socketId];
         return copy;
       });
+      
+      // Clear active speaker if they left
+      if (activeSpeaker === socketId) {
+        setActiveSpeaker(null);
+      }
     };
 
     /* ---------------- PARTICIPANT & HAND HANDLERS ---------------- */
@@ -206,25 +287,52 @@ export default function ConferenceRoom() {
       handleLeave();
     };
 
+    /* ---------------- SPEAKER MODE HANDLERS ---------------- */
+    const handleActiveSpeakerUpdate = ({ socketId }) => {
+      if (!mounted) return;
+      setActiveSpeaker(socketId);
+      
+      if (socketId === socket.id) {
+        showNotification("You are now the active speaker", "success");
+      }
+    };
+
+    const handleSpeakerModeToggled = ({ enabled }) => {
+      if (!mounted) return;
+      setSpeakerModeEnabled(enabled);
+      if (!enabled) {
+        setActiveSpeaker(null);
+      }
+      showNotification(`Speaker mode ${enabled ? "enabled" : "disabled"}`, "info");
+    };
+
+    const handleSpeakerAssigned = ({ socketId }) => {
+      if (!mounted) return;
+      setActiveSpeaker(socketId);
+      if (socketId === socket.id) {
+        showNotification("You have been assigned as speaker by admin", "success");
+      }
+    };
+
     /* ---------------- ADMIN ACTION LISTENERS ---------------- */
     const handleForceMute = () => {
       console.log("Admin forced mute");
       toggleAudio(false);
       setMicOn(false);
-      showNotification("Admin has muted your microphone");
+      showNotification("Admin has muted your microphone", "warning");
     };
 
     const handleForceCameraOff = () => {
       console.log("Admin turned off camera");
       toggleVideo(false);
       setCamOn(false);
-      showNotification("Admin has turned off your camera");
+      showNotification("Admin has turned off your camera", "warning");
     };
 
     const handleRemovedByAdmin = () => {
       console.log("Removed by admin");
       handleLeave();
-      showNotification("You have been removed from the conference by the admin");
+      showNotification("You have been removed from the conference by the admin", "error");
     };
 
     // Setup event listeners
@@ -237,6 +345,11 @@ export default function ConferenceRoom() {
     socket.on("conference:hands-updated", handleHandsUpdated);
     socket.on("conference:ended", handleConferenceEnded);
     
+    // Speaker mode listeners
+    socket.on("conference:active-speaker", handleActiveSpeakerUpdate);
+    socket.on("conference:speaker-mode-toggled", handleSpeakerModeToggled);
+    socket.on("conference:speaker-assigned", handleSpeakerAssigned);
+    
     // Admin action listeners
     socket.on("conference:force-mute", handleForceMute);
     socket.on("conference:force-camera-off", handleForceCameraOff);
@@ -245,6 +358,7 @@ export default function ConferenceRoom() {
     return () => {
       mounted = false;
       leaveConference(conferenceId);
+      stopSpeakerDetection();
       
       // Clean up all listeners
       socket.off("conference:user-joined", handleUserJoined);
@@ -255,6 +369,11 @@ export default function ConferenceRoom() {
       socket.off("conference:participants", handleParticipantsUpdate);
       socket.off("conference:hands-updated", handleHandsUpdated);
       socket.off("conference:ended", handleConferenceEnded);
+      
+      // Clean up speaker mode listeners
+      socket.off("conference:active-speaker", handleActiveSpeakerUpdate);
+      socket.off("conference:speaker-mode-toggled", handleSpeakerModeToggled);
+      socket.off("conference:speaker-assigned", handleSpeakerAssigned);
       
       // Clean up admin listeners
       socket.off("conference:force-mute", handleForceMute);
@@ -268,7 +387,6 @@ export default function ConferenceRoom() {
   ---------------------------------------------------- */
   const fetchConferenceData = async (confId) => {
     try {
-      // You'll need to implement this based on your API
       const response = await fetch(`/api/conferences/${confId}`);
       if (!response.ok) throw new Error("Failed to fetch conference data");
       return await response.json();
@@ -276,12 +394,6 @@ export default function ConferenceRoom() {
       console.error("Error fetching conference data:", error);
       return null;
     }
-  };
-
-  const showNotification = (message) => {
-    // You can use a toast notification library or custom component
-    console.log("Notification:", message);
-    // Example: toast.success(message);
   };
 
   const handleAdminAction = (action, targetSocketId) => {
@@ -316,6 +428,53 @@ export default function ConferenceRoom() {
   };
 
   /* ----------------------------------------------------
+     SPEAKER MODE FUNCTIONS
+  ---------------------------------------------------- */
+  const toggleSpeakerMode = () => {
+    const newMode = !speakerModeEnabled;
+    setSpeakerModeEnabled(newMode);
+    
+    if (!newMode) {
+      setActiveSpeaker(null);
+      // Re-enable all mics when speaker mode is disabled
+      if (localStream) {
+        localStream.getAudioTracks().forEach(track => {
+          if (!track.enabled) {
+            track.enabled = true;
+            setMicOn(true);
+          }
+        });
+      }
+    }
+    
+    socket.emit("conference:toggle-speaker-mode", {
+      conferenceId,
+      enabled: newMode,
+    });
+    
+    showNotification(`Speaker mode ${newMode ? "enabled" : "disabled"}`, "info");
+  };
+
+  const setAsSpeaker = (socketId) => {
+    socket.emit("conference:set-speaker", {
+      conferenceId,
+      targetSocketId: socketId,
+    });
+    setActiveSpeaker(socketId);
+    showNotification(`Set as active speaker`, "success");
+  };
+
+  const clearSpeaker = () => {
+    setActiveSpeaker(null);
+    socket.emit("conference:clear-speaker", { conferenceId });
+    showNotification("Speaker cleared", "info");
+  };
+
+  const toggleLayout = (newLayout) => {
+    setLayout(newLayout);
+  };
+
+  /* ----------------------------------------------------
      DERIVED DATA
   ---------------------------------------------------- */
   const allCameraStreams = useMemo(() => {
@@ -325,11 +484,17 @@ export default function ConferenceRoom() {
   const currentParticipant = participants.find(p => p.userId === currentUser?._id);
   const socketId = socket.id;
 
+  // Get current active speaker's participant info
+  const activeSpeakerParticipant = participants.find(p => p.socketId === activeSpeaker);
+  const activeSpeakerName = activeSpeakerParticipant?.userName || 
+    (activeSpeaker === socket.id ? "You" : `User ${activeSpeaker?.slice(0, 4)}`);
+
   /* ----------------------------------------------------
      CONTROLS
   ---------------------------------------------------- */
   const handleLeave = () => {
     leaveConference(conferenceId);
+    stopSpeakerDetection();
     
     // Stop all tracks
     if (localStream) {
@@ -343,6 +508,11 @@ export default function ConferenceRoom() {
   };
 
   const handleToggleMic = () => {
+    if (speakerModeEnabled && activeSpeaker !== socket.id) {
+      showNotification("Only the active speaker can unmute in speaker mode", "warning");
+      return;
+    }
+    
     toggleAudio(!micOn);
     setMicOn((v) => !v);
   };
@@ -375,6 +545,7 @@ export default function ConferenceRoom() {
       setSharingScreen((v) => !v);
     } catch (error) {
       console.error("Screen share error:", error);
+      showNotification("Screen share failed", "error");
     }
   };
 
@@ -402,6 +573,49 @@ export default function ConferenceRoom() {
           </Typography>
           
           <Box sx={{ display: "flex", gap: 1 }}>
+            {/* LAYOUT CONTROLS */}
+            <Tooltip title="Grid Layout">
+              <IconButton
+                onClick={() => toggleLayout(LAYOUT.GRID)}
+                sx={{
+                  background: layout === LAYOUT.GRID ? "#2196f3" : "#424242",
+                  color: "white",
+                  "&:hover": { background: layout === LAYOUT.GRID ? "#1976d2" : "#303030" },
+                }}
+              >
+                <GroupsIcon />
+              </IconButton>
+            </Tooltip>
+            
+            <Tooltip title="Speaker Layout">
+              <IconButton
+                onClick={() => toggleLayout(LAYOUT.SPEAKER)}
+                sx={{
+                  background: layout === LAYOUT.SPEAKER ? "#2196f3" : "#424242",
+                  color: "white",
+                  "&:hover": { background: layout === LAYOUT.SPEAKER ? "#1976d2" : "#303030" },
+                }}
+              >
+                <PresentToAllIcon />
+              </IconButton>
+            </Tooltip>
+            
+            {/* SPEAKER MODE TOGGLE */}
+            <Tooltip title={speakerModeEnabled ? "Disable Speaker Mode" : "Enable Speaker Mode"}>
+              <IconButton
+                onClick={toggleSpeakerMode}
+                sx={{
+                  background: speakerModeEnabled ? "#00e676" : "#424242",
+                  color: speakerModeEnabled ? "#000" : "white",
+                  "&:hover": {
+                    background: speakerModeEnabled ? "#00c853" : "#303030",
+                  },
+                }}
+              >
+                <VolumeUpIcon />
+              </IconButton>
+            </Tooltip>
+            
             {isAdminOrManager && raisedHands.length > 0 && (
               <Tooltip title="Clear All Raised Hands">
                 <IconButton
@@ -409,9 +623,7 @@ export default function ConferenceRoom() {
                   sx={{
                     background: "#ff9800",
                     color: "white",
-                    "&:hover": {
-                      background: "#f57c00",
-                    },
+                    "&:hover": { background: "#f57c00" },
                   }}
                 >
                   <ClearAllIcon />
@@ -425,38 +637,82 @@ export default function ConferenceRoom() {
                 sx={{
                   background: participantsPanelOpen ? "#2196f3" : "#424242",
                   color: "white",
-                  "&:hover": {
-                    background: participantsPanelOpen ? "#1976d2" : "#303030",
-                  },
+                  "&:hover": { background: participantsPanelOpen ? "#1976d2" : "#303030" },
                 }}
               >
-                <GroupsIcon />
+                <PersonIcon />
               </IconButton>
             </Tooltip>
           </Box>
         </Box>
 
+        {/* SPEAKER MODE STATUS */}
+        {speakerModeEnabled && (
+          <Box sx={{ 
+            mb: 2, 
+            p: 1, 
+            background: "rgba(0, 230, 118, 0.1)", 
+            borderRadius: 1,
+            border: "1px solid rgba(0, 230, 118, 0.3)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between"
+          }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <VolumeUpIcon sx={{ color: "#00e676", fontSize: 20 }} />
+              <Typography color="#00e676" fontWeight={500}>
+                Speaker Mode Active
+              </Typography>
+            </Box>
+            
+            {activeSpeaker && (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <Typography color="white" variant="body2">
+                  Current Speaker:
+                </Typography>
+                <Chip 
+                  label={activeSpeakerName}
+                  size="small"
+                  sx={{ 
+                    background: "#00e676", 
+                    color: "#000", 
+                    fontWeight: "bold" 
+                  }}
+                />
+                {isAdminOrManager && (
+                  <IconButton 
+                    size="small" 
+                    onClick={clearSpeaker}
+                    sx={{ color: "#ff4444" }}
+                  >
+                    <ClearAllIcon fontSize="small" />
+                  </IconButton>
+                )}
+              </Box>
+            )}
+            
+            {!activeSpeaker && (
+              <Typography color="#aaa" variant="body2">
+                Waiting for speaker...
+              </Typography>
+            )}
+          </Box>
+        )}
+
         {/* ===================== VIDEO AREA ===================== */}
         {layout === LAYOUT.PRESENTATION ? (
+          // PRESENTATION LAYOUT (Screen share)
           <>
-            {/* SCREEN SHARE / MAIN VIDEO */}
             <Box sx={{ flex: 1, mb: 2 }}>
               <VideoTile
                 videoRef={localVideoRef}
                 label={screenSharer === "me" ? "You (Presenting)" : "Presenter"}
                 isScreen
+                isActiveSpeaker={speakerModeEnabled && activeSpeaker === socket.id}
               />
             </Box>
 
-            {/* PARTICIPANT STRIP */}
-            <Box
-              sx={{
-                display: "flex",
-                gap: 2,
-                overflowX: "auto",
-                height: "200px",
-              }}
-            >
+            <Box sx={{ display: "flex", gap: 2, overflowX: "auto", height: "200px" }}>
               {allCameraStreams.map(([socketId, stream]) => {
                 const participant = participants.find(p => p.socketId === socketId);
                 const userName = participant?.userName || `User ${socketId.slice(0, 4)}`;
@@ -466,7 +722,8 @@ export default function ConferenceRoom() {
                     <VideoTile 
                       stream={stream} 
                       label={userName} 
-                      small 
+                      small
+                      isActiveSpeaker={speakerModeEnabled && activeSpeaker === socketId}
                     />
                     {isAdminOrManager && socketId !== socket.id && (
                       <IconButton
@@ -478,9 +735,7 @@ export default function ConferenceRoom() {
                           right: 4,
                           background: "rgba(0,0,0,0.7)",
                           color: "white",
-                          "&:hover": {
-                            background: "rgba(0,0,0,0.9)",
-                          },
+                          "&:hover": { background: "rgba(0,0,0,0.9)" },
                         }}
                       >
                         <MoreVertIcon fontSize="small" />
@@ -491,23 +746,115 @@ export default function ConferenceRoom() {
               })}
             </Box>
           </>
+        ) : layout === LAYOUT.SPEAKER ? (
+          // SPEAKER LAYOUT (Large active speaker + small others)
+          <Box sx={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
+            {/* MAIN SPEAKER VIEW */}
+            {activeSpeaker && (
+              <Box sx={{ flex: 2, minHeight: "60%" }}>
+                {activeSpeaker === socket.id ? (
+                  <VideoTile 
+                    videoRef={localVideoRef} 
+                    label="You (Speaking)"
+                    isActiveSpeaker={true}
+                    large
+                  >
+                    {handRaised && <RaiseHandIndicator label="Your Hand is Raised" />}
+                  </VideoTile>
+                ) : (
+                  allCameraStreams
+                    .filter(([socketId]) => socketId === activeSpeaker)
+                    .map(([socketId, stream]) => {
+                      const participant = participants.find(p => p.socketId === socketId);
+                      const userName = participant?.userName || `User ${socketId.slice(0, 4)}`;
+                      
+                      return (
+                        <VideoTile 
+                          key={socketId}
+                          stream={stream} 
+                          label={`${userName} (Speaking)`}
+                          isActiveSpeaker={true}
+                          large
+                        />
+                      );
+                    })
+                )}
+              </Box>
+            )}
+            
+            {/* OTHER PARTICIPANTS (GRID) */}
+            <Box sx={{ 
+              flex: 1, 
+              display: "grid", 
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: 1
+            }}>
+              {/* Local video (if not active speaker) */}
+              {activeSpeaker !== socket.id && (
+                <Box sx={{ position: "relative" }}>
+                  <VideoTile 
+                    videoRef={localVideoRef} 
+                    label="You"
+                    small
+                    isActiveSpeaker={false}
+                  />
+                </Box>
+              )}
+              
+              {/* Remote videos (excluding active speaker) */}
+              {allCameraStreams
+                .filter(([socketId]) => socketId !== activeSpeaker)
+                .map(([socketId, stream]) => {
+                  const participant = participants.find(p => p.socketId === socketId);
+                  const userName = participant?.userName || `User ${socketId.slice(0, 4)}`;
+                  const isHandRaised = raisedHands.includes(socketId);
+                  
+                  return (
+                    <Box key={socketId} sx={{ position: "relative" }}>
+                      <VideoTile 
+                        stream={stream} 
+                        label={userName}
+                        small
+                        isActiveSpeaker={false}
+                      />
+                      
+                      {isAdminOrManager && socketId !== socket.id && (
+                        <IconButton
+                          size="small"
+                          onClick={(e) => handleOpenAdminMenu(e, socketId)}
+                          sx={{
+                            position: "absolute",
+                            top: 4,
+                            right: 4,
+                            background: "rgba(0,0,0,0.7)",
+                            color: "white",
+                            "&:hover": { background: "rgba(0,0,0,0.9)" },
+                          }}
+                        >
+                          <MoreVertIcon fontSize="small" />
+                        </IconButton>
+                      )}
+                    </Box>
+                  );
+                })}
+            </Box>
+          </Box>
         ) : (
-          /* ===================== GRID LAYOUT ===================== */
-          <Box
-            sx={{
-              flex: 1,
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-              gap: 2,
-              overflow: "auto",
-            }}
-          >
+          // GRID LAYOUT (Default)
+          <Box sx={{
+            flex: 1,
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+            gap: 2,
+            overflow: "auto",
+          }}>
             {/* LOCAL VIDEO */}
             <Box sx={{ position: "relative" }}>
               <VideoTile 
                 videoRef={localVideoRef} 
                 label="You"
                 isLocal
+                isActiveSpeaker={speakerModeEnabled && activeSpeaker === socket.id}
               >
                 {handRaised && <RaiseHandIndicator label="Your Hand is Raised" />}
               </VideoTile>
@@ -524,10 +871,9 @@ export default function ConferenceRoom() {
                   <VideoTile 
                     stream={stream} 
                     label={userName}
+                    isActiveSpeaker={speakerModeEnabled && activeSpeaker === socketId}
                   >
-                    {isHandRaised && (
-                      <RaiseHandIndicator label="Hand Raised" />
-                    )}
+                    {isHandRaised && <RaiseHandIndicator label="Hand Raised" />}
                   </VideoTile>
                   
                   {/* ADMIN CONTROLS */}
@@ -542,9 +888,7 @@ export default function ConferenceRoom() {
                           right: 8,
                           background: "rgba(0,0,0,0.7)",
                           color: "white",
-                          "&:hover": {
-                            background: "rgba(0,0,0,0.9)",
-                          },
+                          "&:hover": { background: "rgba(0,0,0,0.9)" },
                         }}
                       >
                         <MoreVertIcon fontSize="small" />
@@ -560,13 +904,30 @@ export default function ConferenceRoom() {
                             right: 8,
                             background: "rgba(255, 152, 0, 0.8)",
                             color: "white",
-                            "&:hover": {
-                              background: "rgba(255, 152, 0, 1)",
-                            },
+                            "&:hover": { background: "rgba(255, 152, 0, 1)" },
                           }}
                           title="Lower Hand"
                         >
                           <HandshakeIcon fontSize="small" />
+                        </IconButton>
+                      )}
+                      
+                      {/* SET AS SPEAKER OPTION */}
+                      {speakerModeEnabled && (
+                        <IconButton
+                          size="small"
+                          onClick={() => setAsSpeaker(socketId)}
+                          sx={{
+                            position: "absolute",
+                            top: 72,
+                            right: 8,
+                            background: "rgba(0, 230, 118, 0.8)",
+                            color: "black",
+                            "&:hover": { background: "rgba(0, 230, 118, 1)" },
+                          }}
+                          title="Set as Speaker"
+                        >
+                          <VolumeUpIcon fontSize="small" />
                         </IconButton>
                       )}
                     </>
@@ -578,31 +939,38 @@ export default function ConferenceRoom() {
         )}
 
         {/* ===================== CONTROLS BAR ===================== */}
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "center",
-            gap: 2,
-            mt: 2,
-            pt: 2,
-            borderTop: "1px solid #333",
-          }}
-        >
+        <Box sx={{
+          display: "flex",
+          justifyContent: "center",
+          gap: 2,
+          mt: 2,
+          pt: 2,
+          borderTop: "1px solid #333",
+        }}>
+          {/* MIC CONTROL */}
           <Tooltip title={micOn ? "Mute Microphone" : "Unmute Microphone"}>
-            <IconButton
-              onClick={handleToggleMic}
-              sx={{
-                background: micOn ? "#2e7d32" : "#424242",
-                color: "white",
-                "&:hover": {
-                  background: micOn ? "#1b5e20" : "#303030",
-                },
-              }}
-            >
-              {micOn ? <MicIcon /> : <MicOffIcon />}
-            </IconButton>
+            <span>
+              <IconButton
+                onClick={handleToggleMic}
+                disabled={speakerModeEnabled && activeSpeaker !== socket.id}
+                sx={{
+                  background: micOn ? "#2e7d32" : "#424242",
+                  color: "white",
+                  "&:hover": {
+                    background: micOn ? "#1b5e20" : "#303030",
+                  },
+                  "&.Mui-disabled": {
+                    background: "#333",
+                    color: "#666",
+                  },
+                }}
+              >
+                {micOn ? <MicIcon /> : <MicOffIcon />}
+              </IconButton>
+            </span>
           </Tooltip>
 
+          {/* CAMERA CONTROL */}
           <Tooltip title={camOn ? "Turn Camera Off" : "Turn Camera On"}>
             <IconButton
               onClick={handleToggleCam}
@@ -618,6 +986,7 @@ export default function ConferenceRoom() {
             </IconButton>
           </Tooltip>
 
+          {/* SCREEN SHARE */}
           <Tooltip title={sharingScreen ? "Stop Screen Share" : "Start Screen Share"}>
             <IconButton
               onClick={handleScreenShare}
@@ -633,6 +1002,7 @@ export default function ConferenceRoom() {
             </IconButton>
           </Tooltip>
 
+          {/* RAISE HAND */}
           <Tooltip title={handRaised ? "Lower Hand" : "Raise Hand"}>
             <IconButton
               onClick={handleRaiseHand}
@@ -648,15 +1018,45 @@ export default function ConferenceRoom() {
             </IconButton>
           </Tooltip>
 
+          {/* SPEAKER MODE CONTROLS */}
+          {isAdminOrManager && speakerModeEnabled && (
+            <>
+              <Tooltip title="Clear Speaker">
+                <IconButton
+                  onClick={clearSpeaker}
+                  sx={{
+                    background: "#ff4444",
+                    color: "white",
+                    "&:hover": { background: "#cc0000" },
+                  }}
+                >
+                  <ClearAllIcon />
+                </IconButton>
+              </Tooltip>
+              
+              <Tooltip title="Set Yourself as Speaker">
+                <IconButton
+                  onClick={() => setAsSpeaker(socket.id)}
+                  sx={{
+                    background: "#00e676",
+                    color: "black",
+                    "&:hover": { background: "#00c853" },
+                  }}
+                >
+                  <MicExternalOnIcon />
+                </IconButton>
+              </Tooltip>
+            </>
+          )}
+
+          {/* LEAVE CONFERENCE */}
           <Tooltip title="Leave Conference">
             <IconButton
               onClick={handleLeave}
               sx={{
                 background: "#d32f2f",
                 color: "white",
-                "&:hover": {
-                  background: "#c62828",
-                },
+                "&:hover": { background: "#c62828" },
               }}
             >
               <CallEndIcon />
@@ -672,6 +1072,11 @@ export default function ConferenceRoom() {
           <Typography color="#aaa" variant="caption">
             • Hands Raised: {raisedHands.length}
           </Typography>
+          {speakerModeEnabled && (
+            <Typography color="#00e676" variant="caption" ml={1}>
+              • Speaker Mode
+            </Typography>
+          )}
           {isAdminOrManager && (
             <Typography color="#4caf50" variant="caption" ml={1}>
               • Admin Mode
@@ -689,6 +1094,11 @@ export default function ConferenceRoom() {
           onAdminAction={handleAdminAction}
           currentUserId={currentUser?._id}
           onClose={() => setParticipantsPanelOpen(false)}
+          // Pass speaker mode props
+          speakerModeEnabled={speakerModeEnabled}
+          activeSpeaker={activeSpeaker}
+          onSetSpeaker={setAsSpeaker}
+          onToggleSpeakerMode={toggleSpeakerMode}
         />
       )}
 
@@ -697,14 +1107,8 @@ export default function ConferenceRoom() {
         anchorEl={adminMenuAnchor}
         open={Boolean(adminMenuAnchor)}
         onClose={handleCloseAdminMenu}
-        anchorOrigin={{
-          vertical: 'bottom',
-          horizontal: 'right',
-        }}
-        transformOrigin={{
-          vertical: 'top',
-          horizontal: 'right',
-        }}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
         <MenuItem onClick={() => {
           handleAdminAction("mute", selectedParticipantId);
@@ -725,6 +1129,18 @@ export default function ConferenceRoom() {
           </ListItemIcon>
           Turn Camera Off
         </MenuItem>
+        
+        {speakerModeEnabled && (
+          <MenuItem onClick={() => {
+            setAsSpeaker(selectedParticipantId);
+            handleCloseAdminMenu();
+          }}>
+            <ListItemIcon>
+              <VolumeUpIcon fontSize="small" color="success" />
+            </ListItemIcon>
+            <Typography color="success.main">Set as Speaker</Typography>
+          </MenuItem>
+        )}
         
         <MenuItem onClick={() => {
           handleAdminAction("lower-hand", selectedParticipantId);
@@ -748,6 +1164,22 @@ export default function ConferenceRoom() {
           <Typography color="error">Remove from Conference</Typography>
         </MenuItem>
       </Menu>
+
+      {/* NOTIFICATION SNACKBAR */}
+      <Snackbar
+        open={notification.open}
+        autoHideDuration={4000}
+        onClose={() => setNotification({ ...notification, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={() => setNotification({ ...notification, open: false })} 
+          severity={notification.severity}
+          sx={{ width: '100%' }}
+        >
+          {notification.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
