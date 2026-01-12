@@ -4,7 +4,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Layout from "./components/Layout/Layout";
-
+import ConferenceRoom from "./pages/ConferenceRoom";
 import Login from "./components/Auth/Login";
 import Register from "./components/Auth/Register";
 import OAuthSuccess from "./components/Auth/OAuthSuccess";
@@ -157,9 +157,14 @@ function App() {
               }
             />
             <Route
-              path="/teams/:teamId/conference/:conferenceId"
-              element={<ConferenceRoom />}
+              path="/conference/:conferenceId"
+              element={
+                <ProtectedRoute>
+                  <ConferenceRoom />
+                </ProtectedRoute>
+              }
             />
+
           </Routes>
         </Router>
       </ThemeProvider>
