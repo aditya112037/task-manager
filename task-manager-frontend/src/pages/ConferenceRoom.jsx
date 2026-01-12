@@ -48,7 +48,7 @@ import {
 } from "../services/webrtc";
 
 import VideoTile from "../components/Conference/VideoTile";
-import { AuthContext } from "../context/AuthContext";
+import { useAuth } from "../context/AuthContext";
 
 /* ----------------------------------------------------
    CONSTANTS
@@ -62,7 +62,7 @@ export default function ConferenceRoom() {
   const { conferenceId } = useParams();
   const navigate = useNavigate();
   const socket = getSocket();
-  const { currentUser } = useContext(AuthContext);
+  const { user: currentUser } = useAuth();
 
   const localVideoRef = useRef(null);
   const [adminMenuAnchor, setAdminMenuAnchor] = useState(null);
