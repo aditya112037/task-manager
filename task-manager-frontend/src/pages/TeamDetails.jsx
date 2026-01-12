@@ -1,4 +1,4 @@
-// TeamDetails.jsx - Updated with Conference Feature
+// TeamDetails.jsx - Updated with Socket-Only Conference System
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   Box,
@@ -34,12 +34,11 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { teamsAPI, teamTasksAPI } from "../services/api";
-import { conferenceAPI } from "../services/conferenceAPI"; // New import
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import TeamTaskForm from "../components/Teams/TeamTaskForm";
 import { useAuth } from "../context/AuthContext";
 import TeamAnalytics from "../components/Teams/Overview/Analytics";
-import { joinTeamRoom, leaveTeamRoom } from "../services/socket";
+import { joinTeamRoom, leaveTeamRoom, getSocket } from "../services/socket";
 
 /* ---------------------------------------------------
    SAFE MEMBER RESOLVER (prevents all crashes)
@@ -82,7 +81,7 @@ export default function TeamDetails() {
   const [editTeamDialog, setEditTeamDialog] = useState(false);
   const [teamFormData, setTeamFormData] = useState({});
 
-  // Conference state - NEW
+  // Conference state - SOCKET-ONLY
   const [conference, setConference] = useState(null);
   const [loadingConference, setLoadingConference] = useState(false);
 
@@ -195,24 +194,8 @@ export default function TeamDetails() {
   }, [teamId, myRole, showSnack]);
 
   /* ---------------------------------------------------
-     FETCH ACTIVE CONFERENCE (NEW)
-  --------------------------------------------------- */
-  const fetchConference = useCallback(async () => {
-    setLoadingConference(true);
-    try {
-      const res = await conferenceAPI.getActive(teamId);
-      setConference(res.data || null);
-    } catch (err) {
-      console.error("Conference fetch error:", err);
-      setConference(null);
-    } finally {
-      setLoadingConference(false);
-    }
-  }, [teamId]);
-
-  /* ---------------------------------------------------
      🚨 CRITICAL FIX 1: COMPLETE invalidation listeners
-     Listen to ALL events: tasks, teams, extensions, comments, conferences (NEW)
+     Listen to ALL events: tasks, teams, extensions, comments
   --------------------------------------------------- */
   useEffect(() => {
     const onTasksInvalidate = ({ detail }) => {
@@ -244,34 +227,84 @@ export default function TeamDetails() {
       }
     };
 
-    // ✅ NEW: Conference invalidation
-    const onConferenceInvalidate = ({ detail }) => {
-      if (detail?.teamId && String(detail.teamId) !== String(teamId)) return;
-      console.log("🔄 TeamDetails: invalidate:conferences received");
-      fetchConference();
-    };
-
     window.addEventListener("invalidate:tasks", onTasksInvalidate);
     window.addEventListener("invalidate:teams", onTeamsInvalidate);
     window.addEventListener("invalidate:extensions", onExtensionsInvalidate);
     window.addEventListener("invalidate:comments", onCommentsInvalidate);
-    window.addEventListener("invalidate:conferences", onConferenceInvalidate); // NEW
 
     return () => {
       window.removeEventListener("invalidate:tasks", onTasksInvalidate);
       window.removeEventListener("invalidate:teams", onTeamsInvalidate);
       window.removeEventListener("invalidate:extensions", onExtensionsInvalidate);
       window.removeEventListener("invalidate:comments", onCommentsInvalidate);
-      window.removeEventListener("invalidate:conferences", onConferenceInvalidate); // NEW
     };
   }, [
     teamId, 
     fetchTeamTasks, 
     fetchPendingExtensions, 
     fetchTeam,
-    fetchConference, // NEW
     teamTasks
   ]);
+
+  /* ---------------------------------------------------
+     SOCKET CONFERENCE LISTENERS (NEW - SOCKET-ONLY APPROACH)
+  --------------------------------------------------- */
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    // Listen for conference started in this team
+    const handleConferenceStarted = (payload) => {
+      if (payload.teamId !== teamId) return;
+      console.log("🎥 Conference started in team:", teamId);
+      setConference(payload.conference);
+    };
+
+    // Listen for conference ended in this team
+    const handleConferenceEnded = ({ teamId: endedTeamId }) => {
+      if (endedTeamId !== teamId) return;
+      console.log("🎥 Conference ended in team:", teamId);
+      setConference(null);
+    };
+
+    // Listen for conference started success (for navigation)
+    const handleConferenceStartedSuccess = ({ conference }) => {
+      console.log("🎥 Conference started successfully, navigating to:", conference._id);
+      navigate(`/conference/${conference._id}`);
+    };
+
+    // Listen for active conference info
+    const handleActiveConference = ({ conference: activeConference, teamId: confTeamId }) => {
+      if (confTeamId !== teamId) return;
+      setConference(activeConference);
+      setLoadingConference(false);
+    };
+
+    // Listen for no active conference
+    const handleNoActiveConference = ({ teamId: confTeamId }) => {
+      if (confTeamId !== teamId) return;
+      setConference(null);
+      setLoadingConference(false);
+    };
+
+    socket.on("conference:started", handleConferenceStarted);
+    socket.on("conference:ended", handleConferenceEnded);
+    socket.on("conference:started:success", handleConferenceStartedSuccess);
+    socket.on("conference:active", handleActiveConference);
+    socket.on("conference:none", handleNoActiveConference);
+
+    // Request active conference status on mount
+    setLoadingConference(true);
+    socket.emit("conference:getActive", { teamId });
+
+    return () => {
+      socket.off("conference:started", handleConferenceStarted);
+      socket.off("conference:ended", handleConferenceEnded);
+      socket.off("conference:started:success", handleConferenceStartedSuccess);
+      socket.off("conference:active", handleActiveConference);
+      socket.off("conference:none", handleNoActiveConference);
+    };
+  }, [teamId, navigate]);
 
   /* ---------------------------------------------------
      🚨 CRITICAL FIX 3: Refetch when role changes
@@ -290,8 +323,7 @@ export default function TeamDetails() {
   --------------------------------------------------- */
   useEffect(() => {
     fetchTeam();
-    fetchConference(); // NEW: Load conference on initial mount
-  }, [fetchTeam, fetchConference]);
+  }, [fetchTeam]);
 
   useEffect(() => {
     if (!teamId) return;
@@ -302,25 +334,36 @@ export default function TeamDetails() {
   }, [teamId]);
 
   /* ---------------------------------------------------
-     CONFERENCE HANDLERS (NEW)
+     CONFERENCE HANDLERS (SOCKET-ONLY)
   --------------------------------------------------- */
-  const handleStartConference = async () => {
-    try {
-      setLoadingConference(true);
-      const res = await conferenceAPI.create(teamId);
-      showSnack("Conference started!", "success");
-      navigate(`/conference/${res.data._id}`);
-    } catch (err) {
-      console.error("Start conference error:", err);
-      showSnack(err.response?.data?.message || "Failed to start conference", "error");
-      setLoadingConference(false);
+  const handleStartConference = () => {
+    const socket = getSocket();
+    if (!socket) {
+      showSnack("Connection error. Please refresh.", "error");
+      return;
     }
+
+    if (!["admin", "manager"].includes(myRole)) {
+      showSnack("Only admins and managers can start conferences", "error");
+      return;
+    }
+
+    setLoadingConference(true);
+    socket.emit("conference:start", { teamId });
+    
+    // Show loading state for 5 seconds max
+    setTimeout(() => {
+      setLoadingConference(false);
+    }, 5000);
   };
 
   const handleJoinConference = () => {
-    if (conference) {
-      navigate(`/conference/${conference._id}`);
+    if (!conference) {
+      showSnack("No active conference to join", "error");
+      return;
     }
+    
+    navigate(`/conference/${conference._id}`);
   };
 
   /* ---------------------------------------------------
@@ -670,7 +713,7 @@ export default function TeamDetails() {
       {/* OVERVIEW */}
       {tab === 0 && (
         <Paper sx={{ p: 3, borderRadius: 3 }}>
-          {/* CONFERENCE SECTION - NEW */}
+          {/* CONFERENCE SECTION - SOCKET-ONLY */}
           <Box sx={{ mb: 4 }}>
             <Typography variant="h6" fontWeight={700}>
               Team Conference
@@ -697,8 +740,7 @@ export default function TeamDetails() {
                   Join Active Conference
                 </Button>
                 <Typography variant="caption" color="text.secondary" display="block">
-                  Started by: {conference.createdBy?.name || "Unknown"} •{" "}
-                  {conference.participantsCount || 0} participants
+                  {conference.participantsCount || 0} participant(s) online
                 </Typography>
               </Box>
             ) : ["admin", "manager"].includes(myRole) ? (
@@ -708,7 +750,7 @@ export default function TeamDetails() {
                 onClick={handleStartConference}
                 disabled={loadingConference}
               >
-                Start Conference
+                {loadingConference ? "Starting..." : "Start Conference"}
               </Button>
             ) : (
               <Typography variant="caption" color="text.secondary">
@@ -847,7 +889,7 @@ export default function TeamDetails() {
       {/* EXTENSIONS */}
       {tab === 3 && (
         <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+          <Box sx={{ display: "flex", justifyContent:"space-between", alignItems: "center", mb: 2 }}>
             <Typography variant="h6" fontWeight={700}>Extension Requests</Typography>
             <Box sx={{ display: "flex", gap: 1 }}>
               <Button 
