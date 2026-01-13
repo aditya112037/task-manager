@@ -106,7 +106,7 @@ export default function ConferenceRoom() {
   };
 
   /* ----------------------------------------------------
-     AUTO-MUTE BASED ON SPEAKER MODE
+     🛡 STEP 7 — AUTO-MUTE WITH ADMIN ENFORCEMENT
   ---------------------------------------------------- */
   useEffect(() => {
     if (!localStream || !speakerModeEnabled) return;
@@ -114,51 +114,68 @@ export default function ConferenceRoom() {
     const audioTracks = localStream.getAudioTracks();
     if (audioTracks.length === 0) return;
     
-    const shouldBeMuted = activeSpeaker !== socket.id && activeSpeaker !== null;
+    const shouldSpeak = activeSpeaker === socket.id;
     
-    if (shouldBeMuted) {
-      audioTracks.forEach(track => {
-        if (track.enabled) {
-          track.enabled = false;
-          setMicOn(false);
-        }
-      });
-    } else if (activeSpeaker === socket.id) {
-      audioTracks.forEach(track => {
-        if (!track.enabled) {
-          track.enabled = true;
-          setMicOn(true);
-        }
-      });
-    }
+    // ADMIN OVERRIDE ENFORCEMENT:
+    // 1. If I'm not the active speaker → mute (no exceptions)
+    // 2. If I am the active speaker → unmute
+    // 3. This overrides any local mic button state
+    
+    audioTracks.forEach(track => {
+      if (shouldSpeak && !track.enabled) {
+        // Admin says I should speak, but my track is disabled
+        track.enabled = true;
+        setMicOn(true);
+        console.log("Admin override: Unmuting because I'm the speaker");
+      } else if (!shouldSpeak && track.enabled) {
+        // I'm not the speaker, but my track is enabled
+        track.enabled = false;
+        setMicOn(false);
+        console.log("Admin override: Muting because I'm not the speaker");
+      }
+    });
   }, [activeSpeaker, speakerModeEnabled, localStream, socket.id]);
 
   /* ----------------------------------------------------
-     SPEAKER DETECTION
+     🧪 STEP 6 — SPEAKER DETECTION WITH OWNERSHIP RULES
   ---------------------------------------------------- */
   useEffect(() => {
     if (!localStream || !speakerModeEnabled) return;
     
     const cleanup = startSpeakerDetection(localStream, (speaking) => {
-      if (speaking && !isSpeaking) {
-        setIsSpeaking(true);
-        // Emit speaking event to server
-        socket.emit("conference:speaking", {
-          conferenceId,
-          speaking: true,
-        });
-      } else if (!speaking && isSpeaking) {
-        setIsSpeaking(false);
-        // Emit stopped speaking event to server
+      if (!speakerModeEnabled) return;
+      
+      if (!speaking) {
+        // Always emit when stopping speaking
         socket.emit("conference:speaking", {
           conferenceId,
           speaking: false,
         });
+        setIsSpeaking(false);
+        return;
+      }
+      
+      // SPEAKER OWNERSHIP RULE:
+      // Only emit "I'm speaking" if:
+      // 1. There's no active speaker currently, OR
+      // 2. I am already the active speaker
+      const canTakeOverSpeaker = !activeSpeaker || activeSpeaker === socket.id;
+      
+      if (canTakeOverSpeaker) {
+        setIsSpeaking(true);
+        socket.emit("conference:speaking", {
+          conferenceId,
+          speaking: true,
+        });
+      } else {
+        // I'm speaking, but someone else is the current speaker
+        // This prevents audio chaos and flickering
+        console.log("Not taking over speaker - ", activeSpeaker, "is speaking");
       }
     });
     
     return cleanup;
-  }, [localStream, speakerModeEnabled, conferenceId, socket, isSpeaking]);
+  }, [localStream, speakerModeEnabled, conferenceId, socket, activeSpeaker]);
 
   /* ----------------------------------------------------
      INIT MEDIA + CONFERENCE
@@ -266,8 +283,9 @@ export default function ConferenceRoom() {
         return copy;
       });
       
-      // Clear active speaker if they left
+      // 🧠 STEP 8 — FAILSAFE: Clear active speaker if they left
       if (activeSpeaker === socketId) {
+        console.log("Active speaker left, clearing speaker");
         setActiveSpeaker(null);
       }
     };
@@ -287,9 +305,10 @@ export default function ConferenceRoom() {
       handleLeave();
     };
 
-    /* ---------------- SPEAKER MODE HANDLERS ---------------- */
+    /* ---------------- 🧱 STEP 5 — SPEAKER MODE HANDLERS ---------------- */
     const handleActiveSpeakerUpdate = ({ socketId }) => {
       if (!mounted) return;
+      console.log("Active speaker updated:", socketId);
       setActiveSpeaker(socketId);
       
       if (socketId === socket.id) {
@@ -299,18 +318,35 @@ export default function ConferenceRoom() {
 
     const handleSpeakerModeToggled = ({ enabled }) => {
       if (!mounted) return;
+      console.log("Speaker mode toggled:", enabled);
       setSpeakerModeEnabled(enabled);
+      
+      // Clear speaker when mode is disabled
       if (!enabled) {
         setActiveSpeaker(null);
       }
+      
       showNotification(`Speaker mode ${enabled ? "enabled" : "disabled"}`, "info");
     };
 
     const handleSpeakerAssigned = ({ socketId }) => {
       if (!mounted) return;
+      console.log("Speaker assigned by admin:", socketId);
       setActiveSpeaker(socketId);
+      
       if (socketId === socket.id) {
         showNotification("You have been assigned as speaker by admin", "success");
+      }
+    };
+
+    /* ---------------- 🧠 STEP 8 — USER LEFT HANDLER ---------------- */
+    const handleUserLeftEvent = ({ socketId }) => {
+      if (!mounted) return;
+      
+      // Clear active speaker if they left
+      if (activeSpeaker === socketId) {
+        console.log("Active speaker left via user-left event");
+        setActiveSpeaker(null);
       }
     };
 
@@ -345,10 +381,13 @@ export default function ConferenceRoom() {
     socket.on("conference:hands-updated", handleHandsUpdated);
     socket.on("conference:ended", handleConferenceEnded);
     
-    // Speaker mode listeners
+    // 🧱 STEP 5 — Speaker mode listeners
     socket.on("conference:active-speaker", handleActiveSpeakerUpdate);
     socket.on("conference:speaker-mode-toggled", handleSpeakerModeToggled);
     socket.on("conference:speaker-assigned", handleSpeakerAssigned);
+    
+    // 🧠 STEP 8 — Additional user left listener
+    socket.on("conference:user-left", handleUserLeftEvent);
     
     // Admin action listeners
     socket.on("conference:force-mute", handleForceMute);
@@ -370,10 +409,13 @@ export default function ConferenceRoom() {
       socket.off("conference:hands-updated", handleHandsUpdated);
       socket.off("conference:ended", handleConferenceEnded);
       
-      // Clean up speaker mode listeners
+      // 🧱 STEP 5 — Clean up speaker mode listeners
       socket.off("conference:active-speaker", handleActiveSpeakerUpdate);
       socket.off("conference:speaker-mode-toggled", handleSpeakerModeToggled);
       socket.off("conference:speaker-assigned", handleSpeakerAssigned);
+      
+      // 🧠 STEP 8 — Clean up additional user left listener
+      socket.off("conference:user-left", handleUserLeftEvent);
       
       // Clean up admin listeners
       socket.off("conference:force-mute", handleForceMute);
@@ -508,6 +550,7 @@ export default function ConferenceRoom() {
   };
 
   const handleToggleMic = () => {
+    // SPEAKER MODE RESTRICTION:
     if (speakerModeEnabled && activeSpeaker !== socket.id) {
       showNotification("Only the active speaker can unmute in speaker mode", "warning");
       return;
