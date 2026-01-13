@@ -313,7 +313,6 @@ export default function TeamDetails() {
   useEffect(() => {
     if (!team || !myRole) return;
     
-    console.log("🔄 Role changed to:", myRole, "refetching tasks and extensions");
     fetchTeamTasks();
     fetchPendingExtensions();
   }, [myRole, team, fetchTeamTasks, fetchPendingExtensions]);

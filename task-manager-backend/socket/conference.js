@@ -1,6 +1,7 @@
 // socket/conference.js
 
 const Team = require("../models/team");
+const verifyConferenceAdmin = require("./verifyConferenceAdmin");
 
 /*
   In-memory conference store
@@ -85,6 +86,25 @@ module.exports = function registerConferenceSocket(io, socket) {
     
     conference.speakerMode.speakerTimeouts.set(socketId, timeout);
   };
+
+  /* ---------------------------------------------------
+     SERVER-SIDE MIC ENFORCEMENT (STEP 2)
+  --------------------------------------------------- */
+  // Periodic enforcement to prevent rogue clients
+  const enforceSpeakerMode = () => {
+    conferences.forEach((conference, conferenceId) => {
+      if (!conference.speakerMode.enabled) return;
+
+      conference.participants.forEach((_, socketId) => {
+        if (socketId !== conference.speakerMode.activeSpeaker) {
+          io.to(socketId).emit("conference:force-mute");
+        }
+      });
+    });
+  };
+
+  // Run enforcement every 3 seconds
+  setInterval(enforceSpeakerMode, 3000);
 
   /* ---------------------------------------------------
      CREATE CONFERENCE
@@ -208,8 +228,8 @@ module.exports = function registerConferenceSocket(io, socket) {
         }
       );
 
-      // Send current conference state to new joiner
-      socket.emit("conference:joined", {
+      // ✅ STEP 3 — STATE SYNC ON RECONNECT
+      const conferenceState = {
         conferenceId,
         participants: participants,
         raisedHands: Array.from(conference.raisedHands),
@@ -217,7 +237,10 @@ module.exports = function registerConferenceSocket(io, socket) {
           enabled: conference.speakerMode.enabled,
           activeSpeaker: conference.speakerMode.activeSpeaker,
         },
-      });
+      };
+
+      socket.emit("conference:joined", conferenceState);
+      socket.emit("conference:state", conferenceState);
 
       // Send current active speaker state
       if (conference.speakerMode.activeSpeaker) {
@@ -338,39 +361,52 @@ module.exports = function registerConferenceSocket(io, socket) {
   --------------------------------------------------- */
 
   // Toggle speaker mode (admin only)
-  socket.on("conference:toggle-speaker-mode", ({ conferenceId, enabled }) => {
-    const conference = conferences.get(conferenceId);
-    if (!conference) return;
+  socket.on("conference:toggle-speaker-mode", async ({ conferenceId, enabled }) => {
+    try {
+      const conference = conferences.get(conferenceId);
+      if (!conference) return;
 
-    // Check if user is admin
-    if (!isConferenceAdmin(conferenceId, socket.id)) {
-      return socket.emit("conference:error", {
-        message: "Only admin can toggle speaker mode",
+      const user = getUserFromSocket();
+      if (!user) return;
+
+      // ✅ STEP 2 — USE DB VERIFICATION FOR CRITICAL ACTIONS
+      const isAdmin = await verifyConferenceAdmin({
+        userId: user._id,
+        conference
       });
+
+      if (!isAdmin) {
+        return socket.emit("conference:error", {
+          message: "Only admin can toggle speaker mode",
+        });
+      }
+
+      conference.speakerMode.enabled = enabled;
+      
+      if (!enabled) {
+        // Clear active speaker when disabling
+        conference.speakerMode.activeSpeaker = null;
+        // Clear all timeouts
+        conference.speakerMode.speakerTimeouts.forEach(timeout => clearTimeout(timeout));
+        conference.speakerMode.speakerTimeouts.clear();
+      }
+
+      io.to(getConferenceRoom(conferenceId)).emit("conference:speaker-mode-toggled", {
+        enabled,
+        bySocketId: socket.id,
+      });
+
+      // Also emit active speaker update
+      io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
+        socketId: conference.speakerMode.activeSpeaker,
+      });
+    } catch (err) {
+      console.error("conference:toggle-speaker-mode error:", err);
+      socket.emit("conference:error", { message: "Server error" });
     }
-
-    conference.speakerMode.enabled = enabled;
-    
-    if (!enabled) {
-      // Clear active speaker when disabling
-      conference.speakerMode.activeSpeaker = null;
-      // Clear all timeouts
-      conference.speakerMode.speakerTimeouts.forEach(timeout => clearTimeout(timeout));
-      conference.speakerMode.speakerTimeouts.clear();
-    }
-
-    io.to(getConferenceRoom(conferenceId)).emit("conference:speaker-mode-toggled", {
-      enabled,
-      bySocketId: socket.id,
-    });
-
-    // Also emit active speaker update
-    io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
-      socketId: conference.speakerMode.activeSpeaker,
-    });
   });
 
-  // Speaking detection from client
+  // ✅ STEP 1 — SPEAKING DETECTION WITH OWNERSHIP LOCK
   socket.on("conference:speaking", ({ conferenceId, speaking }) => {
     const conference = conferences.get(conferenceId);
     if (!conference || !conference.speakerMode.enabled) return;
@@ -378,17 +414,23 @@ module.exports = function registerConferenceSocket(io, socket) {
     const participant = conference.participants.get(socket.id);
     if (!participant) return;
 
+    // 🔐 HARD RULE: Only current speaker can send speaking updates
+    if (
+      conference.speakerMode.activeSpeaker &&
+      conference.speakerMode.activeSpeaker !== socket.id
+    ) {
+      console.log(`Blocked speaker hijack attempt from ${socket.id}, active speaker is ${conference.speakerMode.activeSpeaker}`);
+      return;
+    }
+
     if (speaking) {
-      // Set this user as active speaker
       conference.speakerMode.activeSpeaker = socket.id;
-      
-      // Clear previous timeout and set new one
       setSpeakerTimeout(conference, socket.id);
-      
-      // Broadcast to all participants
-      io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
-        socketId: socket.id,
-      });
+
+      io.to(getConferenceRoom(conferenceId)).emit(
+        "conference:active-speaker",
+        { socketId: socket.id }
+      );
     } else {
       // Only clear if this user is the current active speaker
       if (conference.speakerMode.activeSpeaker === socket.id) {
@@ -398,83 +440,132 @@ module.exports = function registerConferenceSocket(io, socket) {
   });
 
   // Admin manually sets speaker
-  socket.on("conference:set-speaker", ({ conferenceId, targetSocketId }) => {
-    const conference = conferences.get(conferenceId);
-    if (!conference) return;
+  socket.on("conference:set-speaker", async ({ conferenceId, targetSocketId }) => {
+    try {
+      const conference = conferences.get(conferenceId);
+      if (!conference) return;
 
-    // Check if user is admin
-    if (!isConferenceAdmin(conferenceId, socket.id)) {
-      return socket.emit("conference:error", {
-        message: "Only admin can set speaker",
+      const user = getUserFromSocket();
+      if (!user) return;
+
+      // ✅ STEP 2 — USE DB VERIFICATION FOR CRITICAL ACTIONS
+      const isAdmin = await verifyConferenceAdmin({
+        userId: user._id,
+        conference
       });
-    }
 
-    // Check if target exists
-    const targetParticipant = conference.participants.get(targetSocketId);
-    if (!targetParticipant) {
-      return socket.emit("conference:error", {
-        message: "Target participant not found",
+      if (!isAdmin) {
+        return socket.emit("conference:error", {
+          message: "Only admin can set speaker",
+        });
+      }
+
+      // Check if target exists
+      const targetParticipant = conference.participants.get(targetSocketId);
+      if (!targetParticipant) {
+        return socket.emit("conference:error", {
+          message: "Target participant not found",
+        });
+      }
+
+      // Set active speaker
+      conference.speakerMode.activeSpeaker = targetSocketId;
+      
+      // Clear previous timeout and set new one
+      setSpeakerTimeout(conference, targetSocketId);
+      
+      // Broadcast to all
+      io.to(getConferenceRoom(conferenceId)).emit("conference:speaker-assigned", {
+        socketId: targetSocketId,
+        bySocketId: socket.id,
       });
+
+      io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
+        socketId: targetSocketId,
+      });
+    } catch (err) {
+      console.error("conference:set-speaker error:", err);
+      socket.emit("conference:error", { message: "Server error" });
     }
-
-    // Set active speaker
-    conference.speakerMode.activeSpeaker = targetSocketId;
-    
-    // Clear previous timeout and set new one
-    setSpeakerTimeout(conference, targetSocketId);
-    
-    // Broadcast to all
-    io.to(getConferenceRoom(conferenceId)).emit("conference:speaker-assigned", {
-      socketId: targetSocketId,
-      bySocketId: socket.id,
-    });
-
-    io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
-      socketId: targetSocketId,
-    });
   });
 
   // Clear active speaker
-  socket.on("conference:clear-speaker", ({ conferenceId }) => {
-    const conference = conferences.get(conferenceId);
-    if (!conference) return;
+  socket.on("conference:clear-speaker", async ({ conferenceId }) => {
+    try {
+      const conference = conferences.get(conferenceId);
+      if (!conference) return;
 
-    // Check if user is admin
-    if (!isConferenceAdmin(conferenceId, socket.id)) {
-      return socket.emit("conference:error", {
-        message: "Only admin can clear speaker",
+      const user = getUserFromSocket();
+      if (!user) return;
+
+      // ✅ STEP 2 — USE DB VERIFICATION FOR CRITICAL ACTIONS
+      const isAdmin = await verifyConferenceAdmin({
+        userId: user._id,
+        conference
       });
-    }
 
-    // Clear active speaker
-    const previousSpeaker = conference.speakerMode.activeSpeaker;
-    conference.speakerMode.activeSpeaker = null;
-    
-    if (previousSpeaker) {
-      clearSpeakerTimeout(conference, previousSpeaker);
-    }
+      if (!isAdmin) {
+        return socket.emit("conference:error", {
+          message: "Only admin can clear speaker",
+        });
+      }
 
-    // Broadcast to all
-    io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
-      socketId: null,
-    });
+      // Clear active speaker
+      const previousSpeaker = conference.speakerMode.activeSpeaker;
+      conference.speakerMode.activeSpeaker = null;
+      
+      if (previousSpeaker) {
+        clearSpeakerTimeout(conference, previousSpeaker);
+      }
+
+      // Broadcast to all
+      io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
+        socketId: null,
+      });
+    } catch (err) {
+      console.error("conference:clear-speaker error:", err);
+      socket.emit("conference:error", { message: "Server error" });
+    }
   });
 
   /* ---------------------------------------------------
      ADMIN ACTIONS
   --------------------------------------------------- */
-  socket.on("conference:admin-action", async ({ conferenceId, action, targetSocketId, userId }) => {
+  socket.on("conference:admin-action", async ({ conferenceId, action, targetSocketId }) => {
     try {
       const conference = conferences.get(conferenceId);
       if (!conference) return;
 
-      // Verify admin permissions
+      // ❌ ISSUE 3 FIXED — Never trust userId from client, use socket.user
+      const adminUser = getUserFromSocket();
+      if (!adminUser) return;
+
       const adminParticipant = conference.participants.get(socket.id);
-      if (!adminParticipant || !["admin", "manager"].includes(adminParticipant.role)) {
+      
+      // ✅ STEP 2 — USE DB VERIFICATION FOR CRITICAL ACTIONS
+      const isAdmin = await verifyConferenceAdmin({
+        userId: adminUser._id,
+        conference
+      });
+
+      if (!isAdmin) {
         return socket.emit("conference:error", {
           message: "Only admin can perform this action",
         });
       }
+
+      // ❌ ISSUE 4 — CONFERENCE OWNERSHIP LOCK (Optional but recommended)
+      // Uncomment if you want conference creator supremacy
+      /*
+      if (
+        adminParticipant.role === "manager" &&
+        String(conference.createdBy) !== String(adminParticipant.userId)
+      ) {
+        return socket.emit("conference:error", {
+          message: "Only conference owner can perform this action"
+        });
+      }
+      */
 
       const targetParticipant = conference.participants.get(targetSocketId);
       if (!targetParticipant) {
@@ -543,7 +634,9 @@ module.exports = function registerConferenceSocket(io, socket) {
       conference.adminActions.set(Date.now(), {
         action,
         adminSocketId: socket.id,
+        adminUserId: adminUser._id,
         targetSocketId,
+        targetUserId: targetParticipant.userId,
         timestamp: new Date(),
       });
 
