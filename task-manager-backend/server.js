@@ -9,6 +9,10 @@ const { Server } = require("socket.io");
 const registerConferenceSocket = require("./socket/conference");
 const jwt = require("jsonwebtoken");
 const User = require("./models/user");
+
+// Import shared conference store
+const { conferences, deleteConference } = require("./utils/conferenceStore");
+
 dotenv.config();
 connectDB();
 
@@ -56,9 +60,8 @@ global.emitToTeam = (teamId, event, payload = {}) => {
   io.to(`team_${teamId}`).emit(event, payload);
 };
 
-// In-memory stores
+// In-memory stores for hand raises
 const conferenceHands = {};
-const activeConferences = {}; // Store conference metadata
 
 io.use(async (socket, next) => {
   try {
@@ -99,35 +102,8 @@ io.on("connection", (socket) => {
     const room = `conference_${conferenceId}`;
     socket.join(room);
     
-    // Store conference metadata if provided
-    if (conferenceData && !activeConferences[conferenceId]) {
-      activeConferences[conferenceId] = {
-        ...conferenceData,
-        createdAt: new Date(),
-        participants: [],
-      };
-    }
-    
-    // Track participant
-    if (activeConferences[conferenceId]) {
-      const participant = {
-        socketId: socket.id,
-        userId: socket.userId,
-        name: socket.user?.name,
-        joinedAt: new Date(),
-      };
-      
-      // Check if participant already exists
-      const existingIndex = activeConferences[conferenceId].participants.findIndex(
-        p => p.userId === socket.userId
-      );
-      
-      if (existingIndex === -1) {
-        activeConferences[conferenceId].participants.push(participant);
-      } else {
-        activeConferences[conferenceId].participants[existingIndex] = participant;
-      }
-    }
+    // Note: Conference metadata is now stored in the shared conferenceStore
+    // We don't need to duplicate it here
     
     console.log(`🎤 Socket ${socket.id} joined ${room}`);
   });
@@ -150,18 +126,8 @@ io.on("connection", (socket) => {
     const room = `conference_${conferenceId}`;
     socket.leave(room);
     
-    // Remove from conference participants
-    if (activeConferences[conferenceId]) {
-      activeConferences[conferenceId].participants = 
-        activeConferences[conferenceId].participants.filter(
-          p => p.socketId !== socket.id
-        );
-      
-      // Clean up empty conferences
-      if (activeConferences[conferenceId].participants.length === 0) {
-        delete activeConferences[conferenceId];
-      }
-    }
+    // Note: Conference participants are managed in the shared conferenceStore
+    // We don't need to manage them here
     
     // Lower hand when leaving conference
     if (conferenceHands[conferenceId]?.has(socket.id)) {
@@ -208,16 +174,18 @@ io.on("connection", (socket) => {
   });
 
   /* ------------------------------
-     CONFERENCE ADMIN ACTIONS
+     CONFERENCE ADMIN ACTIONS (Legacy - Now handled in conference.js)
+     Keeping this for backward compatibility
   ------------------------------ */
   socket.on("conference:admin-action", async (payload) => {
     const { action, targetSocketId, conferenceId, userId } = payload;
 
-    const conference = activeConferences[conferenceId];
+    // Check conference exists in shared store
+    const conference = conferences.get(conferenceId);
     if (!conference) return;
 
     // Verify admin - simple check: if user is the conference creator
-    const isAdmin = conference.createdBy?.toString() === userId;
+    const isAdmin = String(conference.createdBy) === String(userId);
     if (!isAdmin) return;
 
     switch (action) {
@@ -251,16 +219,16 @@ io.on("connection", (socket) => {
   });
 
   /* ------------------------------
-     CLEAR ALL HANDS (for host)
+     CLEAR ALL HANDS (for host) - Legacy
   ------------------------------ */
   socket.on("conference:clear-hands", ({ conferenceId, userId }) => {
     if (!conferenceId) return;
     
     // Verify admin
-    const conference = activeConferences[conferenceId];
+    const conference = conferences.get(conferenceId);
     if (!conference) return;
     
-    const isAdmin = conference.createdBy?.toString() === userId;
+    const isAdmin = String(conference.createdBy) === String(userId);
     if (!isAdmin) return;
     
     if (conferenceHands[conferenceId]) {
@@ -295,20 +263,61 @@ io.on("connection", (socket) => {
       }
     }
     
-    // Remove from active conferences
-    for (const confId in activeConferences) {
-      if (activeConferences[confId]) {
-        activeConferences[confId].participants = 
-          activeConferences[confId].participants.filter(
-            p => p.socketId !== socket.id
-          );
-        
-        // Clean up empty conferences
-        if (activeConferences[confId].participants.length === 0) {
-          delete activeConferences[confId];
-        }
-      }
-    }
+    // Note: Conference participant cleanup is now handled in conference.js
+    // using the shared conference store
+  });
+});
+
+/* ---------------------------------------------------
+   HEALTH CHECK ENDPOINT - Shows conference stats
+--------------------------------------------------- */
+app.get("/", (req, res) => {
+  const conferenceStats = {
+    totalConferences: conferences.size,
+    conferences: Array.from(conferences.values()).map(conf => ({
+      conferenceId: conf.conferenceId,
+      teamId: conf.teamId,
+      participantCount: conf.participants.size,
+      speakerModeEnabled: conf.speakerMode.enabled,
+      activeSpeaker: conf.speakerMode.activeSpeaker,
+      raisedHandsCount: conf.raisedHands.size,
+    }))
+  };
+
+  res.json({
+    status: "OK",
+    message: "🚀 Task Manager API Running",
+    socket: "Active",
+    conferenceStats,
+  });
+});
+
+/* ---------------------------------------------------
+   DEBUG ENDPOINT - View all active conferences
+--------------------------------------------------- */
+app.get("/debug/conferences", (req, res) => {
+  const allConferences = Array.from(conferences.values()).map(conf => {
+    const participants = Array.from(conf.participants.values());
+    return {
+      conferenceId: conf.conferenceId,
+      teamId: conf.teamId,
+      createdBy: conf.createdBy,
+      createdAt: conf.createdAt,
+      speakerMode: conf.speakerMode,
+      participantCount: conf.participants.size,
+      participants: participants.map(p => ({
+        userId: p.userId,
+        name: p.name,
+        role: p.role,
+        socketId: p.socketId,
+      })),
+      raisedHands: Array.from(conf.raisedHands),
+    };
+  });
+
+  res.json({
+    count: allConferences.length,
+    conferences: allConferences,
   });
 });
 
@@ -324,16 +333,6 @@ app.use("/api/comments", require("./routes/taskComments"));
 app.use("/api/notifications", require("./routes/notifications"));
 app.use("/api/ics", require("./routes/ics"));
 
-app.get("/", (req, res) => {
-  res.json({
-    status: "OK",
-    message: "🚀 Task Manager API Running",
-    socket: "Active",
-    activeConferences: Object.keys(activeConferences).length,
-    conferenceHands: Object.keys(conferenceHands).length,
-  });
-});
-
 /* ---------------------------------------------------
    START SERVER
 --------------------------------------------------- */
@@ -342,4 +341,19 @@ const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🌐 CORS allowed origins: ${allowedOrigins.join(", ")}`);
+  console.log(`📊 Conference store initialized`);
+});
+
+// Handle graceful shutdown
+process.on('SIGINT', () => {
+  console.log('🔄 Shutting down gracefully...');
+  console.log(`📊 Cleaning up ${conferences.size} conferences...`);
+  
+  // Close all conference connections
+  conferences.clear();
+  
+  server.close(() => {
+    console.log('👋 Server closed');
+    process.exit(0);
+  });
 });

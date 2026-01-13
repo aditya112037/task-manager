@@ -2,36 +2,7 @@
 
 const Team = require("../models/team");
 const verifyConferenceAdmin = require("./verifyConferenceAdmin");
-
-/*
-  In-memory conference store
-  NOTE: This is intentional.
-  Conferences are real-time constructs, not persistent data.
-*/
-const conferences = new Map();
-
-/*
-  conferences = {
-    conferenceId: {
-      teamId,
-      createdBy,
-      createdAt,
-      participants: Map(socketId => {
-        userId,
-        role,
-        name
-      }),
-      speakerMode: {
-        enabled: false,
-        activeSpeaker: null, // socketId of active speaker
-        speakerTimeout: null, // timeout to clear speaker
-        speakerTimeouts: Map() // per-user timeouts
-      },
-      raisedHands: Set(), // socketIds of users with raised hands
-      adminActions: Map() // Track admin actions
-    }
-  }
-*/
+const { conferences, getConferenceByTeamId, deleteConference } = require("../utils/conferenceStore"); // ✅ Import shared store
 
 module.exports = function registerConferenceSocket(io, socket) {
   /* ---------------------------------------------------
@@ -48,7 +19,7 @@ module.exports = function registerConferenceSocket(io, socket) {
 
   // Get participant from conference
   const getParticipant = (conferenceId, socketId) => {
-    const conference = conferences.get(conferenceId);
+    const conference = conferences.get(conferenceId); // ✅ Using shared store
     if (!conference) return null;
     return conference.participants.get(socketId);
   };
@@ -115,6 +86,14 @@ module.exports = function registerConferenceSocket(io, socket) {
       const user = getUserFromSocket();
       if (!user) return;
 
+      // Check if conference already exists for this team
+      const existingConference = getConferenceByTeamId(teamId);
+      if (existingConference) {
+        return socket.emit("conference:error", {
+          message: "Conference already exists for this team",
+        });
+      }
+
       const team = await Team.findById(teamId);
       if (!team) {
         return socket.emit("conference:error", {
@@ -134,6 +113,7 @@ module.exports = function registerConferenceSocket(io, socket) {
 
       const conferenceId = `${teamId}-${Date.now()}`;
 
+      // ✅ Using shared store
       conferences.set(conferenceId, {
         conferenceId,
         teamId,
@@ -169,7 +149,10 @@ module.exports = function registerConferenceSocket(io, socket) {
       io.to(`team_${teamId}`).emit("conference:started", {
         conferenceId,
         teamId,
+        createdBy: user._id,
       });
+
+      console.log(`Conference created: ${conferenceId} for team ${teamId}`);
     } catch (err) {
       console.error("conference:create error:", err);
       socket.emit("conference:error", { message: "Server error" });
@@ -179,7 +162,7 @@ module.exports = function registerConferenceSocket(io, socket) {
   /* ---------------------------------------------------
      JOIN CONFERENCE
   --------------------------------------------------- */
-  socket.on("conference:join", async ({ conferenceId }) => {
+  socket.on("conference:join", async ({ conferenceId, conferenceData }) => {
     try {
       const user = getUserFromSocket();
       if (!user) return;
@@ -228,7 +211,7 @@ module.exports = function registerConferenceSocket(io, socket) {
         }
       );
 
-      // ✅ STEP 3 — STATE SYNC ON RECONNECT
+      // ✅ STATE SYNC ON RECONNECT
       const conferenceState = {
         conferenceId,
         participants: participants,
@@ -248,6 +231,8 @@ module.exports = function registerConferenceSocket(io, socket) {
           socketId: conference.speakerMode.activeSpeaker,
         });
       }
+
+      console.log(`User ${user._id} joined conference ${conferenceId}`);
     } catch (err) {
       console.error("conference:join error:", err);
     }
@@ -294,12 +279,15 @@ module.exports = function registerConferenceSocket(io, socket) {
       raisedHands: Array.from(conference.raisedHands),
     });
 
+    console.log(`User left conference ${conferenceId}, ${conference.participants.size} remaining`);
+
     // Auto-end if empty
     if (conference.participants.size === 0) {
-      conferences.delete(conferenceId);
+      deleteConference(conferenceId); // ✅ Using shared store function
       io.to(`team_${conference.teamId}`).emit("conference:ended", {
         conferenceId,
       });
+      console.log(`Conference ${conferenceId} ended (empty)`);
     }
   });
 
@@ -357,7 +345,7 @@ module.exports = function registerConferenceSocket(io, socket) {
   });
 
   /* ---------------------------------------------------
-     SPEAKER MODE FUNCTIONALITY (PHASE 4)
+     SPEAKER MODE FUNCTIONALITY
   --------------------------------------------------- */
 
   // Toggle speaker mode (admin only)
@@ -369,7 +357,7 @@ module.exports = function registerConferenceSocket(io, socket) {
       const user = getUserFromSocket();
       if (!user) return;
 
-      // ✅ STEP 2 — USE DB VERIFICATION FOR CRITICAL ACTIONS
+      // ✅ USE DB VERIFICATION FOR CRITICAL ACTIONS
       const isAdmin = await verifyConferenceAdmin({
         userId: user._id,
         conference
@@ -400,13 +388,15 @@ module.exports = function registerConferenceSocket(io, socket) {
       io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
         socketId: conference.speakerMode.activeSpeaker,
       });
+
+      console.log(`Speaker mode ${enabled ? 'enabled' : 'disabled'} for conference ${conferenceId}`);
     } catch (err) {
       console.error("conference:toggle-speaker-mode error:", err);
       socket.emit("conference:error", { message: "Server error" });
     }
   });
 
-  // ✅ STEP 1 — SPEAKING DETECTION WITH OWNERSHIP LOCK
+  // ✅ SPEAKING DETECTION WITH OWNERSHIP LOCK
   socket.on("conference:speaking", ({ conferenceId, speaking }) => {
     const conference = conferences.get(conferenceId);
     if (!conference || !conference.speakerMode.enabled) return;
@@ -448,7 +438,7 @@ module.exports = function registerConferenceSocket(io, socket) {
       const user = getUserFromSocket();
       if (!user) return;
 
-      // ✅ STEP 2 — USE DB VERIFICATION FOR CRITICAL ACTIONS
+      // ✅ USE DB VERIFICATION FOR CRITICAL ACTIONS
       const isAdmin = await verifyConferenceAdmin({
         userId: user._id,
         conference
@@ -483,6 +473,8 @@ module.exports = function registerConferenceSocket(io, socket) {
       io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
         socketId: targetSocketId,
       });
+
+      console.log(`Speaker manually assigned to ${targetSocketId} in conference ${conferenceId}`);
     } catch (err) {
       console.error("conference:set-speaker error:", err);
       socket.emit("conference:error", { message: "Server error" });
@@ -498,7 +490,7 @@ module.exports = function registerConferenceSocket(io, socket) {
       const user = getUserFromSocket();
       if (!user) return;
 
-      // ✅ STEP 2 — USE DB VERIFICATION FOR CRITICAL ACTIONS
+      // ✅ USE DB VERIFICATION FOR CRITICAL ACTIONS
       const isAdmin = await verifyConferenceAdmin({
         userId: user._id,
         conference
@@ -522,6 +514,8 @@ module.exports = function registerConferenceSocket(io, socket) {
       io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
         socketId: null,
       });
+
+      console.log(`Speaker cleared in conference ${conferenceId}`);
     } catch (err) {
       console.error("conference:clear-speaker error:", err);
       socket.emit("conference:error", { message: "Server error" });
@@ -536,13 +530,12 @@ module.exports = function registerConferenceSocket(io, socket) {
       const conference = conferences.get(conferenceId);
       if (!conference) return;
 
-      // ❌ ISSUE 3 FIXED — Never trust userId from client, use socket.user
       const adminUser = getUserFromSocket();
       if (!adminUser) return;
 
       const adminParticipant = conference.participants.get(socket.id);
       
-      // ✅ STEP 2 — USE DB VERIFICATION FOR CRITICAL ACTIONS
+      // ✅ USE DB VERIFICATION FOR CRITICAL ACTIONS
       const isAdmin = await verifyConferenceAdmin({
         userId: adminUser._id,
         conference
@@ -553,19 +546,6 @@ module.exports = function registerConferenceSocket(io, socket) {
           message: "Only admin can perform this action",
         });
       }
-
-      // ❌ ISSUE 4 — CONFERENCE OWNERSHIP LOCK (Optional but recommended)
-      // Uncomment if you want conference creator supremacy
-      /*
-      if (
-        adminParticipant.role === "manager" &&
-        String(conference.createdBy) !== String(adminParticipant.userId)
-      ) {
-        return socket.emit("conference:error", {
-          message: "Only conference owner can perform this action"
-        });
-      }
-      */
 
       const targetParticipant = conference.participants.get(targetSocketId);
       if (!targetParticipant) {
@@ -640,6 +620,7 @@ module.exports = function registerConferenceSocket(io, socket) {
         timestamp: new Date(),
       });
 
+      console.log(`Admin action ${action} performed on ${targetSocketId} in conference ${conferenceId}`);
     } catch (err) {
       console.error("conference:admin-action error:", err);
       socket.emit("conference:error", { message: "Server error" });
@@ -686,10 +667,11 @@ module.exports = function registerConferenceSocket(io, socket) {
           });
 
         if (conference.participants.size === 0) {
-          conferences.delete(conferenceId);
+          deleteConference(conferenceId); // ✅ Using shared store function
           io.to(`team_${conference.teamId}`).emit("conference:ended", {
             conferenceId,
           });
+          console.log(`Conference ${conferenceId} auto-ended on disconnect`);
         }
       }
     }

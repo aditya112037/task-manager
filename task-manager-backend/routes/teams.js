@@ -1,7 +1,10 @@
+// routes/teams.js
+
 const express = require("express");
 const router = express.Router();
 const Team = require("../models/team");
 const { protect } = require("../middleware/auth");
+const { getConferenceByTeamId, conferences } = require("../utils/conferenceStore");
 
 // ----------------------------------------------------
 // SOCKET HELPERS (INVALIDATION ONLY)
@@ -313,6 +316,118 @@ router.put("/:teamId/transfer-admin/:userId", protect, async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+// ----------------------------------------------------
+// CHECK ACTIVE CONFERENCE ✓
+// ----------------------------------------------------
+router.get("/:teamId/conference", protect, async (req, res) => {
+  try {
+    const { teamId } = req.params;
+    const user = req.user;
+
+    // Verify user is a member of the team
+    const team = await Team.findById(teamId);
+    if (!team) {
+      return res.status(404).json({ error: "Team not found" });
+    }
+
+    const isMember = team.members.some(
+      (m) => String(m.user) === String(user._id)
+    );
+    if (!isMember) {
+      return res.status(403).json({ error: "Not a team member" });
+    }
+
+    // Check for active conference using shared store
+    const conference = getConferenceByTeamId(teamId);
+
+    if (conference) {
+      // Get participants with user info
+      const participants = Array.from(conference.participants.values());
+      
+      return res.json({
+        active: true,
+        conference: {
+          conferenceId: conference.conferenceId,
+          teamId: conference.teamId,
+          createdBy: conference.createdBy,
+          createdAt: conference.createdAt,
+          speakerMode: {
+            enabled: conference.speakerMode.enabled,
+            activeSpeaker: conference.speakerMode.activeSpeaker,
+          },
+          participantCount: conference.participants.size,
+          participants: participants.map(p => ({
+            userId: p.userId,
+            name: p.name,
+            role: p.role,
+            socketId: p.socketId,
+          })),
+          raisedHands: Array.from(conference.raisedHands),
+        },
+      });
+    }
+
+    res.json({ 
+      active: false, 
+      conference: null 
+    });
+  } catch (error) {
+    console.error("Error checking conference status:", error);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+// ----------------------------------------------------
+// GET ALL ACTIVE CONFERENCES (ADMIN ONLY) - Optional
+// ----------------------------------------------------
+router.get("/:teamId/conferences/active", protect, async (req, res) => {
+  try {
+    const { teamId } = req.params;
+    const user = req.user;
+
+    // Verify user is admin of the team
+    const team = await Team.findById(teamId);
+    if (!team) {
+      return res.status(404).json({ error: "Team not found" });
+    }
+
+    if (String(team.admin) !== String(user._id)) {
+      return res.status(403).json({ error: "Only team admin can view all conferences" });
+    }
+
+    // Get all conferences for this team
+    const teamConferences = [];
+    
+    for (const conference of conferences.values()) {
+      if (String(conference.teamId) === String(teamId)) {
+        const participants = Array.from(conference.participants.values());
+        teamConferences.push({
+          conferenceId: conference.conferenceId,
+          createdBy: conference.createdBy,
+          createdAt: conference.createdAt,
+          participantCount: conference.participants.size,
+          participants: participants.map(p => ({
+            userId: p.userId,
+            name: p.name,
+            role: p.role,
+            socketId: p.socketId,
+          })),
+          speakerModeEnabled: conference.speakerMode.enabled,
+          raisedHandsCount: conference.raisedHands.size,
+        });
+      }
+    }
+
+    res.json({
+      count: teamConferences.length,
+      conferences: teamConferences,
+    });
+  } catch (error) {
+    console.error("Error getting active conferences:", error);
+    res.status(500).json({ error: "Server error" });
   }
 });
 

@@ -1,4 +1,4 @@
-// TeamDetails.jsx - Updated with Socket-Only Conference System
+// TeamDetails.jsx - Updated with Complete Socket-Only Conference System
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   Box,
@@ -24,6 +24,9 @@ import {
   Alert,
   CircularProgress,
   Grid,
+  Card,
+  CardContent,
+  CardActions,
 } from "@mui/material";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
@@ -32,6 +35,9 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import ExitToAppIcon from "@mui/icons-material/ExitToApp";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import VideocamIcon from "@mui/icons-material/Videocam";
+import GroupsIcon from "@mui/icons-material/Groups";
+import VolumeUpIcon from "@mui/icons-material/VolumeUp";
+import PersonIcon from "@mui/icons-material/Person";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { teamsAPI, teamTasksAPI } from "../services/api";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
@@ -39,6 +45,7 @@ import TeamTaskForm from "../components/Teams/TeamTaskForm";
 import { useAuth } from "../context/AuthContext";
 import TeamAnalytics from "../components/Teams/Overview/Analytics";
 import { joinTeamRoom, leaveTeamRoom, getSocket } from "../services/socket";
+import { startConference } from "../services/conferenceSocket";
 
 /* ---------------------------------------------------
    SAFE MEMBER RESOLVER (prevents all crashes)
@@ -83,7 +90,8 @@ export default function TeamDetails() {
 
   // Conference state - SOCKET-ONLY
   const [conference, setConference] = useState(null);
-  const [loadingConference, setLoadingConference] = useState(false);
+  const [loadingConference, setLoadingConference] = useState(true);
+  const [socketConnected, setSocketConnected] = useState(true);
 
   // Snackbar state
   const [snackbar, setSnackbar] = useState({
@@ -247,64 +255,132 @@ export default function TeamDetails() {
   ]);
 
   /* ---------------------------------------------------
-     SOCKET CONFERENCE LISTENERS (NEW - SOCKET-ONLY APPROACH)
+     SOCKET CONFERENCE LISTENERS (SOCKET-ONLY APPROACH)
   --------------------------------------------------- */
   useEffect(() => {
     const socket = getSocket();
-    if (!socket) return;
+    if (!socket) {
+      console.error("Socket not available");
+      setSocketConnected(false);
+      setLoadingConference(false);
+      return;
+    }
+
+    setSocketConnected(true);
+    
+    console.log("Setting up conference listeners for team:", teamId);
 
     // Listen for conference started in this team
-    const handleConferenceStarted = (payload) => {
-      if (payload.teamId !== teamId) return;
-      console.log("🎥 Conference started in team:", teamId);
-      setConference(payload.conference);
+    const handleConferenceStarted = ({ conferenceId, teamId: startedTeamId, createdBy }) => {
+      console.log("🎥 Conference started event:", { conferenceId, startedTeamId, createdBy });
+      if (String(startedTeamId) !== String(teamId)) return;
+      
+      // Set basic conference info
+      setConference({
+        conferenceId,
+        teamId: startedTeamId,
+        createdBy,
+        participantsCount: 1, // The creator just joined
+      });
+      
+      showSnack("Conference started successfully!", "success");
+      setLoadingConference(false);
     };
 
     // Listen for conference ended in this team
-    const handleConferenceEnded = ({ teamId: endedTeamId }) => {
-      if (endedTeamId !== teamId) return;
-      console.log("🎥 Conference ended in team:", teamId);
+    const handleConferenceEnded = ({ conferenceId, teamId: endedTeamId }) => {
+      console.log("🎥 Conference ended event:", { conferenceId, endedTeamId });
+      if (String(endedTeamId) !== String(teamId)) return;
+      
       setConference(null);
+      showSnack("Conference ended", "info");
     };
 
-    // Listen for conference started success (for navigation)
-    const handleConferenceStartedSuccess = ({ conference }) => {
-      console.log("🎥 Conference started successfully, navigating to:", conference._id);
-      navigate(`/conference/${conference._id}`);
+    // Listen for conference creation success
+    const handleConferenceCreated = ({ conferenceId, teamId: createdTeamId }) => {
+      console.log("🎥 Conference created:", { conferenceId, createdTeamId });
+      if (String(createdTeamId) !== String(teamId)) return;
+      
+      // Navigate to conference room
+      setTimeout(() => {
+        navigate(`/conference/${conferenceId}`);
+      }, 500);
     };
 
-    // Listen for active conference info
-    const handleActiveConference = ({ conference: activeConference, teamId: confTeamId }) => {
-      if (confTeamId !== teamId) return;
-      setConference(activeConference);
+    // Listen for conference creation error
+    const handleConferenceError = ({ message }) => {
+      console.error("🎥 Conference error:", message);
+      showSnack(`Conference error: ${message}`, "error");
       setLoadingConference(false);
     };
 
-    // Listen for no active conference
-    const handleNoActiveConference = ({ teamId: confTeamId }) => {
-      if (confTeamId !== teamId) return;
-      setConference(null);
-      setLoadingConference(false);
+    // Listen for user joined conference
+    const handleUserJoined = ({ socketId, userId, userName }) => {
+      console.log("🎥 User joined conference:", { socketId, userId, userName });
+      // Update participant count if we have conference data
+      if (conference) {
+        setConference(prev => ({
+          ...prev,
+          participantsCount: (prev.participantsCount || 0) + 1
+        }));
+      }
     };
 
+    // Listen for user left conference
+    const handleUserLeft = ({ socketId }) => {
+      console.log("🎥 User left conference:", socketId);
+      // Update participant count if we have conference data
+      if (conference) {
+        setConference(prev => ({
+          ...prev,
+          participantsCount: Math.max(0, (prev.participantsCount || 1) - 1)
+        }));
+      }
+    };
+
+    // Check for existing conference on mount
+    const checkExistingConference = async () => {
+      try {
+        console.log("Checking for existing conference for team:", teamId);
+        const response = await fetch(`/api/teams/${teamId}/conference`);
+        const data = await response.json();
+        
+        if (data.active && data.conference) {
+          console.log("Found existing conference:", data.conference);
+          setConference(data.conference);
+        } else {
+          console.log("No existing conference found");
+          setConference(null);
+        }
+      } catch (error) {
+        console.error("Error checking conference:", error);
+        setConference(null);
+      } finally {
+        setLoadingConference(false);
+      }
+    };
+
+    // Set up socket listeners
     socket.on("conference:started", handleConferenceStarted);
     socket.on("conference:ended", handleConferenceEnded);
-    socket.on("conference:started:success", handleConferenceStartedSuccess);
-    socket.on("conference:active", handleActiveConference);
-    socket.on("conference:none", handleNoActiveConference);
+    socket.on("conference:created", handleConferenceCreated);
+    socket.on("conference:error", handleConferenceError);
+    socket.on("conference:user-joined", handleUserJoined);
+    socket.on("conference:user-left", handleUserLeft);
 
-    // Request active conference status on mount
-    setLoadingConference(true);
-    socket.emit("conference:getActive", { teamId });
+    // Check for existing conference
+    checkExistingConference();
 
     return () => {
+      console.log("Cleaning up conference listeners");
       socket.off("conference:started", handleConferenceStarted);
       socket.off("conference:ended", handleConferenceEnded);
-      socket.off("conference:started:success", handleConferenceStartedSuccess);
-      socket.off("conference:active", handleActiveConference);
-      socket.off("conference:none", handleNoActiveConference);
+      socket.off("conference:created", handleConferenceCreated);
+      socket.off("conference:error", handleConferenceError);
+      socket.off("conference:user-joined", handleUserJoined);
+      socket.off("conference:user-left", handleUserLeft);
     };
-  }, [teamId, navigate]);
+  }, [teamId, navigate, showSnack, conference]);
 
   /* ---------------------------------------------------
      🚨 CRITICAL FIX 3: Refetch when role changes
@@ -336,9 +412,8 @@ export default function TeamDetails() {
      CONFERENCE HANDLERS (SOCKET-ONLY)
   --------------------------------------------------- */
   const handleStartConference = () => {
-    const socket = getSocket();
-    if (!socket) {
-      showSnack("Connection error. Please refresh.", "error");
+    if (!socketConnected) {
+      showSnack("Connection error. Please refresh the page.", "error");
       return;
     }
 
@@ -347,13 +422,30 @@ export default function TeamDetails() {
       return;
     }
 
+    if (conference) {
+      showSnack("Conference already active. Join instead.", "warning");
+      return;
+    }
+
     setLoadingConference(true);
-    socket.emit("conference:start", { teamId });
+    console.log("Starting conference for team:", teamId);
     
-    // Show loading state for 5 seconds max
-    setTimeout(() => {
+    try {
+      startConference(teamId);
+      
+      // Set a timeout to reset loading state if no response
+      setTimeout(() => {
+        if (loadingConference) {
+          setLoadingConference(false);
+          showSnack("Conference creation taking longer than expected...", "info");
+        }
+      }, 5000);
+      
+    } catch (error) {
+      console.error("Error starting conference:", error);
       setLoadingConference(false);
-    }, 5000);
+      showSnack("Failed to start conference", "error");
+    }
   };
 
   const handleJoinConference = () => {
@@ -362,7 +454,34 @@ export default function TeamDetails() {
       return;
     }
     
-    navigate(`/conference/${conference._id}`);
+    if (!socketConnected) {
+      showSnack("Connection error. Please refresh the page.", "error");
+      return;
+    }
+    
+    console.log("Joining conference:", conference.conferenceId);
+    navigate(`/conference/${conference.conferenceId}`);
+  };
+
+  const handleRefreshConference = async () => {
+    setLoadingConference(true);
+    try {
+      const response = await fetch(`/api/teams/${teamId}/conference`);
+      const data = await response.json();
+      
+      if (data.active && data.conference) {
+        setConference(data.conference);
+        showSnack("Conference status refreshed", "success");
+      } else {
+        setConference(null);
+        showSnack("No active conference", "info");
+      }
+    } catch (error) {
+      console.error("Error refreshing conference:", error);
+      showSnack("Failed to refresh conference status", "error");
+    } finally {
+      setLoadingConference(false);
+    }
   };
 
   /* ---------------------------------------------------
@@ -465,7 +584,7 @@ export default function TeamDetails() {
   --------------------------------------------------- */
   const handleCopyInviteLink = () => {
     navigator.clipboard.writeText(`${window.location.origin}/join/${team._id}`);
-    showSnack("Copied!", "success");
+    showSnack("Invite link copied!", "success");
   };
 
   /* ---------------------------------------------------
@@ -619,6 +738,153 @@ export default function TeamDetails() {
   };
 
   /* ---------------------------------------------------
+     RENDER CONFERENCE CARD COMPONENT
+  --------------------------------------------------- */
+  const renderConferenceCard = () => (
+    <Card sx={{ 
+      maxWidth: 400, 
+      mb: 4, 
+      borderRadius: 2,
+      border: conference ? "2px solid #00e676" : "1px solid #e0e0e0",
+      boxShadow: conference ? "0 4px 20px rgba(0, 230, 118, 0.15)" : "0 2px 8px rgba(0,0,0,0.1)"
+    }}>
+      <CardContent>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
+          <VideocamIcon color={conference ? "success" : "primary"} />
+          <Typography variant="h6" component="div" fontWeight={700}>
+            {conference ? "Active Conference" : "Team Conference"}
+          </Typography>
+          {conference && (
+            <Chip
+              label="Live"
+              color="error"
+              size="small"
+              sx={{ ml: "auto", animation: "pulse 2s infinite" }}
+            />
+          )}
+        </Box>
+
+        {loadingConference ? (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2, py: 2 }}>
+            <CircularProgress size={24} />
+            <Typography variant="body2" color="text.secondary">
+              Checking conference status...
+            </Typography>
+          </Box>
+        ) : conference ? (
+          <>
+            <Typography variant="body2" color="text.secondary" gutterBottom>
+              Conference ID: {conference.conferenceId?.slice(0, 12)}...
+            </Typography>
+            
+            <Box sx={{ display: "flex", alignItems: "center", gap: 2, mt: 2, mb: 2 }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                <GroupsIcon fontSize="small" />
+                <Typography variant="body2">
+                  {conference.participantCount || conference.participantsCount || 1} participant(s)
+                </Typography>
+              </Box>
+
+              {conference.speakerMode?.enabled && (
+                <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                  <VolumeUpIcon fontSize="small" color="success" />
+                  <Typography variant="body2" color="success.main">
+                    Speaker Mode
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+
+            {conference.participants && conference.participants.length > 0 && (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Active Participants:
+                </Typography>
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                  {conference.participants.slice(0, 3).map((participant, index) => (
+                    <Chip
+                      key={index}
+                      icon={<PersonIcon fontSize="small" />}
+                      label={participant.name}
+                      size="small"
+                      variant="outlined"
+                    />
+                  ))}
+                  {conference.participants.length > 3 && (
+                    <Chip
+                      label={`+${conference.participants.length - 3} more`}
+                      size="small"
+                      variant="outlined"
+                    />
+                  )}
+                </Box>
+              </Box>
+            )}
+          </>
+        ) : (
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            No active conference right now. {["admin", "manager"].includes(myRole) 
+              ? "Start a conference to collaborate in real-time." 
+              : "Only admins and managers can start a conference."}
+          </Typography>
+        )}
+      </CardContent>
+
+      <CardActions sx={{ justifyContent: "center", p: 2, pt: 0 }}>
+        {loadingConference ? (
+          <Button disabled>
+            <CircularProgress size={24} />
+          </Button>
+        ) : conference ? (
+          <Button
+            variant="contained"
+            color="success"
+            startIcon={<VideocamIcon />}
+            onClick={handleJoinConference}
+            fullWidth
+            size="large"
+          >
+            Join Conference
+          </Button>
+        ) : ["admin", "manager"].includes(myRole) ? (
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<VideocamIcon />}
+            onClick={handleStartConference}
+            fullWidth
+            size="large"
+            disabled={!socketConnected}
+          >
+            {socketConnected ? "Start Conference" : "Connecting..."}
+          </Button>
+        ) : (
+          <Button
+            variant="outlined"
+            disabled
+            fullWidth
+            size="large"
+          >
+            Join Conference
+          </Button>
+        )}
+      </CardActions>
+      
+      {conference && (
+        <Box sx={{ p: 2, pt: 0, textAlign: "center" }}>
+          <Button 
+            size="small" 
+            onClick={handleRefreshConference}
+            disabled={loadingConference}
+          >
+            Refresh Status
+          </Button>
+        </Box>
+      )}
+    </Card>
+  );
+
+  /* ---------------------------------------------------
      LOADING
   --------------------------------------------------- */
   if (loadingTeam)
@@ -711,67 +977,39 @@ export default function TeamDetails() {
 
       {/* OVERVIEW */}
       {tab === 0 && (
-        <Paper sx={{ p: 3, borderRadius: 3 }}>
+        <>
           {/* CONFERENCE SECTION - SOCKET-ONLY */}
-          <Box sx={{ mb: 4 }}>
-            <Typography variant="h6" fontWeight={700}>
+          <Paper sx={{ p: 3, borderRadius: 3, mb: 3 }}>
+            <Typography variant="h6" fontWeight={700} gutterBottom>
               Team Conference
             </Typography>
-
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
               Real-time audio/video collaboration for this team
             </Typography>
+            
+            {renderConferenceCard()}
 
-            {loadingConference ? (
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <CircularProgress size={20} />
-                <Typography variant="body2">Checking conference status...</Typography>
-              </Box>
-            ) : conference ? (
-              <Box>
-                <Button
-                  variant="contained"
-                  color="success"
-                  startIcon={<VideocamIcon />}
-                  onClick={handleJoinConference}
-                  sx={{ mb: 1 }}
-                >
-                  Join Active Conference
-                </Button>
-                <Typography variant="caption" color="text.secondary" display="block">
-                  {conference.participantsCount || 0} participant(s) online
-                </Typography>
-              </Box>
-            ) : ["admin", "manager"].includes(myRole) ? (
-              <Button
-                variant="contained"
-                startIcon={<VideocamIcon />}
-                onClick={handleStartConference}
-                disabled={loadingConference}
-              >
-                {loadingConference ? "Starting..." : "Start Conference"}
-              </Button>
-            ) : (
-              <Typography variant="caption" color="text.secondary">
-                No active conference right now. Only admins and managers can start a conference.
-              </Typography>
+            {!socketConnected && (
+              <Alert severity="warning" sx={{ mt: 2 }}>
+                Socket connection lost. Please refresh the page to restore conference functionality.
+              </Alert>
             )}
-          </Box>
-
-          <Divider sx={{ mb: 4 }} />
+          </Paper>
 
           {/* ANALYTICS SECTION */}
-          <TeamAnalytics team={team} tasks={teamTasks} myRole={myRole} />
+          <Paper sx={{ p: 3, borderRadius: 3 }}>
+            <TeamAnalytics team={team} tasks={teamTasks} myRole={myRole} />
 
-          <Button 
-            sx={{ mt: 3 }} 
-            variant="outlined" 
-            startIcon={<ContentCopyIcon />} 
-            onClick={handleCopyInviteLink}
-          >
-            Copy Invite Link
-          </Button>
-        </Paper>
+            <Button 
+              sx={{ mt: 3 }} 
+              variant="outlined" 
+              startIcon={<ContentCopyIcon />} 
+              onClick={handleCopyInviteLink}
+            >
+              Copy Invite Link
+            </Button>
+          </Paper>
+        </>
       )}
 
       {/* MEMBERS */}
