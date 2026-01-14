@@ -1,7 +1,7 @@
+// App.jsx
 import React, { useMemo, useState, useEffect } from "react";
 import { ThemeProvider, createTheme, CssBaseline } from "@mui/material";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-import { getSocket } from "./services/socket";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Layout from "./components/Layout/Layout";
 import ConferenceRoom from "./pages/ConferenceRoom";
@@ -9,7 +9,6 @@ import Login from "./components/Auth/Login";
 import Register from "./components/Auth/Register";
 import OAuthSuccess from "./components/Auth/OAuthSuccess";
 import Dashboard from "./pages/Dashboard";
-
 import TeamsHome from "./pages/TeamsHome";
 import TeamDetails from "./pages/TeamDetails";
 import CreateTeam from "./pages/CreateTeam";
@@ -27,34 +26,13 @@ const PublicRoute = ({ children }) => {
   return !user ? children : <Navigate to="/" />;
 };
 
-function App() {
+function AppContent() {
   const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("darkMode");
     if (saved) setDarkMode(saved === "true");
   }, []);
-  
-  useEffect(() => {
-    if (user) {
-      console.log("👤 User authenticated, ensuring socket connection...");
-      
-      // Give a small delay to ensure token is in localStorage
-      const timer = setTimeout(() => {
-        try {
-          const socket = getSocket();
-          if (socket && !socket.connected) {
-            console.log("🔄 Attempting socket connection...");
-            socket.connect();
-          }
-        } catch (error) {
-          console.error("❌ Socket connection attempt failed:", error);
-        }
-      }, 500);
-
-      return () => clearTimeout(timer);
-    }
-  }, [user]);
 
   const toggleDarkMode = () => {
     const next = !darkMode;
@@ -95,102 +73,105 @@ function App() {
     [darkMode]
   );
 
-  
+  return (
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Router>
+        <Routes>
+          {/* LOGIN / REGISTER - NO SIDEBAR */}
+          <Route
+            path="/login"
+            element={
+              <PublicRoute>
+                <Login />
+              </PublicRoute>
+            }
+          />
+          <Route
+            path="/register"
+            element={
+              <PublicRoute>
+                <Register />
+              </PublicRoute>
+            }
+          />
+          <Route path="/oauth-success" element={<OAuthSuccess />} />
 
+          <Route
+            path="/join-team"
+            element={
+              <ProtectedRoute>
+                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                  <JoinTeam />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route path="/join/:inviteCode" element={<JoinTeam />} />
+
+          {/* PROTECTED ROUTES WITH LAYOUT */}
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
+                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                  <Dashboard />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/teams"
+            element={
+              <ProtectedRoute>
+                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                  <TeamsHome />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/teams/create"
+            element={
+              <ProtectedRoute>
+                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                  <CreateTeam />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/teams/:teamId"
+            element={
+              <ProtectedRoute>
+                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                  <TeamDetails />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/conference/:conferenceId"
+            element={
+              <ProtectedRoute>
+                <ConferenceRoom />
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </Router>
+    </ThemeProvider>
+  );
+}
+
+function App() {
   return (
     <AuthProvider>
-      <ThemeProvider theme={theme}>
-        <CssBaseline />
-        <Router>
-          <Routes>
-            {/* LOGIN / REGISTER - NO SIDEBAR */}
-            <Route
-              path="/login"
-              element={
-                <PublicRoute>
-                  <Login />
-                </PublicRoute>
-              }
-            />
-            <Route
-              path="/register"
-              element={
-                <PublicRoute>
-                  <Register />
-                </PublicRoute>
-              }
-            />
-            <Route path="/oauth-success" element={<OAuthSuccess />} />
-
-            <Route
-              path="/join-team"
-              element={
-                <ProtectedRoute>
-                  <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
-                    <JoinTeam />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-
-            <Route path="/join/:inviteCode" element={<JoinTeam />} />
-
-            {/* PROTECTED ROUTES WITH LAYOUT */}
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
-                    <Dashboard />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-
-            <Route
-              path="/teams"
-              element={
-                <ProtectedRoute>
-                  <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
-                    <TeamsHome />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-
-            <Route
-              path="/teams/create"
-              element={
-                <ProtectedRoute>
-                  <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
-                    <CreateTeam />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-
-            <Route
-              path="/teams/:teamId"
-              element={
-                <ProtectedRoute>
-                  <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
-                    <TeamDetails />
-                  </Layout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/conference/:conferenceId"
-              element={
-                <ProtectedRoute>
-                  <ConferenceRoom />
-                </ProtectedRoute>
-              }
-            />
-
-          </Routes>
-        </Router>
-      </ThemeProvider>
+      <AppContent />
     </AuthProvider>
   );
 }
