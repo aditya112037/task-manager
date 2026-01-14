@@ -196,7 +196,7 @@ export default function ConferenceRoom() {
   }, [localStream, speakerModeEnabled, conferenceId, socket, activeSpeaker]);
 
   /* ----------------------------------------------------
-     INIT MEDIA + CONFERENCE
+     INIT MEDIA + CONFERENCE - CRITICAL FIX
   ---------------------------------------------------- */
   useEffect(() => {
     let mounted = true;
@@ -214,18 +214,31 @@ export default function ConferenceRoom() {
           }
         }
 
-        const stream = await initMedia();
-        if (!mounted) return;
+        // 🚨 CRITICAL: Initialize media ONCE
+        let stream = null;
+        try {
+          stream = await initMedia();
+          if (!mounted) return;
 
-        setLocalStream(stream);
-        setLocalStreamState(stream);
-        
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = stream;
+          // 🚨 CRITICAL: Set the stream in webrtc module
+          setLocalStream(stream);
+          setLocalStreamState(stream);
+          
+          // Update video element
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = stream;
+            console.log("Video element updated with stream");
+          }
+        } catch (mediaError) {
+          console.warn("Media initialization failed, joining without camera:", mediaError);
+          showNotification("Joining without camera/microphone", "warning");
+          // Continue without media - user can join as audio-only or observer
         }
 
         // Get conference data
         const confData = await fetchConferenceData(conferenceId);
+        if (!mounted) return;
+        
         setConferenceData(confData);
         
         // Check if current user is admin/manager
@@ -234,10 +247,37 @@ export default function ConferenceRoom() {
           setIsAdminOrManager(isCreator);
         }
 
+        // Join conference (with or without media)
         joinConference(conferenceId, confData);
+        
+        if (stream) {
+          showNotification("Media initialized successfully", "success");
+        } else {
+          showNotification("Joined conference without camera/microphone", "info");
+        }
+        
       } catch (error) {
-        console.error("Failed to initialize media:", error);
-        showNotification("Failed to initialize media", "error");
+        console.error("Failed to initialize conference:", error);
+        showNotification(`Conference initialization failed: ${error.message}`, "error");
+        
+        // Try to fetch conference data anyway for fallback
+        try {
+          const confData = await fetchConferenceData(conferenceId);
+          if (mounted) {
+            setConferenceData(confData);
+            
+            if (confData && currentUser) {
+              const isCreator = confData.createdBy === currentUser._id;
+              setIsAdminOrManager(isCreator);
+            }
+            
+            joinConference(conferenceId, confData);
+            showNotification("Joined conference with limited functionality", "warning");
+          }
+        } catch (confError) {
+          console.error("Failed to join conference:", confError);
+          showNotification("Could not join conference. Please try again.", "error");
+        }
       }
     };
 
@@ -245,7 +285,15 @@ export default function ConferenceRoom() {
 
     /* ---------------- SIGNALING HANDLERS ---------------- */
     const handleUserJoined = async ({ userId, userName, socketId }) => {
-      const pc = createPeer(userId, socket);
+      if (!mounted) return;
+      
+      // Only create peer if we have a local stream
+      if (!localStream) {
+        console.log("No local stream, skipping peer creation for", socketId);
+        return;
+      }
+      
+      const pc = createPeer(userId, socket, localStream);
 
       pc.ontrack = (e) => {
         if (!mounted) return;
@@ -265,7 +313,9 @@ export default function ConferenceRoom() {
     };
 
     const handleOffer = async ({ from, offer }) => {
-      const pc = createPeer(from, socket);
+      if (!mounted) return;
+      
+      const pc = createPeer(from, socket, localStream);
 
       pc.ontrack = (e) => {
         if (!mounted) return;
@@ -286,7 +336,9 @@ export default function ConferenceRoom() {
     };
 
     const handleAnswer = async ({ from, answer }) => {
-      const pc = createPeer(from, socket);
+      if (!mounted) return;
+      
+      const pc = createPeer(from, socket, localStream);
       try {
         await pc.setRemoteDescription(answer);
       } catch (error) {
@@ -295,7 +347,9 @@ export default function ConferenceRoom() {
     };
 
     const handleIceCandidate = ({ from, candidate }) => {
-      const pc = createPeer(from, socket);
+      if (!mounted) return;
+      
+      const pc = createPeer(from, socket, localStream);
       try {
         pc.addIceCandidate(candidate);
       } catch (error) {
@@ -331,6 +385,7 @@ export default function ConferenceRoom() {
     };
 
     const handleConferenceEnded = () => {
+      if (!mounted) return;
       handleLeave();
     };
 
@@ -381,20 +436,27 @@ export default function ConferenceRoom() {
 
     /* ---------------- ADMIN ACTION LISTENERS ---------------- */
     const handleForceMute = () => {
+      if (!mounted) return;
       console.log("Admin forced mute");
-      toggleAudio(false);
-      setMicOn(false);
-      showNotification("Admin has muted your microphone", "warning");
+      if (localStream) {
+        toggleAudio(false);
+        setMicOn(false);
+        showNotification("Admin has muted your microphone", "warning");
+      }
     };
 
     const handleForceCameraOff = () => {
+      if (!mounted) return;
       console.log("Admin turned off camera");
-      toggleVideo(false);
-      setCamOn(false);
-      showNotification("Admin has turned off your camera", "warning");
+      if (localStream) {
+        toggleVideo(false);
+        setCamOn(false);
+        showNotification("Admin has turned off your camera", "warning");
+      }
     };
 
     const handleRemovedByAdmin = () => {
+      if (!mounted) return;
       console.log("Removed by admin");
       handleLeave();
       showNotification("You have been removed from the conference by the admin", "error");
@@ -590,6 +652,11 @@ export default function ConferenceRoom() {
       return;
     }
     
+    if (!localStream) {
+      showNotification("No microphone available", "error");
+      return;
+    }
+    
     toggleAudio(!micOn);
     setMicOn((v) => !v);
   };
@@ -604,6 +671,11 @@ export default function ConferenceRoom() {
   };
 
   const handleToggleCam = () => {
+    if (!localStream) {
+      showNotification("No camera available", "error");
+      return;
+    }
+    
     toggleVideo(!camOn);
     setCamOn((v) => !v);
   };
@@ -1051,11 +1123,16 @@ export default function ConferenceRoom() {
           <Tooltip title={camOn ? "Turn Camera Off" : "Turn Camera On"}>
             <IconButton
               onClick={handleToggleCam}
+              disabled={!localStream}
               sx={{
                 background: camOn ? "#1565c0" : "#424242",
                 color: "white",
                 "&:hover": {
                   background: camOn ? "#0d47a1" : "#303030",
+                },
+                "&.Mui-disabled": {
+                  background: "#333",
+                  color: "#666",
                 },
               }}
             >
@@ -1067,11 +1144,16 @@ export default function ConferenceRoom() {
           <Tooltip title={sharingScreen ? "Stop Screen Share" : "Start Screen Share"}>
             <IconButton
               onClick={handleScreenShare}
+              disabled={!localStream}
               sx={{
                 background: sharingScreen ? "#6a1b9a" : "#424242",
                 color: "white",
                 "&:hover": {
                   background: sharingScreen ? "#4a148c" : "#303030",
+                },
+                "&.Mui-disabled": {
+                  background: "#333",
+                  color: "#666",
                 },
               }}
             >
@@ -1114,10 +1196,15 @@ export default function ConferenceRoom() {
               <Tooltip title="Set Yourself as Speaker">
                 <IconButton
                   onClick={() => setAsSpeaker(socket.id)}
+                  disabled={!localStream}
                   sx={{
                     background: "#00e676",
                     color: "black",
                     "&:hover": { background: "#00c853" },
+                    "&.Mui-disabled": {
+                      background: "#333",
+                      color: "#666",
+                    },
                   }}
                 >
                   <MicExternalOnIcon />
@@ -1157,6 +1244,11 @@ export default function ConferenceRoom() {
           {isAdminOrManager && (
             <Typography color="#4caf50" variant="caption" ml={1}>
               • Admin Mode
+            </Typography>
+          )}
+          {!localStream && (
+            <Typography color="#ff9800" variant="caption" ml={1}>
+              • Audio/Video Disabled
             </Typography>
           )}
         </Box>
