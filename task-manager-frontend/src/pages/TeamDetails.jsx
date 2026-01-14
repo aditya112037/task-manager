@@ -1,4 +1,4 @@
-// TeamDetails.jsx - Updated with Complete Socket-Only Conference System
+// TeamDetails.jsx - Fixed with Complete Socket-Only Conference System
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import {
   Box,
@@ -90,7 +90,7 @@ export default function TeamDetails() {
 
   // Conference state - SOCKET-ONLY
   const [conference, setConference] = useState(null);
-  const [loadingConference, setLoadingConference] = useState(true);
+  const [loadingConference, setLoadingConference] = useState(false);
   const [socketConnected, setSocketConnected] = useState(true);
 
   // Snackbar state
@@ -255,7 +255,8 @@ export default function TeamDetails() {
   ]);
 
   /* ---------------------------------------------------
-     SOCKET CONFERENCE LISTENERS (SOCKET-ONLY APPROACH)
+     SOCKET CONFERENCE LISTENERS (PURE SOCKET-ONLY APPROACH)
+     🚨 CRITICAL FIX: No REST calls, only socket events
   --------------------------------------------------- */
   useEffect(() => {
     const socket = getSocket();
@@ -338,26 +339,21 @@ export default function TeamDetails() {
       }
     };
 
-    // Check for existing conference on mount
-    const checkExistingConference = async () => {
-      try {
-        console.log("Checking for existing conference for team:", teamId);
-        const response = await fetch(`/api/teams/${teamId}/conference`);
-        const data = await response.json();
-        
-        if (data.active && data.conference) {
-          console.log("Found existing conference:", data.conference);
-          setConference(data.conference);
-        } else {
-          console.log("No existing conference found");
-          setConference(null);
-        }
-      } catch (error) {
-        console.error("Error checking conference:", error);
+    // 🚨 CRITICAL FIX: Request conference state via socket only
+    const requestConferenceState = () => {
+      console.log("Requesting conference state via socket for team:", teamId);
+      socket.emit('conference:check', { teamId });
+    };
+
+    // Listen for conference state response
+    const handleConferenceState = ({ conference: existingConference, active }) => {
+      console.log("🎥 Conference state received:", { existingConference, active });
+      if (active && existingConference) {
+        setConference(existingConference);
+      } else {
         setConference(null);
-      } finally {
-        setLoadingConference(false);
       }
+      setLoadingConference(false);
     };
 
     // Set up socket listeners
@@ -367,9 +363,18 @@ export default function TeamDetails() {
     socket.on("conference:error", handleConferenceError);
     socket.on("conference:user-joined", handleUserJoined);
     socket.on("conference:user-left", handleUserLeft);
-
-    // Check for existing conference
-    checkExistingConference();
+    socket.on("conference:state", handleConferenceState);
+    
+    // Request conference state
+    requestConferenceState();
+    
+    // Also listen for socket reconnection
+    const handleReconnect = () => {
+      console.log("Socket reconnected, requesting conference state");
+      requestConferenceState();
+    };
+    
+    socket.on("reconnect", handleReconnect);
 
     return () => {
       console.log("Cleaning up conference listeners");
@@ -379,6 +384,8 @@ export default function TeamDetails() {
       socket.off("conference:error", handleConferenceError);
       socket.off("conference:user-joined", handleUserJoined);
       socket.off("conference:user-left", handleUserLeft);
+      socket.off("conference:state", handleConferenceState);
+      socket.off("reconnect", handleReconnect);
     };
   }, [teamId, navigate, showSnack, conference]);
 
@@ -409,7 +416,8 @@ export default function TeamDetails() {
   }, [teamId]);
 
   /* ---------------------------------------------------
-     CONFERENCE HANDLERS (SOCKET-ONLY)
+     CONFERENCE HANDLERS (PURE SOCKET-ONLY)
+     🚨 CRITICAL FIX: No REST calls
   --------------------------------------------------- */
   const handleStartConference = () => {
     if (!socketConnected) {
@@ -461,27 +469,6 @@ export default function TeamDetails() {
     
     console.log("Joining conference:", conference.conferenceId);
     navigate(`/conference/${conference.conferenceId}`);
-  };
-
-  const handleRefreshConference = async () => {
-    setLoadingConference(true);
-    try {
-      const response = await fetch(`/api/teams/${teamId}/conference`);
-      const data = await response.json();
-      
-      if (data.active && data.conference) {
-        setConference(data.conference);
-        showSnack("Conference status refreshed", "success");
-      } else {
-        setConference(null);
-        showSnack("No active conference", "info");
-      }
-    } catch (error) {
-      console.error("Error refreshing conference:", error);
-      showSnack("Failed to refresh conference status", "error");
-    } finally {
-      setLoadingConference(false);
-    }
   };
 
   /* ---------------------------------------------------
@@ -738,6 +725,20 @@ export default function TeamDetails() {
   };
 
   /* ---------------------------------------------------
+     CONFERENCE STATUS REFRESH (SOCKET-ONLY)
+  --------------------------------------------------- */
+  const handleRefreshConference = () => {
+    const socket = getSocket();
+    if (!socket) {
+      showSnack("Socket not available", "error");
+      return;
+    }
+    
+    setLoadingConference(true);
+    socket.emit('conference:check', { teamId });
+  };
+
+  /* ---------------------------------------------------
      RENDER CONFERENCE CARD COMPONENT
   --------------------------------------------------- */
   const renderConferenceCard = () => (
@@ -870,7 +871,7 @@ export default function TeamDetails() {
         )}
       </CardActions>
       
-      {conference && (
+      {!loadingConference && (
         <Box sx={{ p: 2, pt: 0, textAlign: "center" }}>
           <Button 
             size="small" 
