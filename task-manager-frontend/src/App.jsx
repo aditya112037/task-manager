@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from "react";
 import { ThemeProvider, createTheme, CssBaseline } from "@mui/material";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
-
+import { getSocket } from "./services/socket";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Layout from "./components/Layout/Layout";
 import ConferenceRoom from "./pages/ConferenceRoom";
@@ -34,6 +34,27 @@ function App() {
     const saved = localStorage.getItem("darkMode");
     if (saved) setDarkMode(saved === "true");
   }, []);
+  
+  useEffect(() => {
+    if (user) {
+      console.log("👤 User authenticated, ensuring socket connection...");
+      
+      // Give a small delay to ensure token is in localStorage
+      const timer = setTimeout(() => {
+        try {
+          const socket = getSocket();
+          if (socket && !socket.connected) {
+            console.log("🔄 Attempting socket connection...");
+            socket.connect();
+          }
+        } catch (error) {
+          console.error("❌ Socket connection attempt failed:", error);
+        }
+      }, 500);
+
+      return () => clearTimeout(timer);
+    }
+  }, [user]);
 
   const toggleDarkMode = () => {
     const next = !darkMode;
@@ -73,6 +94,8 @@ function App() {
       }),
     [darkMode]
   );
+
+  
 
   return (
     <AuthProvider>

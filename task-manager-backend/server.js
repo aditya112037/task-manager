@@ -50,6 +50,10 @@ const io = new Server(server, {
     origin: allowedOrigins,
     credentials: true,
   },
+  // 🚨 CRITICAL: Enable connection state recovery
+  connectionStateRecovery: {
+    maxDisconnectionDuration: 2 * 60 * 1000, // 2 minutes
+  }
 });
 
 // 🔒 Single global socket instance
@@ -63,49 +67,169 @@ global.emitToTeam = (teamId, event, payload = {}) => {
 // In-memory stores for hand raises
 const conferenceHands = {};
 
+/* ---------------------------------------------------
+   🚨 CRITICAL: ENHANCED SOCKET AUTHENTICATION MIDDLEWARE
+   With detailed debugging and error handling
+--------------------------------------------------- */
 io.use(async (socket, next) => {
   try {
-    const token = socket.handshake.auth?.token;
-    if (!token) return next(new Error("Unauthorized"));
+    console.log("🔐 Socket auth attempt:", {
+      socketId: socket.id,
+      hasAuth: !!socket.handshake.auth,
+      authKeys: socket.handshake.auth ? Object.keys(socket.handshake.auth) : 'none',
+      headers: socket.handshake.headers ? Object.keys(socket.handshake.headers) : 'none',
+      hasAuthorizationHeader: !!socket.handshake.headers?.authorization,
+    });
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id).select("name email");
+    // 🚨 CRITICAL: Try multiple ways to get token
+    let token = null;
+    
+    // 1. Try auth.token first (primary method)
+    if (socket.handshake.auth?.token) {
+      token = socket.handshake.auth.token;
+      console.log('📦 Token found in auth.token');
+    }
+    // 2. Try auth.authorization
+    else if (socket.handshake.auth?.authorization) {
+      const authHeader = socket.handshake.auth.authorization;
+      if (authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+        console.log('📦 Token found in auth.authorization');
+      }
+    }
+    // 3. Try headers.authorization as fallback
+    else if (socket.handshake.headers?.authorization) {
+      const authHeader = socket.handshake.headers.authorization;
+      if (authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7);
+        console.log('📦 Token found in headers.authorization');
+      }
+    }
 
-    if (!user) return next(new Error("Unauthorized"));
+    if (!token) {
+      console.error('❌ No token provided in socket handshake', {
+        auth: socket.handshake.auth,
+        headersAuth: socket.handshake.headers?.authorization
+      });
+      return next(new Error("Unauthorized: No token provided"));
+    }
 
-    socket.user = user;
-    socket.userId = user._id.toString();
-    next();
+    // 🚨 CRITICAL: Validate token format
+    console.log('🔑 Token received:', {
+      length: token.length,
+      startsWith: token.substring(0, 10) + '...',
+      endsWith: '...' + token.substring(token.length - 10),
+    });
+
+    // Check if token looks like a JWT (3 parts separated by dots)
+    const tokenParts = token.split('.');
+    if (tokenParts.length !== 3) {
+      console.error('❌ Invalid token format - not a JWT', {
+        parts: tokenParts.length,
+        tokenSample: token.substring(0, 50)
+      });
+      return next(new Error("Unauthorized: Invalid token format"));
+    }
+
+    try {
+      // Verify the token
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      console.log('✅ Token decoded successfully:', {
+        id: decoded.id,
+        email: decoded.email,
+        exp: new Date(decoded.exp * 1000),
+        iat: new Date(decoded.iat * 1000),
+        now: new Date(),
+        isExpired: decoded.exp * 1000 < Date.now()
+      });
+
+      // Check if token is expired
+      if (decoded.exp * 1000 < Date.now()) {
+        console.error('❌ Token expired:', {
+          expiredAt: new Date(decoded.exp * 1000),
+          now: new Date()
+        });
+        return next(new Error("Unauthorized: Token expired"));
+      }
+
+      // Find user in database
+      const user = await User.findById(decoded.id).select("name email _id");
+      
+      if (!user) {
+        console.error('❌ User not found in database:', decoded.id);
+        return next(new Error("Unauthorized: User not found"));
+      }
+
+      // 🚨 CRITICAL: Attach user to socket
+      socket.user = user;
+      socket.userId = user._id.toString();
+      
+      console.log(`✅ Socket ${socket.id} authenticated successfully as:`, {
+        userId: user._id,
+        email: user.email,
+        name: user.name
+      });
+      
+      next();
+      
+    } catch (jwtError) {
+      console.error('❌ JWT verification failed:', {
+        name: jwtError.name,
+        message: jwtError.message,
+        expiredAt: jwtError.expiredAt,
+      });
+      
+      if (jwtError.name === 'TokenExpiredError') {
+        return next(new Error("Unauthorized: Token expired"));
+      }
+      if (jwtError.name === 'JsonWebTokenError') {
+        return next(new Error("Unauthorized: Invalid token signature"));
+      }
+      
+      return next(new Error("Unauthorized: Token verification failed"));
+    }
+    
   } catch (err) {
-    next(new Error("Unauthorized"));
+    console.error('❌ Unexpected socket auth error:', {
+      name: err.name,
+      message: err.message,
+      stack: err.stack
+    });
+    
+    return next(new Error("Unauthorized: Authentication failed"));
   }
 });
 
+/* ---------------------------------------------------
+   SOCKET CONNECTION HANDLER
+--------------------------------------------------- */
 io.on("connection", (socket) => {
-  console.log("🔥 Socket connected:", socket.id, "User:", socket.user?.email);
+  console.log("🔥 Socket connected:", {
+    socketId: socket.id,
+    userId: socket.userId,
+    email: socket.user?.email,
+    name: socket.user?.name,
+    authenticated: !!socket.user
+  });
+
+  // 🚨 CRITICAL: Verify socket.user exists
+  if (!socket.user || !socket.userId) {
+    console.error('❌ Socket connected without user data - disconnecting', socket.id);
+    socket.disconnect();
+    return;
+  }
 
   /* ------------------------------
      JOIN TEAM ROOM
   ------------------------------ */
   socket.on("joinTeam", (teamId) => {
-    if (!teamId) return;
+    if (!teamId) {
+      console.error('❌ joinTeam called without teamId:', { socketId: socket.id });
+      return;
+    }
     const room = `team_${teamId}`;
     socket.join(room);
-    console.log(`👥 Socket ${socket.id} joined ${room}`);
-  });
-
-  /* ------------------------------
-     JOIN CONFERENCE ROOM
-  ------------------------------ */
-  socket.on("joinConference", ({ conferenceId, conferenceData }) => {
-    if (!conferenceId) return;
-    const room = `conference_${conferenceId}`;
-    socket.join(room);
-    
-    // Note: Conference metadata is now stored in the shared conferenceStore
-    // We don't need to duplicate it here
-    
-    console.log(`🎤 Socket ${socket.id} joined ${room}`);
+    console.log(`👥 Socket ${socket.id} (${socket.user?.email}) joined ${room}`);
   });
 
   /* ------------------------------
@@ -119,15 +243,25 @@ io.on("connection", (socket) => {
   });
 
   /* ------------------------------
+     JOIN CONFERENCE ROOM
+  ------------------------------ */
+  socket.on("joinConference", ({ conferenceId, conferenceData }) => {
+    if (!conferenceId) {
+      console.error('❌ joinConference called without conferenceId:', { socketId: socket.id });
+      return;
+    }
+    const room = `conference_${conferenceId}`;
+    socket.join(room);
+    console.log(`🎤 Socket ${socket.id} (${socket.user?.email}) joined ${room}`);
+  });
+
+  /* ------------------------------
      LEAVE CONFERENCE ROOM
   ------------------------------ */
   socket.on("leaveConference", (conferenceId) => {
     if (!conferenceId) return;
     const room = `conference_${conferenceId}`;
     socket.leave(room);
-    
-    // Note: Conference participants are managed in the shared conferenceStore
-    // We don't need to manage them here
     
     // Lower hand when leaving conference
     if (conferenceHands[conferenceId]?.has(socket.id)) {
@@ -154,11 +288,11 @@ io.on("connection", (socket) => {
 
     io.to(`conference_${conferenceId}`).emit("conference:hands-updated", {
       raisedHands: Array.from(conferenceHands[conferenceId]),
-      userId: socket.user?._id,
+      userId: socket.userId,
       userName: socket.user?.name,
     });
     
-    console.log(`✋ Hand raised by ${socket.user?.name} in conference ${conferenceId}`);
+    console.log(`✋ Hand raised by ${socket.user?.name} (${socket.userId}) in conference ${conferenceId}`);
   });
 
   socket.on("conference:lower-hand", ({ conferenceId }) => {
@@ -170,7 +304,7 @@ io.on("connection", (socket) => {
       raisedHands: Array.from(conferenceHands[conferenceId] || []),
     });
     
-    console.log(`👇 Hand lowered by ${socket.user?.name} in conference ${conferenceId}`);
+    console.log(`👇 Hand lowered by ${socket.user?.name} (${socket.userId}) in conference ${conferenceId}`);
   });
 
   /* ------------------------------
@@ -186,7 +320,15 @@ io.on("connection", (socket) => {
 
     // Verify admin - simple check: if user is the conference creator
     const isAdmin = String(conference.createdBy) === String(userId);
-    if (!isAdmin) return;
+    if (!isAdmin) {
+      console.warn('❌ Non-admin attempted admin action:', { 
+        userId, 
+        conferenceId,
+        action,
+        socketId: socket.id 
+      });
+      return;
+    }
 
     switch (action) {
       case "lower-hand":
@@ -197,23 +339,23 @@ io.on("connection", (socket) => {
             raisedHands: Array.from(conferenceHands[conferenceId] || []),
           }
         );
-        console.log(`🛠️ Admin lowered hand for socket ${targetSocketId}`);
+        console.log(`🛠️ Admin ${userId} lowered hand for socket ${targetSocketId}`);
         break;
 
       case "mute":
         io.to(targetSocketId).emit("conference:force-mute");
-        console.log(`🛠️ Admin muted socket ${targetSocketId}`);
+        console.log(`🛠️ Admin ${userId} muted socket ${targetSocketId}`);
         break;
 
       case "camera-off":
         io.to(targetSocketId).emit("conference:force-camera-off");
-        console.log(`🛠️ Admin turned off camera for socket ${targetSocketId}`);
+        console.log(`🛠️ Admin ${userId} turned off camera for socket ${targetSocketId}`);
         break;
         
       case "remove-from-conference":
         // Find the socket and emit remove event
         io.to(targetSocketId).emit("conference:removed-by-admin");
-        console.log(`🛠️ Admin removed socket ${targetSocketId} from conference`);
+        console.log(`🛠️ Admin ${userId} removed socket ${targetSocketId} from conference`);
         break;
     }
   });
@@ -229,7 +371,14 @@ io.on("connection", (socket) => {
     if (!conference) return;
     
     const isAdmin = String(conference.createdBy) === String(userId);
-    if (!isAdmin) return;
+    if (!isAdmin) {
+      console.warn('❌ Non-admin attempted to clear hands:', { 
+        userId, 
+        conferenceId,
+        socketId: socket.id 
+      });
+      return;
+    }
     
     if (conferenceHands[conferenceId]) {
       conferenceHands[conferenceId].clear();
@@ -239,7 +388,7 @@ io.on("connection", (socket) => {
       raisedHands: [],
     });
     
-    console.log(`🧹 All hands cleared by admin in conference ${conferenceId}`);
+    console.log(`🧹 All hands cleared by admin ${userId} in conference ${conferenceId}`);
   });
 
   /* ------------------------------
@@ -251,7 +400,12 @@ io.on("connection", (socket) => {
      DISCONNECT HANDLER
   ------------------------------ */
   socket.on("disconnect", (reason) => {
-    console.log("❌ Socket disconnected:", socket.id, reason);
+    console.log("❌ Socket disconnected:", {
+      socketId: socket.id,
+      userId: socket.userId,
+      email: socket.user?.email,
+      reason: reason
+    });
     
     // Clean up hand raises on disconnect
     for (const confId in conferenceHands) {
@@ -288,13 +442,16 @@ app.get("/", (req, res) => {
     status: "OK",
     message: "🚀 Task Manager API Running",
     socket: "Active",
+    socketConnections: io.engine.clientsCount,
     conferenceStats,
   });
 });
 
 /* ---------------------------------------------------
-   DEBUG ENDPOINT - View all active conferences
+   DEBUG ENDPOINTS
 --------------------------------------------------- */
+
+// View all active conferences
 app.get("/debug/conferences", (req, res) => {
   const allConferences = Array.from(conferences.values()).map(conf => {
     const participants = Array.from(conf.participants.values());
@@ -321,6 +478,58 @@ app.get("/debug/conferences", (req, res) => {
   });
 });
 
+// View connected sockets
+app.get("/debug/sockets", (req, res) => {
+  const sockets = [];
+  
+  io.of("/").sockets.forEach((socket) => {
+    sockets.push({
+      id: socket.id,
+      userId: socket.userId,
+      email: socket.user?.email,
+      name: socket.user?.name,
+      rooms: Array.from(socket.rooms),
+      connected: socket.connected,
+    });
+  });
+
+  res.json({
+    totalConnections: io.engine.clientsCount,
+    sockets: sockets,
+  });
+});
+
+// Verify JWT token endpoint (for debugging)
+app.post("/debug/verify-token", (req, res) => {
+  try {
+    const { token } = req.body;
+    
+    if (!token) {
+      return res.status(400).json({ error: "No token provided" });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const tokenInfo = {
+      valid: true,
+      id: decoded.id,
+      email: decoded.email,
+      exp: new Date(decoded.exp * 1000),
+      iat: new Date(decoded.iat * 1000),
+      now: new Date(),
+      isExpired: decoded.exp * 1000 < Date.now(),
+    };
+
+    res.json(tokenInfo);
+  } catch (error) {
+    res.status(401).json({
+      valid: false,
+      error: error.name,
+      message: error.message,
+      expiredAt: error.expiredAt,
+    });
+  }
+});
+
 /* ---------------------------------------------------
    ROUTES
 --------------------------------------------------- */
@@ -342,6 +551,8 @@ server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🌐 CORS allowed origins: ${allowedOrigins.join(", ")}`);
   console.log(`📊 Conference store initialized`);
+  console.log(`🔐 JWT_SECRET configured: ${process.env.JWT_SECRET ? 'Yes' : 'No'}`);
+  console.log(`🔌 Socket.IO ready for connections`);
 });
 
 // Handle graceful shutdown
@@ -357,3 +568,6 @@ process.on('SIGINT', () => {
     process.exit(0);
   });
 });
+
+// Export for testing
+module.exports = { app, server, io };

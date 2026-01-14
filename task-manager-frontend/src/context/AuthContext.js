@@ -1,7 +1,7 @@
+// AuthContext.jsx
 import React, { createContext, useState, useContext, useEffect } from "react";
 import { authAPI } from "../services/api";
-import { getSocket } from "../services/socket";
-
+import { initSocket, connectSocket } from "../services/socket";
 
 const AuthContext = createContext(null);
 
@@ -16,6 +16,25 @@ export const useAuth = () => {
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [socketInitialized, setSocketInitialized] = useState(false);
+
+  /* ---------------------------------------------------
+     INITIALIZE SOCKET AFTER AUTH
+  --------------------------------------------------- */
+  const initializeSocket = () => {
+    const token = localStorage.getItem("token");
+    if (token && !socketInitialized) {
+      try {
+        console.log("🔌 Initializing socket connection...");
+        initSocket();
+        connectSocket();
+        setSocketInitialized(true);
+        console.log("✅ Socket initialized successfully");
+      } catch (error) {
+        console.error("❌ Failed to initialize socket:", error);
+      }
+    }
+  };
 
   /* ---------------------------------------------------
      INITIAL AUTH CHECK (HYDRATE + VERIFY)
@@ -40,6 +59,9 @@ export const AuthProvider = ({ children }) => {
           const res = await authAPI.getProfile();
           setUser(res.data);
           localStorage.setItem("user", JSON.stringify(res.data));
+          
+          // 🚨 CRITICAL: Initialize socket after successful auth
+          initializeSocket();
         } catch (err) {
           console.error("Auth verification failed:", err);
           localStorage.removeItem("token");
@@ -65,6 +87,9 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem("user", JSON.stringify(userData));
     setUser(userData);
 
+    // 🚨 CRITICAL: Initialize socket after login
+    initializeSocket();
+
     return res.data;
   };
 
@@ -79,6 +104,9 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem("user", JSON.stringify(userData));
     setUser(userData);
 
+    // 🚨 CRITICAL: Initialize socket after register
+    initializeSocket();
+
     return res.data;
   };
 
@@ -86,16 +114,14 @@ export const AuthProvider = ({ children }) => {
      LOGOUT
   --------------------------------------------------- */
   const logout = () => {
+    const socket = getSocket();
+    if (socket) socket.disconnect();
+
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    
+    setUser(null);
+    setSocketInitialized(false);
 
-     const socket = getSocket();
-     if (socket) socket.disconnect(); // ✅ correct place
-
-  localStorage.clear();
-  setUser(null);
-    // optional but recommended
     window.location.href = "/login";
   };
 
@@ -106,6 +132,7 @@ export const AuthProvider = ({ children }) => {
     login,
     register,
     logout,
+    socketInitialized,
   };
 
   return (

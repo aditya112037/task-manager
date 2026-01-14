@@ -1,9 +1,8 @@
-// services/socket.js
 import { io } from "socket.io-client";
 
 let socket = null;
 
-export const initSocket = (userId, token) => {
+export const initSocket = () => {
   if (socket && socket.connected) return socket;
 
   // Disconnect existing socket if any
@@ -11,60 +10,54 @@ export const initSocket = (userId, token) => {
     socket.disconnect();
   }
 
-  const socketUrl = process.env.REACT_APP_API_URL || "http://localhost:5000";
+  // 🚨 CRITICAL FIX: Get token from localStorage
+  const token = localStorage.getItem("token");
+  const user = JSON.parse(localStorage.getItem("user") || "null");
+  
+  if (!token) {
+    console.warn("No token found in localStorage");
+    return null;
+  }
+
+  const socketUrl = import.meta.env.VITE_SOCKET_URL || "http://localhost:5000";
+  
+  console.log("🔄 Creating socket connection with token:", token.substring(0, 20) + "...");
   
   socket = io(socketUrl, {
     autoConnect: false,
-    transports: ["websocket", "polling"],
+    transports: ["websocket"],
     reconnection: true,
     reconnectionAttempts: 5,
     reconnectionDelay: 1000,
+    // 🚨 CRITICAL: Send ONLY token, not userId
     auth: { 
-      userId,
-      token 
+      token: token  // Only send the token
     },
     withCredentials: true,
   });
 
   // Connection event listeners
   socket.on("connect", () => {
-    console.log("Socket connected:", socket.id);
+    console.log("✅ Socket connected:", socket.id);
   });
 
   socket.on("connect_error", (error) => {
-    console.error("Socket connection error:", error);
+    console.error("❌ Socket connection error:", error.message);
   });
 
   socket.on("disconnect", (reason) => {
-    console.log("Socket disconnected:", reason);
-  });
-
-  socket.on("reconnect", (attemptNumber) => {
-    console.log("Socket reconnected after", attemptNumber, "attempts");
-  });
-
-  socket.on("reconnect_error", (error) => {
-    console.error("Socket reconnection error:", error);
-  });
-
-  socket.on("reconnect_failed", () => {
-    console.error("Socket reconnection failed");
+    console.log("❌ Socket disconnected:", reason);
   });
 
   return socket;
 };
 
-export const connectSocket = (token) => {
+export const connectSocket = () => {
   if (!socket) {
-    console.error("Socket not initialized");
-    return null;
+    socket = initSocket();
   }
   
-  if (!socket.connected) {
-    // Update auth with latest token
-    if (token) {
-      socket.auth.token = token;
-    }
+  if (socket && !socket.connected) {
     socket.connect();
   }
   
@@ -79,7 +72,7 @@ export const disconnectSocket = () => {
 
 export const getSocket = () => {
   if (!socket) {
-    console.warn("Socket not initialized. Call initSocket first.");
+    socket = initSocket();
   }
   return socket;
 };
@@ -87,6 +80,8 @@ export const getSocket = () => {
 export const isSocketConnected = () => {
   return socket && socket.connected;
 };
+
+// ... rest of your socket.js functions remain the same
 
 export const joinTeamRoom = (teamId) => {
   if (socket && socket.connected && teamId) {
