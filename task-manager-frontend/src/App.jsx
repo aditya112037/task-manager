@@ -29,6 +29,7 @@ const PublicRoute = ({ children }) => {
 
 function App() {
   const [darkMode, setDarkMode] = useState(false);
+  const { user } = useAuth(); // ✅ Get user from useAuth hook
 
   useEffect(() => {
     const saved = localStorage.getItem("darkMode");
@@ -94,8 +95,6 @@ function App() {
       }),
     [darkMode]
   );
-
-  
 
   return (
     <AuthProvider>

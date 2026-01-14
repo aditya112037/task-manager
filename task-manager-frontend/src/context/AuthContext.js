@@ -1,7 +1,7 @@
 // AuthContext.jsx
 import React, { createContext, useState, useContext, useEffect } from "react";
 import { authAPI } from "../services/api";
-import { initSocket, connectSocket } from "../services/socket";
+import { initSocket, connectSocket, getSocket } from "../services/socket"; // ✅ Import getSocket
 
 const AuthContext = createContext(null);
 
