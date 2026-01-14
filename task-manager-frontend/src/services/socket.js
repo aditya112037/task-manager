@@ -18,7 +18,7 @@ export const initSocket = () => {
     console.warn("No token found in localStorage");
     return null;
   }
-  
+
 const socketUrl =
   process.env.REACT_APP_API_URL || "http://localhost:5000";
 
@@ -101,14 +101,13 @@ export const leaveTeamRoom = (teamId) => {
   }
 };
 
-export const joinConferenceRoom = (conferenceId, conferenceData) => {
+export const joinConferenceRoom = (conferenceId) => {
   if (socket && socket.connected && conferenceId) {
-    console.log("Joining conference room:", `conference_${conferenceId}`);
-    socket.emit("joinConference", { conferenceId, conferenceData });
-  } else {
-    console.warn("Cannot join conference room: Socket not connected or missing conferenceId");
+    console.log("Joining conference:", conferenceId);
+    socket.emit("conference:join", { conferenceId });
   }
 };
+
 
 export const leaveConferenceRoom = (conferenceId) => {
   if (socket && socket.connected && conferenceId) {

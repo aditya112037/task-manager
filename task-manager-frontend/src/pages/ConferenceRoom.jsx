@@ -1,3 +1,4 @@
+// ConferenceRoom.jsx
 import React, { useEffect, useRef, useState, useMemo, useContext } from "react";
 import { 
   Box, 
@@ -37,7 +38,7 @@ import ClearAllIcon from "@mui/icons-material/ClearAll";
 import PersonIcon from "@mui/icons-material/Person";
 import PresentToAllIcon from "@mui/icons-material/PresentToAll";
 
-import { getSocket } from "../services/socket";
+import { getSocket, joinConferenceRoom } from "../services/socket";
 import {
   initMedia,
   joinConference,
@@ -97,6 +98,23 @@ export default function ConferenceRoom() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speakerModeEnabled, setSpeakerModeEnabled] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: "", severity: "info" });
+
+  /* ----------------------------------------------------
+     🚨 CRITICAL: JOIN CONFERENCE ROOM ON MOUNT
+  ---------------------------------------------------- */
+  useEffect(() => {
+    if (!conferenceId) return;
+    
+    console.log("🚀 Joining conference room:", conferenceId);
+    joinConferenceRoom(conferenceId);
+    
+    return () => {
+      console.log("👋 Leaving conference room:", conferenceId);
+      if (socket) {
+        socket.emit("conference:leave", { conferenceId });
+      }
+    };
+  }, [conferenceId, socket]);
 
   /* ----------------------------------------------------
      SHOW NOTIFICATION
@@ -185,6 +203,17 @@ export default function ConferenceRoom() {
 
     const start = async () => {
       try {
+        // First, ensure socket is connected
+        if (!socket || !socket.connected) {
+          console.warn("Socket not connected, waiting...");
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          if (!socket || !socket.connected) {
+            showNotification("Connection issue. Please refresh.", "error");
+            return;
+          }
+        }
+
         const stream = await initMedia();
         if (!mounted) return;
 
@@ -535,6 +564,11 @@ export default function ConferenceRoom() {
      CONTROLS
   ---------------------------------------------------- */
   const handleLeave = () => {
+    // Emit leave event
+    if (socket) {
+      socket.emit("conference:leave", { conferenceId });
+    }
+    
     leaveConference(conferenceId);
     stopSpeakerDetection();
     

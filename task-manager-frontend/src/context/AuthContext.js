@@ -20,21 +20,24 @@ export const AuthProvider = ({ children }) => {
   const socketInitializedRef = useRef(false);
 
   /* ---------------------------------------------------
-     SOCKET MANAGEMENT
+     🚨 CRITICAL: SOCKET AUTH INITIALIZATION
+     Backend depends on socket.user = { _id, token }
   --------------------------------------------------- */
   const initializeSocket = async () => {
     const token = localStorage.getItem("token");
+    const userData = user || JSON.parse(localStorage.getItem("user") || "null");
     
-    if (!token || socketInitializedRef.current) {
+    if (!token || !userData?._id || socketInitializedRef.current) {
+      console.log("⚠️ Cannot initialize socket - missing token, user ID, or already initialized");
       return;
     }
 
     try {
-      console.log("🔌 Initializing socket connection...");
+      console.log("🔌 Initializing socket with user auth...", { userId: userData._id });
       
-      // Initialize socket with user ID if available
-      const userId = user?._id || JSON.parse(localStorage.getItem("user"))?._id;
-      initSocket(userId, token);
+      // 🚨 CRITICAL: Initialize socket with BOTH userId AND token
+      // This sets socket.user on the server side
+      initSocket(userData._id, token);
       
       // Connect socket
       await connectSocket(token);
@@ -50,6 +53,9 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  /* ---------------------------------------------------
+     🚨 CRITICAL: SOCKET CLEANUP
+  --------------------------------------------------- */
   const cleanupSocket = () => {
     if (socketInitializedRef.current) {
       console.log("🔌 Cleaning up socket connection...");
@@ -60,7 +66,30 @@ export const AuthProvider = ({ children }) => {
   };
 
   /* ---------------------------------------------------
-     AUTH VERIFICATION & SOCKET INIT
+     🚨 CRITICAL: RE-INITIALIZE SOCKET WHEN USER CHANGES
+     This ensures socket.user is always set when user is logged in
+  --------------------------------------------------- */
+  useEffect(() => {
+    if (!user || !user._id) {
+      return;
+    }
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+      return;
+    }
+
+    // Initialize socket when user data is available
+    initializeSocket();
+
+    // Cleanup on unmount or when user changes
+    return () => {
+      cleanupSocket();
+    };
+  }, [user]); // Re-run when user changes
+
+  /* ---------------------------------------------------
+     INITIAL AUTH CHECK (HYDRATE + VERIFY)
   --------------------------------------------------- */
   useEffect(() => {
     const verifyAuthAndSetupSocket = async () => {
@@ -85,8 +114,8 @@ export const AuthProvider = ({ children }) => {
           setUser(userData);
           localStorage.setItem("user", JSON.stringify(userData));
 
-          // 3️⃣ Initialize socket AFTER successful auth
-          await initializeSocket();
+          // 🚨 SOCKET WILL BE INITIALIZED BY THE DEPENDENCY EFFECT ABOVE
+          // When setUser completes, the useEffect above will trigger
           
         } catch (err) {
           console.error("Auth verification failed:", err);
@@ -98,11 +127,6 @@ export const AuthProvider = ({ children }) => {
     };
 
     verifyAuthAndSetupSocket();
-
-    // Cleanup on unmount
-    return () => {
-      cleanupSocket();
-    };
   }, []);
 
   /* ---------------------------------------------------
@@ -116,10 +140,7 @@ export const AuthProvider = ({ children }) => {
       // Store auth data
       localStorage.setItem("token", token);
       localStorage.setItem("user", JSON.stringify(userData));
-      setUser(userData);
-
-      // Initialize socket after login
-      await initializeSocket();
+      setUser(userData); // 🚨 This triggers socket initialization via useEffect
 
       return res.data;
     } catch (error) {
@@ -139,10 +160,7 @@ export const AuthProvider = ({ children }) => {
       // Store auth data
       localStorage.setItem("token", token);
       localStorage.setItem("user", JSON.stringify(userData));
-      setUser(userData);
-
-      // Initialize socket after register
-      await initializeSocket();
+      setUser(userData); // 🚨 This triggers socket initialization via useEffect
 
       return res.data;
     } catch (error) {
@@ -186,6 +204,14 @@ export const AuthProvider = ({ children }) => {
     return !!localStorage.getItem("token") && !!user;
   };
 
+  /* ---------------------------------------------------
+     CHECK SOCKET STATUS
+  --------------------------------------------------- */
+  const checkSocketConnected = () => {
+    const socket = getSocket();
+    return socket && socket.connected;
+  };
+
   const value = {
     user,
     setUser: updateUser,
@@ -195,8 +221,9 @@ export const AuthProvider = ({ children }) => {
     logout: handleLogout,
     isAuthenticated,
     socketConnected,
-    initializeSocket, // Export if needed elsewhere
-    cleanupSocket,    // Export if needed elsewhere
+    checkSocketConnected,
+    initializeSocket,
+    cleanupSocket,
   };
 
   return (
