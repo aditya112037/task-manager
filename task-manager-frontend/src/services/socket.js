@@ -18,8 +18,10 @@ export const initSocket = () => {
     console.warn("No token found in localStorage");
     return null;
   }
+  
+const socketUrl =
+  process.env.REACT_APP_API_URL || "http://localhost:5000";
 
-  const socketUrl = import.meta.env.VITE_SOCKET_URL || "http://localhost:5000";
   
   console.log("🔄 Creating socket connection with token:", token.substring(0, 20) + "...");
   
