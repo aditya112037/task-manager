@@ -576,8 +576,11 @@ export const startScreenShare = async (videoRef) => {
 
     // Replace video track in local stream
     console.log("Replacing video track in local stream");
-    localStream.removeTrack(originalVideoTrack);
-    originalVideoTrack.stop(); // Stop the original track
+    Object.values(peers).forEach(pc => {
+  const sender = pc.getSenders().find(s => s.track?.kind === "video");
+  if (sender) sender.replaceTrack(screenTrack);
+});
+
     localStream.addTrack(screenTrack);
 
     // Update video element
@@ -615,22 +618,19 @@ export const stopScreenShare = async (videoRef) => {
 
     console.log("Stopping screen share...");
 
-    // Get new camera stream
-    const cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-        frameRate: { ideal: 30 }
-      },
-      audio: false // We already have audio from the main stream
-    });
+const cameraTrack = localStream
+  .getVideoTracks()
+  .find(t => t.readyState === "live");
 
-    const cameraTrack = cameraStream.getVideoTracks()[0];
-    if (!cameraTrack) {
-      throw new Error("No camera track available");
-    }
+if (!cameraTrack) {
+  console.error("Camera track missing — cannot restore");
+  return;
+}
 
-    console.log("Camera track obtained:", cameraTrack.label);
+Object.values(peers).forEach(pc => {
+  const sender = pc.getSenders().find(s => s.track?.kind === "video");
+  if (sender) sender.replaceTrack(cameraTrack);
+});
 
     // Get the current screen track
     const oldVideoTrack = localStream.getVideoTracks()[0];
