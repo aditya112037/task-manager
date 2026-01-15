@@ -1,11 +1,17 @@
 // services/webrtc.js
 
+/* ----------------------------------------------------
+   GLOBAL STATE
+---------------------------------------------------- */
 let localStream = null;
-const peers = {};
-let screenShareStream = null;
+let screenStream = null;
 let isScreenSharing = false;
+let mediaInitialized = false;
 
-// Speaker detection variables
+// Peer connections store
+const peers = {};
+
+// Speaker detection
 let audioContext = null;
 let analyser = null;
 let microphoneSource = null;
@@ -14,93 +20,103 @@ let isSpeaking = false;
 let onSpeakingChangeCallback = null;
 let audioDetectionEnabled = false;
 
-// 🚨 Guard to prevent multiple getUserMedia calls
-let mediaInitialized = false;
-let mediaInitializationPromise = null;
-
 /* ----------------------------------------------------
-   CORE WEBRTC FUNCTIONS
+   CORE STREAM MANAGEMENT
 ---------------------------------------------------- */
 
 /**
- * Sets the local media stream (should be called once)
- * @param {MediaStream} stream - The media stream from getUserMedia
+ * Initialize local media stream
+ * @param {MediaStreamConstraints} constraints - Media constraints
+ * @returns {Promise<MediaStream>} Local media stream
+ */
+export const initializeMedia = async (constraints = { 
+  video: true, 
+  audio: true 
+}) => {
+  try {
+    // Clean up existing stream if any
+    if (localStream) {
+      cleanupStreamOnly();
+    }
+    
+    console.log("Initializing media with constraints:", constraints);
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    
+    setLocalStream(stream);
+    return stream;
+    
+  } catch (error) {
+    console.error("Failed to initialize media:", error);
+    throw error;
+  }
+};
+
+/**
+ * Set the local stream (should only be called once)
+ * @param {MediaStream} stream - Media stream from getUserMedia
+ * @returns {boolean} Success status
  */
 export const setLocalStream = (stream) => {
-  if (!stream) {
-    console.error("Cannot set null stream");
+  if (!stream || !stream.active) {
+    console.error("Cannot set invalid or inactive stream");
     return false;
   }
   
-  // Check if stream is active
-  if (!stream.active) {
-    console.error("Cannot set inactive stream");
-    return false;
-  }
-  
-  // 🚨 CRITICAL: Only set if we don't already have a stream
+  // Don't replace an active stream
   if (localStream && localStream.active) {
-    console.warn("Local stream already exists and is active, skipping setLocalStream");
-    
-    // But update if the stream is different
-    if (localStream.id !== stream.id) {
-      console.log("Replacing existing stream with new stream");
-      cleanupStreamOnly(); // Clean up old stream
-      localStream = stream;
-      mediaInitialized = true;
-      return true;
-    }
+    console.warn("Local stream already active, keeping existing");
     return false;
   }
   
   localStream = stream;
   mediaInitialized = true;
-  console.log("Local stream set successfully, tracks:", {
-    audio: localStream.getAudioTracks().length,
-    video: localStream.getVideoTracks().length,
-    streamId: localStream.id
+  
+  console.log("Local stream set:", {
+    audioTracks: stream.getAudioTracks().length,
+    videoTracks: stream.getVideoTracks().length,
+    streamId: stream.id
   });
   
   return true;
 };
 
 /**
- * Gets the current local media stream
- * @returns {MediaStream|null} The local stream or null
+ * Get the current local stream
+ * @returns {MediaStream|null} Local stream
  */
 export const getLocalStream = () => localStream;
 
 /**
- * Checks if media is already initialized
- * @returns {boolean} True if media is initialized
+ * Check if media is initialized
+ * @returns {boolean} True if media is ready
  */
 export const isMediaInitialized = () => mediaInitialized && localStream && localStream.active;
 
+/* ----------------------------------------------------
+   PEER CONNECTION MANAGEMENT
+---------------------------------------------------- */
+
 /**
- * Creates a new WebRTC peer connection for a user
- * @param {string} userId - The user ID to connect to
+ * Create a new peer connection for a user
+ * @param {string} userId - Target user ID
  * @param {object} socket - Socket.io instance for signaling
- * @returns {RTCPeerConnection} The new peer connection
+ * @returns {RTCPeerConnection} New peer connection
  */
 export const createPeer = (userId, socket) => {
-  if (!localStream) {
-    console.error("Cannot create peer: Local stream not set");
-    throw new Error("Local stream not set. Call setLocalStream first.");
+  // Validate state
+  if (!localStream || !localStream.active) {
+    throw new Error("Local stream not ready. Call initializeMedia() first.");
   }
-
-  if (!localStream.active) {
-    console.error("Cannot create peer: Local stream is not active");
-    throw new Error("Local stream is not active. Please reinitialize media.");
-  }
-
+  
   if (peers[userId]) {
-    console.warn(`Peer connection already exists for user: ${userId}, returning existing`);
+    console.warn(`Peer already exists for ${userId}, returning existing`);
     return peers[userId];
   }
-
+  
+  console.log(`Creating peer connection for ${userId}`);
+  
   try {
-    console.log(`Creating peer connection for user: ${userId}`);
-    
+    // Create peer connection
     const pc = new RTCPeerConnection({
       iceServers: [
         { urls: "stun:stun.l.google.com:19302" },
@@ -109,79 +125,82 @@ export const createPeer = (userId, socket) => {
       ],
       iceCandidatePoolSize: 10
     });
-
-    // Add local tracks to the peer connection
-    localStream.getTracks().forEach((track) => {
+    
+    // Add local tracks
+    localStream.getTracks().forEach(track => {
       if (track.kind === 'audio' || track.kind === 'video') {
         console.log(`Adding ${track.kind} track to peer ${userId}`);
         pc.addTrack(track, localStream);
       }
     });
-
+    
     // ICE candidate handling
-    pc.onicecandidate = (e) => {
-      if (e.candidate) {
-        socket.emit("conference:ice-candidate", {
-          to: userId,
-          candidate: e.candidate,
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        socket.emit("webrtc:ice-candidate", {
+          target: userId,
+          candidate: event.candidate
         });
       }
     };
-
+    
     // Connection state handling
     pc.onconnectionstatechange = () => {
-      const state = pc.connectionState;
-      console.log(`Connection state with ${userId}: ${state}`);
+      console.log(`Connection state for ${userId}: ${pc.connectionState}`);
       
-      if (state === 'failed' || state === 'disconnected') {
-        console.warn(`Connection with ${userId} is ${state}, attempting to recover...`);
-        
-        // Clean up failed connection
-        if (state === 'failed') {
+      switch(pc.connectionState) {
+        case 'failed':
+          console.error(`Connection with ${userId} failed`);
           removePeer(userId);
-        }
+          break;
+        case 'disconnected':
+          console.warn(`Connection with ${userId} disconnected`);
+          break;
+        case 'connected':
+          console.log(`Connected to ${userId}`);
+          break;
       }
     };
-
+    
     // ICE connection state
     pc.oniceconnectionstatechange = () => {
-      const iceState = pc.iceConnectionState;
-      console.log(`ICE connection state with ${userId}: ${iceState}`);
-      
-      if (iceState === 'failed') {
-        console.error(`ICE connection failed for ${userId}`);
-        // Don't auto-remove, let the connection state handler deal with it
-      }
+      console.log(`ICE state for ${userId}: ${pc.iceConnectionState}`);
     };
-
-    // Track event (when remote stream is received)
+    
+    // Track event (remote stream)
     pc.ontrack = (event) => {
       console.log(`Received ${event.track.kind} track from ${userId}`);
+      
+      // You can dispatch an event or call a callback here
+      if (window.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('webrtc:track', {
+          detail: { userId, track: event.track, stream: event.streams[0] }
+        }));
+      }
     };
-
+    
+    // Store peer
     peers[userId] = pc;
-    console.log(`Peer connection created successfully for ${userId}`);
     return pc;
-
+    
   } catch (error) {
-    console.error("Failed to create peer connection:", error);
+    console.error(`Failed to create peer for ${userId}:`, error);
     throw error;
   }
 };
 
 /**
- * Removes a peer connection
- * @param {string} userId - The user ID to remove
+ * Remove a peer connection
+ * @param {string} userId - User ID to remove
  */
 export const removePeer = (userId) => {
   if (peers[userId]) {
-    console.log(`Removing peer connection for user: ${userId}`);
+    console.log(`Removing peer connection for ${userId}`);
     
     try {
       peers[userId].close();
-      console.log(`Peer connection closed for ${userId}`);
     } catch (error) {
-      console.error(`Error closing peer connection for ${userId}:`, error);
+      console.error(`Error closing peer ${userId}:`, error);
     }
     
     delete peers[userId];
@@ -189,106 +208,95 @@ export const removePeer = (userId) => {
 };
 
 /**
- * Gets a peer connection by user ID
- * @param {string} userId - The user ID
- * @returns {RTCPeerConnection|null} The peer connection or null
+ * Get a specific peer connection
+ * @param {string} userId - User ID
+ * @returns {RTCPeerConnection|null} Peer connection or null
  */
 export const getPeer = (userId) => peers[userId] || null;
 
 /**
- * Gets all peer connections
+ * Get all peer connections
  * @returns {Object} All peer connections
  */
 export const getAllPeers = () => ({ ...peers });
 
 /**
- * Closes all peer connections
+ * Close all peer connections
  */
 export const closeAllPeers = () => {
-  console.log(`Closing all peer connections (${Object.keys(peers).length} peers)`);
+  console.log(`Closing all peer connections (${Object.keys(peers).length})`);
   
   Object.keys(peers).forEach(userId => {
     try {
       peers[userId].close();
-      console.log(`Closed peer connection for ${userId}`);
     } catch (error) {
-      console.error(`Error closing peer for ${userId}:`, error);
+      console.error(`Error closing peer ${userId}:`, error);
     }
     delete peers[userId];
   });
-  
-  console.log("All peer connections closed");
 };
 
 /* ----------------------------------------------------
-   AUDIO / VIDEO CONTROLS
+   AUDIO/VIDEO CONTROLS
 ---------------------------------------------------- */
 
 /**
- * Toggles audio (mute/unmute)
- * @param {boolean} enabled - True to enable audio, false to mute
+ * Toggle audio mute/unmute
+ * @param {boolean} enabled - True to enable audio
  * @returns {boolean} Success status
  */
 export const toggleAudio = (enabled) => {
   if (!localStream) {
-    console.error("Cannot toggle audio - no local stream");
+    console.error("No local stream to toggle audio");
     return false;
   }
   
   const audioTracks = localStream.getAudioTracks();
   if (audioTracks.length === 0) {
-    console.warn("No audio tracks available to toggle");
+    console.warn("No audio tracks found");
     return false;
   }
   
-  let success = false;
-  audioTracks.forEach((track) => {
+  audioTracks.forEach(track => {
     if (track.readyState === 'live') {
       track.enabled = enabled;
-      success = true;
-      console.log(`Audio track ${track.id} ${enabled ? 'enabled' : 'disabled'}`);
-    } else {
-      console.warn(`Audio track ${track.id} is not live (state: ${track.readyState})`);
+      console.log(`Audio track ${enabled ? 'enabled' : 'disabled'}`);
     }
   });
   
-  return success;
+  return true;
 };
 
 /**
- * Toggles video (on/off)
- * @param {boolean} enabled - True to enable video, false to disable
+ * Toggle video on/off
+ * @param {boolean} enabled - True to enable video
  * @returns {boolean} Success status
  */
 export const toggleVideo = (enabled) => {
   if (!localStream) {
-    console.error("Cannot toggle video - no local stream");
+    console.error("No local stream to toggle video");
     return false;
   }
   
   const videoTracks = localStream.getVideoTracks();
   if (videoTracks.length === 0) {
-    console.warn("No video tracks available to toggle");
+    console.warn("No video tracks found");
     return false;
   }
   
-  let success = false;
-  videoTracks.forEach((track) => {
+  videoTracks.forEach(track => {
     if (track.readyState === 'live') {
       track.enabled = enabled;
-      success = true;
-      console.log(`Video track ${track.id} ${enabled ? 'enabled' : 'disabled'}`);
-    } else {
-      console.warn(`Video track ${track.id} is not live (state: ${track.readyState})`);
+      console.log(`Video track ${enabled ? 'enabled' : 'disabled'}`);
     }
   });
   
-  return success;
+  return true;
 };
 
 /**
- * Checks if audio is enabled
- * @returns {boolean} True if audio is enabled
+ * Check if audio is enabled
+ * @returns {boolean} True if audio enabled
  */
 export const isAudioEnabled = () => {
   if (!localStream) return false;
@@ -297,8 +305,8 @@ export const isAudioEnabled = () => {
 };
 
 /**
- * Checks if video is enabled
- * @returns {boolean} True if video is enabled
+ * Check if video is enabled
+ * @returns {boolean} True if video enabled
  */
 export const isVideoEnabled = () => {
   if (!localStream) return false;
@@ -306,30 +314,238 @@ export const isVideoEnabled = () => {
   return videoTrack ? videoTrack.enabled : false;
 };
 
+/**
+ * Get current audio track
+ * @returns {MediaStreamTrack|null} Audio track or null
+ */
+export const getAudioTrack = () => {
+  return localStream ? localStream.getAudioTracks()[0] : null;
+};
+
+/**
+ * Get current video track
+ * @returns {MediaStreamTrack|null} Video track or null
+ */
+export const getVideoTrack = () => {
+  return localStream ? localStream.getVideoTracks()[0] : null;
+};
+
+/* ----------------------------------------------------
+   SCREEN SHARING - CORRECT ARCHITECTURE
+---------------------------------------------------- */
+
+/**
+ * Start screen sharing
+ * @param {React.RefObject} videoRef - Reference to video element
+ * @returns {Promise<MediaStreamTrack>} Screen share track
+ */
+export const startScreenShare = async (videoRef = null) => {
+  // Prevent multiple screen shares
+  if (isScreenSharing) {
+    throw new Error("Screen sharing already active");
+  }
+  
+  // Validate local stream
+  if (!localStream || !localStream.active) {
+    throw new Error("Local stream not ready");
+  }
+  
+  console.log("Starting screen share...");
+  
+  try {
+    // Get screen share stream
+    screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: {
+        cursor: "always",
+        displaySurface: "monitor",
+        frameRate: 30
+      },
+      audio: false
+    });
+    
+    const screenTrack = screenStream.getVideoTracks()[0];
+    if (!screenTrack) {
+      throw new Error("No screen track available");
+    }
+    
+    // Verify camera track is still alive
+    const cameraTrack = localStream.getVideoTracks()[0];
+    if (!cameraTrack || cameraTrack.readyState !== 'live') {
+      throw new Error("Camera track is not live");
+    }
+    
+    isScreenSharing = true;
+    console.log(`Screen share started. Replacing track in ${Object.keys(peers).length} peers`);
+    
+    // ✅ Replace video track in all peer connections
+    Object.values(peers).forEach((pc, index) => {
+      const videoSender = pc.getSenders().find(s => 
+        s.track && s.track.kind === "video"
+      );
+      
+      if (videoSender) {
+        videoSender.replaceTrack(screenTrack);
+      }
+    });
+    
+    // ✅ Update local video element if provided
+    if (videoRef && videoRef.current) {
+      // Create new stream with screen video + existing audio
+      const displayStream = new MediaStream([screenTrack]);
+      const audioTrack = localStream.getAudioTracks()[0];
+      if (audioTrack) {
+        displayStream.addTrack(audioTrack);
+      }
+      videoRef.current.srcObject = displayStream;
+    }
+    
+    // Handle user stopping via browser UI
+    screenTrack.onended = () => {
+      console.log("Screen share ended via browser UI");
+      // Use microtask to avoid promise issues
+      Promise.resolve().then(() => {
+        stopScreenShare(videoRef).catch(err => {
+          console.error("Auto-stop failed:", err);
+          // Still clean up
+          isScreenSharing = false;
+          if (screenStream) {
+            screenStream.getTracks().forEach(t => t.stop());
+            screenStream = null;
+          }
+        });
+      });
+    };
+    
+    console.log("Screen sharing active");
+    return screenTrack;
+    
+  } catch (error) {
+    console.error("Failed to start screen share:", error);
+    
+    // Clean up on error
+    if (screenStream) {
+      screenStream.getTracks().forEach(t => t.stop());
+      screenStream = null;
+    }
+    isScreenSharing = false;
+    
+    throw error;
+  }
+};
+
+/**
+ * Stop screen sharing and restore camera
+ * @param {React.RefObject} videoRef - Reference to video element
+ * @returns {Promise<MediaStreamTrack>} Restored camera track
+ */
+export const stopScreenShare = async (videoRef = null) => {
+  if (!isScreenSharing) {
+    console.log("Not screen sharing");
+    return null;
+  }
+  
+  console.log("Stopping screen share...");
+  
+  try {
+    // ✅ Camera track MUST exist and be live
+    const cameraTrack = localStream.getVideoTracks()[0];
+    
+    if (!cameraTrack || cameraTrack.readyState !== 'live') {
+      // This is a fatal error - camera track was lost
+      console.error("FATAL: Camera track unavailable");
+      
+      // Clean up screen stream
+      if (screenStream) {
+        screenStream.getTracks().forEach(t => t.stop());
+        screenStream = null;
+      }
+      isScreenSharing = false;
+      
+      throw new Error("Camera track permanently unavailable");
+    }
+    
+    // ✅ Restore camera track in all peers
+    Object.values(peers).forEach((pc, index) => {
+      const videoSender = pc.getSenders().find(s => 
+        s.track && s.track.kind === "video"
+      );
+      
+      if (videoSender) {
+        videoSender.replaceTrack(cameraTrack);
+      }
+    });
+    
+    // ✅ Restore camera in local video element
+    if (videoRef && videoRef.current) {
+      videoRef.current.srcObject = localStream;
+    }
+    
+    // ✅ Clean up screen stream
+    if (screenStream) {
+      screenStream.getTracks().forEach(t => t.stop());
+      screenStream = null;
+    }
+    
+    isScreenSharing = false;
+    console.log("Screen sharing stopped, camera restored");
+    
+    return cameraTrack;
+    
+  } catch (error) {
+    console.error("Failed to stop screen share:", error);
+    
+    // Force cleanup
+    isScreenSharing = false;
+    if (screenStream) {
+      screenStream.getTracks().forEach(t => t.stop());
+      screenStream = null;
+    }
+    
+    throw error;
+  }
+};
+
+/**
+ * Check if screen sharing is active
+ * @returns {boolean} True if screen sharing
+ */
+export const isScreenSharingActive = () => isScreenSharing;
+
+/**
+ * Get current screen stream (for debugging)
+ * @returns {MediaStream|null} Screen stream or null
+ */
+export const getScreenStream = () => screenStream;
+
 /* ----------------------------------------------------
    SPEAKER DETECTION
 ---------------------------------------------------- */
 
 /**
- * Starts real-time audio level detection for speaker detection
- * @param {MediaStream} stream - The audio stream to analyze
+ * Start speaker detection
  * @param {Function} onSpeakingChange - Callback when speaking state changes
- * @returns {Function} Cleanup function to stop detection
+ * @returns {Function} Cleanup function
  */
-export const startSpeakerDetection = (stream, onSpeakingChange) => {
-  if (!stream) {
-    console.error("No audio stream provided for speaker detection");
+export const startSpeakerDetection = (onSpeakingChange) => {
+  if (!localStream) {
+    console.error("No local stream for speaker detection");
     return () => {};
   }
-
+  
+  const audioTrack = localStream.getAudioTracks()[0];
+  if (!audioTrack) {
+    console.warn("No audio track for speaker detection");
+    return () => {};
+  }
+  
   try {
-    // Initialize AudioContext
+    // Initialize audio context
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
     if (!AudioContextClass) {
-      console.warn("Web Audio API not supported in this browser");
+      console.warn("Web Audio API not supported");
       return () => {};
     }
-
+    
     audioContext = new AudioContextClass();
     analyser = audioContext.createAnalyser();
     
@@ -338,20 +554,12 @@ export const startSpeakerDetection = (stream, onSpeakingChange) => {
     analyser.smoothingTimeConstant = 0.8;
     analyser.minDecibels = -45;
     analyser.maxDecibels = -10;
-
-    // Get audio track from stream
-    const audioTrack = stream.getAudioTracks()[0];
-    if (!audioTrack) {
-      console.warn("No audio track in stream for speaker detection");
-      audioContext.close();
-      return () => {};
-    }
-
-    // Create media stream source
-    microphoneSource = audioContext.createMediaStreamSource(stream);
+    
+    // Connect audio source
+    microphoneSource = audioContext.createMediaStreamSource(localStream);
     microphoneSource.connect(analyser);
-
-    // Initialize data array and variables
+    
+    // Initialize detection
     const dataArray = new Uint8Array(analyser.frequencyBinCount);
     let speaking = false;
     let silenceCounter = 0;
@@ -359,40 +567,37 @@ export const startSpeakerDetection = (stream, onSpeakingChange) => {
     
     onSpeakingChangeCallback = onSpeakingChange;
     audioDetectionEnabled = true;
-
+    
     /**
-     * Calculate audio volume from frequency data
-     * @returns {number} Volume level (0-100)
+     * Calculate volume from audio data
      */
     const calculateVolume = () => {
       analyser.getByteFrequencyData(dataArray);
-      
       let sum = 0;
       for (let i = 0; i < dataArray.length; i++) {
         sum += dataArray[i] * dataArray[i];
       }
-      const rms = Math.sqrt(sum / dataArray.length);
-      
-      return rms;
+      return Math.sqrt(sum / dataArray.length);
     };
-
+    
     /**
-     * Detect if user is speaking
+     * Detect speaking state
      */
     const detectSpeaking = () => {
       if (!audioDetectionEnabled) return;
       
       const volume = calculateVolume();
-      
-      const speakingThreshold = 25;
-      const silenceThreshold = 20;
+      const speakingThreshold = 20;
+      const silenceThreshold = 15;
       const historyLength = 5;
       
+      // Update history
       speakingHistory.push(volume > speakingThreshold);
       if (speakingHistory.length > historyLength) {
         speakingHistory.shift();
       }
       
+      // Determine speaking state
       const recentSpeakingFrames = speakingHistory.filter(v => v).length;
       const shouldBeSpeaking = recentSpeakingFrames > historyLength * 0.6;
       
@@ -402,43 +607,38 @@ export const startSpeakerDetection = (stream, onSpeakingChange) => {
           speaking = true;
           isSpeaking = true;
           if (onSpeakingChangeCallback) {
-            onSpeakingChangeCallback(true);
+            onSpeakingChangeCallback(true, volume);
           }
         }
       } else {
         silenceCounter++;
-        if (silenceCounter > 5 && speaking) {
+        if (silenceCounter > 3 && speaking) {
           speaking = false;
           isSpeaking = false;
           if (onSpeakingChangeCallback) {
-            onSpeakingChangeCallback(false);
+            onSpeakingChangeCallback(false, volume);
           }
         }
       }
     };
-
-    speakingInterval = setInterval(detectSpeaking, 60);
-
+    
+    // Start detection interval
+    speakingInterval = setInterval(detectSpeaking, 100);
+    
     console.log("Speaker detection started");
     
     return () => {
       stopSpeakerDetection();
     };
-
+    
   } catch (error) {
     console.error("Failed to start speaker detection:", error);
-    
-    if (audioContext) {
-      audioContext.close().catch(console.error);
-      audioContext = null;
-    }
-    
     return () => {};
   }
 };
 
 /**
- * Stops speaker detection and cleans up resources
+ * Stop speaker detection
  */
 export const stopSpeakerDetection = () => {
   audioDetectionEnabled = false;
@@ -470,14 +670,14 @@ export const stopSpeakerDetection = () => {
 };
 
 /**
- * Gets current speaking state
- * @returns {boolean} True if user is currently speaking
+ * Get current speaking state
+ * @returns {boolean} True if speaking
  */
 export const getSpeakingState = () => isSpeaking;
 
 /**
- * Gets current audio volume level
- * @returns {number} Current volume level (0-100)
+ * Get current volume level
+ * @returns {number} Volume (0-100)
  */
 export const getCurrentVolume = () => {
   if (!analyser || !audioDetectionEnabled) return 0;
@@ -494,345 +694,168 @@ export const getCurrentVolume = () => {
     
     return Math.min(100, Math.max(0, rms));
   } catch (error) {
-    console.error("Error getting volume:", error);
     return 0;
   }
 };
 
-/**
- * Manually trigger speaking state (for testing or admin controls)
- * @param {boolean} speaking - Whether to set as speaking
- */
-export const setSpeakingState = (speaking) => {
-  const previousState = isSpeaking;
-  isSpeaking = speaking;
-  
-  if (previousState !== speaking && onSpeakingChangeCallback) {
-    onSpeakingChangeCallback(speaking);
-  }
-};
-
 /* ----------------------------------------------------
-   SCREEN SHARE - FIXED VERSION
+   MEDIA MANAGEMENT & CLEANUP
 ---------------------------------------------------- */
 
 /**
- * Starts screen sharing
- * @param {Object} videoRef - React ref for the video element
- * @returns {Promise<MediaStreamTrack>} The screen share track
- */
-export const startScreenShare = async (videoRef) => {
-  try {
-    if (isScreenSharing) {
-      console.warn("Already screen sharing");
-      return null;
-    }
-
-    if (!localStream) {
-      throw new Error("Local stream not initialized");
-    }
-
-    console.log("Starting screen share...");
-    
-    // Get screen share stream
-    const screenStream = await navigator.mediaDevices.getDisplayMedia({
-      video: {
-        cursor: "always",
-        displaySurface: "monitor"
-      },
-      audio: false
-    });
-
-    const screenTrack = screenStream.getVideoTracks()[0];
-    if (!screenTrack) {
-      throw new Error("No screen track available");
-    }
-    
-    console.log("Screen share track obtained:", screenTrack.label);
-    screenShareStream = screenStream;
-    isScreenSharing = true;
-
-    // ✅ FIX 1: DO NOT STOP CAMERA TRACK - KEEP IT ALIVE
-    const originalVideoTrack = localStream.getVideoTracks()[0];
-    
-    if (!originalVideoTrack) {
-      console.error("No original video track found");
-      throw new Error("No camera video track available");
-    }
-
-    console.log(`Replacing video track in ${Object.keys(peers).length} peer connections`);
-    
-    // ✅ FIX 1: Only replace track in peers, don't touch local stream
-    Object.values(peers).forEach((pc, index) => {
-      const videoSender = pc.getSenders().find(s => 
-        s.track && s.track.kind === "video"
-      );
-      
-      if (videoSender) {
-        console.log(`Replacing video track in peer connection ${index + 1}`);
-        videoSender.replaceTrack(screenTrack);
-      }
-    });
-
-    // Update video element with screen share
-    if (videoRef && videoRef.current) {
-      // Create a new stream for the video element
-      const displayStream = new MediaStream([screenTrack]);
-      if (localStream.getAudioTracks().length > 0) {
-        displayStream.addTrack(localStream.getAudioTracks()[0]);
-      }
-      videoRef.current.srcObject = displayStream;
-      console.log("Video element updated with screen share");
-    }
-
-    // Handle screen sharing stop
-    screenTrack.onended = async () => {
-      console.log("Screen share ended by user");
-      await stopScreenShare(videoRef);
-    };
-
-    console.log("Screen sharing started successfully");
-    return screenTrack;
-
-  } catch (error) {
-    console.error("Failed to start screen share:", error);
-    throw error;
-  }
-};
-
-/**
- * Stops screen sharing and returns to camera
- * @param {Object} videoRef - React ref for the video element
- * @returns {Promise<MediaStreamTrack>} The camera track
- */
-export const stopScreenShare = async (videoRef) => {
-  try {
-    if (!isScreenSharing) {
-      console.log("Not screen sharing");
-      return null;
-    }
-
-    console.log("Stopping screen share...");
-
-    // ✅ FIX 2: USE EXISTING CAMERA TRACK - NO NEW getUserMedia
-    const cameraTrack = localStream.getVideoTracks().find(t => t.readyState === "live");
-    
-    if (!cameraTrack) {
-      console.error("Camera track missing — cannot restore");
-      // Try to get a fresh camera track as last resort
-      try {
-        const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
-        const fallbackTrack = cameraStream.getVideoTracks()[0];
-        if (fallbackTrack) {
-          cameraStream.getTracks().forEach(t => {
-            if (t !== fallbackTrack) t.stop();
-          });
-          
-          // Update peers
-          Object.values(peers).forEach(pc => {
-            const sender = pc.getSenders().find(s => s.track?.kind === "video");
-            if (sender) sender.replaceTrack(fallbackTrack);
-          });
-          
-          // Update video element
-          if (videoRef && videoRef.current) {
-            videoRef.current.srcObject = localStream;
-          }
-          
-          console.log("Used fallback camera track");
-          return fallbackTrack;
-        }
-      } catch (fallbackError) {
-        console.error("Fallback camera also failed:", fallbackError);
-      }
-      return null;
-    }
-
-    console.log(`Restoring camera track in ${Object.keys(peers).length} peer connections`);
-    
-    // ✅ FIX 2: Restore camera track in all peers
-    Object.values(peers).forEach((pc, index) => {
-      const videoSender = pc.getSenders().find(s => 
-        s.track && s.track.kind === "video"
-      );
-      
-      if (videoSender) {
-        console.log(`Restoring camera track in peer connection ${index + 1}`);
-        videoSender.replaceTrack(cameraTrack);
-      }
-    });
-
-    // Update video element with camera
-    if (videoRef && videoRef.current) {
-      videoRef.current.srcObject = localStream;
-      console.log("Video element updated with camera");
-    }
-
-    // Clean up screen share stream
-    if (screenShareStream) {
-      console.log("Stopping screen share stream tracks");
-      screenShareStream.getTracks().forEach(track => track.stop());
-      screenShareStream = null;
-    }
-
-    isScreenSharing = false;
-    console.log("Screen sharing stopped successfully");
-    return cameraTrack;
-
-  } catch (error) {
-    console.error("Failed to stop screen share:", error);
-    
-    // Emergency fallback
-    try {
-      // Try to force stop screen sharing state
-      if (screenShareStream) {
-        screenShareStream.getTracks().forEach(track => track.stop());
-        screenShareStream = null;
-      }
-      isScreenSharing = false;
-      
-      // Try to restore camera
-      const cameraTrack = localStream.getVideoTracks().find(t => t.readyState === "live");
-      if (cameraTrack) {
-        Object.values(peers).forEach(pc => {
-          const sender = pc.getSenders().find(s => s.track?.kind === "video");
-          if (sender) sender.replaceTrack(cameraTrack);
-        });
-        
-        if (videoRef && videoRef.current) {
-          videoRef.current.srcObject = localStream;
-        }
-      }
-    } catch (emergencyError) {
-      console.error("Emergency recovery failed:", emergencyError);
-    }
-    
-    throw error;
-  }
-};
-
-/**
- * Checks if screen sharing is active
- * @returns {boolean} True if screen sharing is active
- */
-export const isScreenSharingActive = () => isScreenSharing;
-
-/* ----------------------------------------------------
-   STREAM MANAGEMENT
----------------------------------------------------- */
-
-/**
- * Replaces the current video track with a new one
- * @param {MediaStreamTrack} newVideoTrack - The new video track
- * @returns {boolean} Success status
- */
-export const replaceVideoTrack = async (newVideoTrack) => {
-  if (!localStream) {
-    throw new Error("No local stream to replace track in");
-  }
-
-  if (!newVideoTrack) {
-    throw new Error("No new video track provided");
-  }
-
-  console.log(`Replacing video track with: ${newVideoTrack.label || newVideoTrack.id}`);
-
-  const oldVideoTrack = localStream.getVideoTracks()[0];
-  
-  if (oldVideoTrack) {
-    console.log(`Stopping old video track: ${oldVideoTrack.label || oldVideoTrack.id}`);
-    localStream.removeTrack(oldVideoTrack);
-    oldVideoTrack.stop();
-  }
-  
-  console.log("Adding new video track to local stream");
-  localStream.addTrack(newVideoTrack);
-
-  // Update all peer connections
-  console.log(`Updating ${Object.keys(peers).length} peer connections`);
-  Object.values(peers).forEach((pc, index) => {
-    const videoSender = pc.getSenders().find(s => 
-      s.track && s.track.kind === "video"
-    );
-    
-    if (videoSender) {
-      console.log(`Replacing track in peer connection ${index + 1}`);
-      videoSender.replaceTrack(newVideoTrack);
-    }
-  });
-
-  return true;
-};
-
-/* ----------------------------------------------------
-   CLEANUP FUNCTIONS
----------------------------------------------------- */
-
-/**
- * Cleans up only the local stream (keeps peer connections)
+ * Clean up local stream only (keep peers)
  */
 const cleanupStreamOnly = () => {
-  console.log("Cleaning up local stream only");
+  console.log("Cleaning up local stream");
   
+  // Stop screen sharing first
+  if (isScreenSharing) {
+    if (screenStream) {
+      screenStream.getTracks().forEach(t => t.stop());
+      screenStream = null;
+    }
+    isScreenSharing = false;
+  }
+  
+  // Stop local stream
   if (localStream) {
-    const tracks = localStream.getTracks();
-    console.log(`Stopping ${tracks.length} local stream tracks`);
-    tracks.forEach(track => {
-      console.log(`Stopping ${track.kind} track: ${track.label || track.id}`);
+    localStream.getTracks().forEach(track => {
+      console.log(`Stopping ${track.kind} track`);
       track.stop();
     });
     localStream = null;
   }
   
-  if (screenShareStream) {
-    console.log("Stopping screen share stream");
-    screenShareStream.getTracks().forEach(track => track.stop());
-    screenShareStream = null;
-  }
+  // Stop speaker detection
+  stopSpeakerDetection();
   
   mediaInitialized = false;
-  isScreenSharing = false;
-  stopSpeakerDetection();
+};
+
+/**
+ * Restart media with new constraints
+ * @param {MediaStreamConstraints} constraints - New constraints
+ * @returns {Promise<MediaStream>} New stream
+ */
+export const restartMedia = async (constraints = { video: true, audio: true }) => {
+  console.log("Restarting media...");
+  
+  try {
+    // Preserve screen sharing state
+    const wasScreenSharing = isScreenSharing;
+    
+    // Clean up existing stream
+    cleanupStreamOnly();
+    
+    // Get new stream
+    const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+    setLocalStream(newStream);
+    
+    // If we were screen sharing, we need to reapply it
+    // (Screen sharing can't be restored automatically)
+    if (wasScreenSharing) {
+      console.warn("Screen sharing was active before restart. User must restart manually.");
+    }
+    
+    return newStream;
+    
+  } catch (error) {
+    console.error("Failed to restart media:", error);
+    throw error;
+  }
+};
+
+/**
+ * Emergency camera restart (MANUAL USE ONLY)
+ * @param {MediaStreamConstraints} constraints - Camera constraints
+ * @returns {Promise<MediaStreamTrack>} New camera track
+ */
+export const emergencyCameraRestart = async (constraints = { video: true }) => {
+  console.warn("🚨 MANUAL EMERGENCY CAMERA RESTART");
+  
+  // Don't allow during screen share
+  if (isScreenSharing) {
+    throw new Error("Stop screen sharing before camera restart");
+  }
+  
+  try {
+    // Get new camera
+    const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+    const newTrack = newStream.getVideoTracks()[0];
+    
+    if (!newTrack) {
+      throw new Error("No video track from camera");
+    }
+    
+    // Stop audio from new stream
+    newStream.getAudioTracks().forEach(t => t.stop());
+    
+    // Replace in local stream
+    if (localStream) {
+      const oldVideoTracks = localStream.getVideoTracks();
+      oldVideoTracks.forEach(track => {
+        localStream.removeTrack(track);
+        track.stop();
+      });
+      localStream.addTrack(newTrack);
+    } else {
+      localStream = new MediaStream([newTrack]);
+    }
+    
+    // Replace in all peers
+    Object.values(peers).forEach(pc => {
+      const videoSender = pc.getSenders().find(s => s.track?.kind === "video");
+      if (videoSender) {
+        videoSender.replaceTrack(newTrack);
+      }
+    });
+    
+    console.log("✅ Emergency camera restart successful");
+    return newTrack;
+    
+  } catch (error) {
+    console.error("❌ Emergency restart failed:", error);
+    throw error;
+  }
 };
 
 /**
  * Full cleanup of all WebRTC resources
  */
 export const cleanup = () => {
-  console.log("=== Starting full WebRTC cleanup ===");
+  console.log("=== FULL WEBRTC CLEANUP ===");
   
-  // Stop speaker detection first
-  stopSpeakerDetection();
+  // Stop screen sharing
+  if (isScreenSharing && screenStream) {
+    screenStream.getTracks().forEach(t => t.stop());
+    screenStream = null;
+    isScreenSharing = false;
+  }
   
   // Close all peer connections
   closeAllPeers();
   
-  // ✅ FIX 4: ONLY STOP TRACKS HERE
+  // Stop local stream
   if (localStream) {
-    const tracks = localStream.getTracks();
-    console.log(`Stopping ${tracks.length} local stream tracks`);
-    tracks.forEach(track => {
-      console.log(`Stopping ${track.kind} track: ${track.label || track.id}`);
-      track.stop();
-    });
+    localStream.getTracks().forEach(track => track.stop());
     localStream = null;
   }
   
-  if (screenShareStream) {
-    console.log("Stopping screen share stream");
-    screenShareStream.getTracks().forEach(track => track.stop());
-    screenShareStream = null;
-  }
+  // Stop speaker detection
+  stopSpeakerDetection();
   
   mediaInitialized = false;
-  isScreenSharing = false;
   
-  console.log("=== WebRTC cleanup complete ===");
+  console.log("=== CLEANUP COMPLETE ===");
 };
 
+/* ----------------------------------------------------
+   UTILITIES & DEBUGGING
+---------------------------------------------------- */
+
 /**
- * Quick check of WebRTC state
- * @returns {Object} Current WebRTC state
+ * Get current WebRTC state
+ * @returns {Object} State object
  */
 export const getWebRTCState = () => {
   return {
@@ -842,64 +865,150 @@ export const getWebRTCState = () => {
       audioTracks: localStream?.getAudioTracks().length || 0,
       videoTracks: localStream?.getVideoTracks().length || 0,
     },
+    screenSharing: {
+      active: isScreenSharing,
+      stream: !!screenStream
+    },
     peers: Object.keys(peers).length,
-    screenSharing: isScreenSharing,
     mediaInitialized,
-    speakerDetection: audioDetectionEnabled,
+    speakerDetection: audioDetectionEnabled
   };
 };
 
-/* ----------------------------------------------------
-   HELPER FUNCTIONS
----------------------------------------------------- */
-
 /**
- * Gets all audio tracks
- * @returns {Array<MediaStreamTrack>} Audio tracks
+ * Debug all tracks
  */
-export const getAudioTracks = () => {
-  return localStream ? localStream.getAudioTracks() : [];
+export const debugTracks = () => {
+  console.group("📊 WebRTC Track Debug");
+  
+  if (localStream) {
+    const tracks = localStream.getTracks();
+    console.log(`Local Stream (${tracks.length} tracks):`);
+    tracks.forEach((track, i) => {
+      console.log(`  [${i}] ${track.kind}: ${track.label || 'no-label'} | state: ${track.readyState} | enabled: ${track.enabled}`);
+    });
+  } else {
+    console.log("No local stream");
+  }
+  
+  if (screenStream) {
+    const tracks = screenStream.getTracks();
+    console.log(`Screen Stream (${tracks.length} tracks):`);
+    tracks.forEach((track, i) => {
+      console.log(`  [${i}] ${track.kind}: ${track.label || 'no-label'} | state: ${track.readyState} | enabled: ${track.enabled}`);
+    });
+  } else {
+    console.log("No screen stream");
+  }
+  
+  console.log(`Screen Sharing Active: ${isScreenSharing}`);
+  console.log(`Active Peers: ${Object.keys(peers).length}`);
+  console.groupEnd();
 };
 
 /**
- * Gets all video tracks
- * @returns {Array<MediaStreamTrack>} Video tracks
+ * Check if all tracks are healthy
+ * @returns {boolean} True if all tracks are live
  */
-export const getVideoTracks = () => {
-  return localStream ? localStream.getVideoTracks() : [];
-};
-
-/**
- * Checks if the local stream has active tracks
- * @returns {boolean} True if stream has active tracks
- */
-export const hasActiveTracks = () => {
+export const areTracksHealthy = () => {
   if (!localStream) return false;
   
   const tracks = localStream.getTracks();
-  return tracks.length > 0 && tracks.every(track => track.readyState === 'live');
+  if (tracks.length === 0) return false;
+  
+  return tracks.every(track => track.readyState === 'live');
 };
 
 /**
- * Restarts media with new constraints
- * @param {Object} constraints - Media constraints
- * @returns {Promise<MediaStream>} New media stream
+ * Update video constraints
+ * @param {MediaTrackConstraints} constraints - New video constraints
+ * @returns {Promise<boolean>} Success status
  */
-export const restartMedia = async (constraints = { video: true, audio: true }) => {
-  console.log("Restarting media with constraints:", constraints);
-  
-  // First clean up existing stream
-  if (localStream) {
-    cleanupStreamOnly();
+export const updateVideoConstraints = async (constraints) => {
+  const videoTrack = getVideoTrack();
+  if (!videoTrack) {
+    console.error("No video track to update");
+    return false;
   }
   
   try {
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
-    setLocalStream(stream);
-    console.log("Media restarted successfully");
-    return stream;
+    await videoTrack.applyConstraints(constraints);
+    console.log("Video constraints updated:", constraints);
+    return true;
   } catch (error) {
-    console.error("Failed to restart media:", error);
-    throw error;
+    console.error("Failed to update video constraints:", error);
+    return false;
   }
+};
+
+/**
+ * Update audio constraints
+ * @param {MediaTrackConstraints} constraints - New audio constraints
+ * @returns {Promise<boolean>} Success status
+ */
+export const updateAudioConstraints = async (constraints) => {
+  const audioTrack = getAudioTrack();
+  if (!audioTrack) {
+    console.error("No audio track to update");
+    return false;
+  }
+  
+  try {
+    await audioTrack.applyConstraints(constraints);
+    console.log("Audio constraints updated:", constraints);
+    return true;
+  } catch (error) {
+    console.error("Failed to update audio constraints:", error);
+    return false;
+  }
+};
+
+/* ----------------------------------------------------
+   EXPORT EVERYTHING
+---------------------------------------------------- */
+export default {
+  // Core
+  initializeMedia,
+  setLocalStream,
+  getLocalStream,
+  isMediaInitialized,
+  
+  // Peer Connections
+  createPeer,
+  removePeer,
+  getPeer,
+  getAllPeers,
+  closeAllPeers,
+  
+  // Controls
+  toggleAudio,
+  toggleVideo,
+  isAudioEnabled,
+  isVideoEnabled,
+  getAudioTrack,
+  getVideoTrack,
+  
+  // Screen Sharing
+  startScreenShare,
+  stopScreenShare,
+  isScreenSharingActive,
+  getScreenStream,
+  
+  // Speaker Detection
+  startSpeakerDetection,
+  stopSpeakerDetection,
+  getSpeakingState,
+  getCurrentVolume,
+  
+  // Media Management
+  restartMedia,
+  emergencyCameraRestart,
+  cleanup,
+  
+  // Utilities
+  getWebRTCState,
+  debugTracks,
+  areTracksHealthy,
+  updateVideoConstraints,
+  updateAudioConstraints
 };
