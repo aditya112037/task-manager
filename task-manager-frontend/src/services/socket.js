@@ -25,18 +25,24 @@ const socketUrl =
   
   console.log("🔄 Creating socket connection with token:", token.substring(0, 20) + "...");
   
-  socket = io(socketUrl, {
-    autoConnect: false,
-    transports: ["websocket"],
-    reconnection: true,
-    reconnectionAttempts: 5,
-    reconnectionDelay: 1000,
-    // 🚨 CRITICAL: Send ONLY token, not userId
-    auth: { 
-      token: token  // Only send the token
-    },
-    withCredentials: true,
-  });
+socket = io(socketUrl, {
+  autoConnect: false,
+
+  // ✅ CRITICAL: allow fallback for Render
+  transports: ["websocket", "polling"],
+
+  reconnection: true,
+  reconnectionAttempts: 5,
+  reconnectionDelay: 1000,
+
+  // ✅ token only
+  auth: {
+    token,
+  },
+
+  withCredentials: true,
+});
+
 
   // Connection event listeners
   socket.on("connect", () => {
