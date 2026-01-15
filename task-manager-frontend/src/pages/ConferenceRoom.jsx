@@ -455,16 +455,40 @@ export default function ConferenceRoom() {
     };
   }, [conferenceId, socket, currentUser]);
 
-  const fetchConferenceData = async (confId) => {
-    try {
-      const response = await fetch(`/api/conferences/${confId}`);
-      if (!response.ok) throw new Error("Failed to fetch conference data");
-      return await response.json();
-    } catch (error) {
-      console.error("Error fetching conference data:", error);
-      return null;
+const fetchConferenceData = async (confId) => {
+  try {
+    const apiBase =
+      process.env.REACT_APP_API_URL || "http://localhost:5000";
+
+    const response = await fetch(
+      `${apiBase}/api/conferences/${confId}`,
+      {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`,
+        },
+        credentials: "include",
+      }
+    );
+
+    // 🚨 If backend accidentally returns HTML, catch it early
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.includes("application/json")) {
+      throw new Error("Backend returned non-JSON response");
     }
-  };
+
+    if (!response.ok) {
+      const err = await response.json();
+      throw new Error(err.error || "Failed to fetch conference data");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error fetching conference data:", error);
+    return null;
+  }
+};
+
 
   const handleAdminAction = (action, targetSocketId) => {
     adminAction({
