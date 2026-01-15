@@ -1,4 +1,3 @@
-// ConferenceRoom.jsx
 import React, { useEffect, useRef, useState, useMemo, useContext } from "react";
 import { 
   Box, 
@@ -60,9 +59,6 @@ import {
 import VideoTile from "../components/Conference/VideoTile";
 import { useAuth } from "../context/AuthContext";
 
-/* ----------------------------------------------------
-   CONSTANTS
----------------------------------------------------- */
 const LAYOUT = {
   GRID: "grid",
   PRESENTATION: "presentation",
@@ -93,60 +89,43 @@ export default function ConferenceRoom() {
   const [isAdminOrManager, setIsAdminOrManager] = useState(false);
   const [conferenceData, setConferenceData] = useState(null);
   
-  // SPEAKER MODE STATE
   const [activeSpeaker, setActiveSpeaker] = useState(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [speakerModeEnabled, setSpeakerModeEnabled] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: "", severity: "info" });
 
-  /* ----------------------------------------------------
-     🚨 CRITICAL: JOIN CONFERENCE ROOM ON MOUNT
-  ---------------------------------------------------- */
   useEffect(() => {
     if (!conferenceId) return;
     
-    console.log("🚀 Joining conference room:", conferenceId);
+    console.log("Joining conference room:", conferenceId);
     joinConferenceRoom(conferenceId);
     
     return () => {
-      console.log("👋 Leaving conference room:", conferenceId);
+      console.log("Leaving conference room:", conferenceId);
       if (socket) {
         socket.emit("conference:leave", { conferenceId });
       }
     };
   }, [conferenceId, socket]);
 
-  /* ----------------------------------------------------
-     SHOW NOTIFICATION
-  ---------------------------------------------------- */
   const showNotification = (message, severity = "info") => {
     setNotification({ open: true, message, severity });
   };
 
-  /* ----------------------------------------------------
-     🛡 STEP 7 — AUTO-MUTE WITH ADMIN ENFORCEMENT
-  ---------------------------------------------------- */
   useEffect(() => {
-    if (!localStream || !speakerModeEnabled) return;
+    if (!localStream || !speakerModeEnabled || !activeSpeaker) return;
     
     const audioTracks = localStream.getAudioTracks();
     if (audioTracks.length === 0) return;
     
-    const shouldSpeak = activeSpeaker === socket.id;
-    
-    // ADMIN OVERRIDE ENFORCEMENT:
-    // 1. If I'm not the active speaker → mute (no exceptions)
-    // 2. If I am the active speaker → unmute
-    // 3. This overrides any local mic button state
+    const shouldSpeak = activeSpeaker === socket.id || isAdminOrManager;
     
     audioTracks.forEach(track => {
       if (shouldSpeak && !track.enabled) {
-        // Admin says I should speak, but my track is disabled
         track.enabled = true;
         setMicOn(true);
         console.log("Admin override: Unmuting because I'm the speaker");
       } else if (!shouldSpeak && track.enabled) {
-        // I'm not the speaker, but my track is enabled
         track.enabled = false;
         setMicOn(false);
         console.log("Admin override: Muting because I'm not the speaker");
@@ -154,9 +133,6 @@ export default function ConferenceRoom() {
     });
   }, [activeSpeaker, speakerModeEnabled, localStream, socket.id]);
 
-  /* ----------------------------------------------------
-     🧪 STEP 6 — SPEAKER DETECTION WITH OWNERSHIP RULES
-  ---------------------------------------------------- */
   useEffect(() => {
     if (!localStream || !speakerModeEnabled) return;
     
@@ -164,7 +140,6 @@ export default function ConferenceRoom() {
       if (!speakerModeEnabled) return;
       
       if (!speaking) {
-        // Always emit when stopping speaking
         socket.emit("conference:speaking", {
           conferenceId,
           speaking: false,
@@ -173,10 +148,6 @@ export default function ConferenceRoom() {
         return;
       }
       
-      // SPEAKER OWNERSHIP RULE:
-      // Only emit "I'm speaking" if:
-      // 1. There's no active speaker currently, OR
-      // 2. I am already the active speaker
       const canTakeOverSpeaker = !activeSpeaker || activeSpeaker === socket.id;
       
       if (canTakeOverSpeaker) {
@@ -186,8 +157,6 @@ export default function ConferenceRoom() {
           speaking: true,
         });
       } else {
-        // I'm speaking, but someone else is the current speaker
-        // This prevents audio chaos and flickering
         console.log("Not taking over speaker - ", activeSpeaker, "is speaking");
       }
     });
@@ -195,15 +164,11 @@ export default function ConferenceRoom() {
     return cleanup;
   }, [localStream, speakerModeEnabled, conferenceId, socket, activeSpeaker]);
 
-  /* ----------------------------------------------------
-     INIT MEDIA + CONFERENCE - CRITICAL FIX
-  ---------------------------------------------------- */
   useEffect(() => {
     let mounted = true;
 
     const start = async () => {
       try {
-        // First, ensure socket is connected
         if (!socket || !socket.connected) {
           console.warn("Socket not connected, waiting...");
           await new Promise(resolve => setTimeout(resolve, 1000));
@@ -214,17 +179,14 @@ export default function ConferenceRoom() {
           }
         }
 
-        // 🚨 CRITICAL: Initialize media ONCE
         let stream = null;
         try {
           stream = await initMedia();
           if (!mounted) return;
 
-          // 🚨 CRITICAL: Set the stream in webrtc module
           setLocalStream(stream);
           setLocalStreamState(stream);
           
-          // Update video element
           if (localVideoRef.current) {
             localVideoRef.current.srcObject = stream;
             console.log("Video element updated with stream");
@@ -232,22 +194,18 @@ export default function ConferenceRoom() {
         } catch (mediaError) {
           console.warn("Media initialization failed, joining without camera:", mediaError);
           showNotification("Joining without camera/microphone", "warning");
-          // Continue without media - user can join as audio-only or observer
         }
 
-        // Get conference data
         const confData = await fetchConferenceData(conferenceId);
         if (!mounted) return;
         
         setConferenceData(confData);
         
-        // Check if current user is admin/manager
         if (confData && currentUser) {
           const isCreator = confData.createdBy === currentUser._id;
           setIsAdminOrManager(isCreator);
         }
 
-        // Join conference (with or without media)
         joinConference(conferenceId, confData);
         
         if (stream) {
@@ -260,7 +218,6 @@ export default function ConferenceRoom() {
         console.error("Failed to initialize conference:", error);
         showNotification(`Conference initialization failed: ${error.message}`, "error");
         
-        // Try to fetch conference data anyway for fallback
         try {
           const confData = await fetchConferenceData(conferenceId);
           if (mounted) {
@@ -283,11 +240,9 @@ export default function ConferenceRoom() {
 
     start();
 
-    /* ---------------- SIGNALING HANDLERS ---------------- */
     const handleUserJoined = async ({ userId, userName, socketId }) => {
       if (!mounted) return;
       
-      // Only create peer if we have a local stream
       if (!localStream) {
         console.log("No local stream, skipping peer creation for", socketId);
         return;
@@ -366,14 +321,12 @@ export default function ConferenceRoom() {
         return copy;
       });
       
-      // 🧠 STEP 8 — FAILSAFE: Clear active speaker if they left
       if (activeSpeaker === socketId) {
         console.log("Active speaker left, clearing speaker");
         setActiveSpeaker(null);
       }
     };
 
-    /* ---------------- PARTICIPANT & HAND HANDLERS ---------------- */
     const handleParticipantsUpdate = ({ users }) => {
       if (!mounted) return;
       setParticipants(users);
@@ -389,7 +342,6 @@ export default function ConferenceRoom() {
       handleLeave();
     };
 
-    /* ---------------- 🧱 STEP 5 — SPEAKER MODE HANDLERS ---------------- */
     const handleActiveSpeakerUpdate = ({ socketId }) => {
       if (!mounted) return;
       console.log("Active speaker updated:", socketId);
@@ -405,7 +357,6 @@ export default function ConferenceRoom() {
       console.log("Speaker mode toggled:", enabled);
       setSpeakerModeEnabled(enabled);
       
-      // Clear speaker when mode is disabled
       if (!enabled) {
         setActiveSpeaker(null);
       }
@@ -423,18 +374,15 @@ export default function ConferenceRoom() {
       }
     };
 
-    /* ---------------- 🧠 STEP 8 — USER LEFT HANDLER ---------------- */
     const handleUserLeftEvent = ({ socketId }) => {
       if (!mounted) return;
       
-      // Clear active speaker if they left
       if (activeSpeaker === socketId) {
         console.log("Active speaker left via user-left event");
         setActiveSpeaker(null);
       }
     };
 
-    /* ---------------- ADMIN ACTION LISTENERS ---------------- */
     const handleForceMute = () => {
       if (!mounted) return;
       console.log("Admin forced mute");
@@ -462,7 +410,6 @@ export default function ConferenceRoom() {
       showNotification("You have been removed from the conference by the admin", "error");
     };
 
-    // Setup event listeners
     socket.on("conference:user-joined", handleUserJoined);
     socket.on("conference:offer", handleOffer);
     socket.on("conference:answer", handleAnswer);
@@ -472,15 +419,12 @@ export default function ConferenceRoom() {
     socket.on("conference:hands-updated", handleHandsUpdated);
     socket.on("conference:ended", handleConferenceEnded);
     
-    // 🧱 STEP 5 — Speaker mode listeners
     socket.on("conference:active-speaker", handleActiveSpeakerUpdate);
     socket.on("conference:speaker-mode-toggled", handleSpeakerModeToggled);
     socket.on("conference:speaker-assigned", handleSpeakerAssigned);
     
-    // 🧠 STEP 8 — Additional user left listener
     socket.on("conference:user-left", handleUserLeftEvent);
     
-    // Admin action listeners
     socket.on("conference:force-mute", handleForceMute);
     socket.on("conference:force-camera-off", handleForceCameraOff);
     socket.on("conference:removed-by-admin", handleRemovedByAdmin);
@@ -490,7 +434,6 @@ export default function ConferenceRoom() {
       leaveConference(conferenceId);
       stopSpeakerDetection();
       
-      // Clean up all listeners
       socket.off("conference:user-joined", handleUserJoined);
       socket.off("conference:offer", handleOffer);
       socket.off("conference:answer", handleAnswer);
@@ -500,24 +443,18 @@ export default function ConferenceRoom() {
       socket.off("conference:hands-updated", handleHandsUpdated);
       socket.off("conference:ended", handleConferenceEnded);
       
-      // 🧱 STEP 5 — Clean up speaker mode listeners
       socket.off("conference:active-speaker", handleActiveSpeakerUpdate);
       socket.off("conference:speaker-mode-toggled", handleSpeakerModeToggled);
       socket.off("conference:speaker-assigned", handleSpeakerAssigned);
       
-      // 🧠 STEP 8 — Clean up additional user left listener
       socket.off("conference:user-left", handleUserLeftEvent);
       
-      // Clean up admin listeners
       socket.off("conference:force-mute", handleForceMute);
       socket.off("conference:force-camera-off", handleForceCameraOff);
       socket.off("conference:removed-by-admin", handleRemovedByAdmin);
     };
   }, [conferenceId, socket, currentUser]);
 
-  /* ----------------------------------------------------
-     HELPER FUNCTIONS
-  ---------------------------------------------------- */
   const fetchConferenceData = async (confId) => {
     try {
       const response = await fetch(`/api/conferences/${confId}`);
@@ -560,16 +497,12 @@ export default function ConferenceRoom() {
     setParticipantsPanelOpen(!participantsPanelOpen);
   };
 
-  /* ----------------------------------------------------
-     SPEAKER MODE FUNCTIONS
-  ---------------------------------------------------- */
   const toggleSpeakerMode = () => {
     const newMode = !speakerModeEnabled;
     setSpeakerModeEnabled(newMode);
     
     if (!newMode) {
       setActiveSpeaker(null);
-      // Re-enable all mics when speaker mode is disabled
       if (localStream) {
         localStream.getAudioTracks().forEach(track => {
           if (!track.enabled) {
@@ -607,9 +540,6 @@ export default function ConferenceRoom() {
     setLayout(newLayout);
   };
 
-  /* ----------------------------------------------------
-     DERIVED DATA
-  ---------------------------------------------------- */
   const allCameraStreams = useMemo(() => {
     return Object.entries(remoteStreams).filter(([socketId, stream]) => stream);
   }, [remoteStreams]);
@@ -617,16 +547,11 @@ export default function ConferenceRoom() {
   const currentParticipant = participants.find(p => p.userId === currentUser?._id);
   const socketId = socket.id;
 
-  // Get current active speaker's participant info
   const activeSpeakerParticipant = participants.find(p => p.socketId === activeSpeaker);
   const activeSpeakerName = activeSpeakerParticipant?.userName || 
     (activeSpeaker === socket.id ? "You" : `User ${activeSpeaker?.slice(0, 4)}`);
 
-  /* ----------------------------------------------------
-     CONTROLS
-  ---------------------------------------------------- */
   const handleLeave = () => {
-    // Emit leave event
     if (socket) {
       socket.emit("conference:leave", { conferenceId });
     }
@@ -634,21 +559,18 @@ export default function ConferenceRoom() {
     leaveConference(conferenceId);
     stopSpeakerDetection();
     
-    // Stop all tracks
     if (localStream) {
       localStream.getTracks().forEach(track => track.stop());
     }
     
-    // Clear remote streams
     setRemoteStreams({});
     
     navigate(-1);
   };
 
   const handleToggleMic = () => {
-    // SPEAKER MODE RESTRICTION:
-    if (speakerModeEnabled && activeSpeaker !== socket.id) {
-      showNotification("Only the active speaker can unmute in speaker mode", "warning");
+    if (speakerModeEnabled && activeSpeaker !== socket.id && !isAdminOrManager) {
+      showNotification("Only the active speaker can unmute", "warning");
       return;
     }
     
@@ -688,6 +610,15 @@ export default function ConferenceRoom() {
         setScreenSharer("me");
       } else {
         await stopScreenShare(localVideoRef);
+        
+        setMicOn(true);
+        setCamOn(true);
+        
+        if (localStream) {
+          localStream.getAudioTracks().forEach(t => (t.enabled = true));
+          localStream.getVideoTracks().forEach(t => (t.enabled = true));
+        }
+        
         setLayout(LAYOUT.GRID);
         setScreenSharer(null);
       }
@@ -698,19 +629,14 @@ export default function ConferenceRoom() {
     }
   };
 
-  /* ----------------------------------------------------
-     RENDER
-  ---------------------------------------------------- */
   return (
     <Box sx={{ display: "flex", height: "100vh", background: "#000" }}>
-      {/* MAIN VIDEO AREA */}
       <Box sx={{ 
         flex: 1, 
         display: "flex", 
         flexDirection: "column",
         p: 2 
       }}>
-        {/* HEADER */}
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
           <Typography color="white" fontWeight={600}>
             Conference Room: {conferenceId}
@@ -722,7 +648,6 @@ export default function ConferenceRoom() {
           </Typography>
           
           <Box sx={{ display: "flex", gap: 1 }}>
-            {/* LAYOUT CONTROLS */}
             <Tooltip title="Grid Layout">
               <IconButton
                 onClick={() => toggleLayout(LAYOUT.GRID)}
@@ -749,7 +674,6 @@ export default function ConferenceRoom() {
               </IconButton>
             </Tooltip>
             
-            {/* SPEAKER MODE TOGGLE */}
             <Tooltip title={speakerModeEnabled ? "Disable Speaker Mode" : "Enable Speaker Mode"}>
               <IconButton
                 onClick={toggleSpeakerMode}
@@ -795,7 +719,6 @@ export default function ConferenceRoom() {
           </Box>
         </Box>
 
-        {/* SPEAKER MODE STATUS */}
         {speakerModeEnabled && (
           <Box sx={{ 
             mb: 2, 
@@ -848,9 +771,7 @@ export default function ConferenceRoom() {
           </Box>
         )}
 
-        {/* ===================== VIDEO AREA ===================== */}
         {layout === LAYOUT.PRESENTATION ? (
-          // PRESENTATION LAYOUT (Screen share)
           <>
             <Box sx={{ flex: 1, mb: 2 }}>
               <VideoTile
@@ -896,9 +817,7 @@ export default function ConferenceRoom() {
             </Box>
           </>
         ) : layout === LAYOUT.SPEAKER ? (
-          // SPEAKER LAYOUT (Large active speaker + small others)
           <Box sx={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
-            {/* MAIN SPEAKER VIEW */}
             {activeSpeaker && (
               <Box sx={{ flex: 2, minHeight: "60%" }}>
                 {activeSpeaker === socket.id ? (
@@ -931,14 +850,12 @@ export default function ConferenceRoom() {
               </Box>
             )}
             
-            {/* OTHER PARTICIPANTS (GRID) */}
             <Box sx={{ 
               flex: 1, 
               display: "grid", 
               gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
               gap: 1
             }}>
-              {/* Local video (if not active speaker) */}
               {activeSpeaker !== socket.id && (
                 <Box sx={{ position: "relative" }}>
                   <VideoTile 
@@ -950,7 +867,6 @@ export default function ConferenceRoom() {
                 </Box>
               )}
               
-              {/* Remote videos (excluding active speaker) */}
               {allCameraStreams
                 .filter(([socketId]) => socketId !== activeSpeaker)
                 .map(([socketId, stream]) => {
@@ -989,7 +905,6 @@ export default function ConferenceRoom() {
             </Box>
           </Box>
         ) : (
-          // GRID LAYOUT (Default)
           <Box sx={{
             flex: 1,
             display: "grid",
@@ -997,7 +912,6 @@ export default function ConferenceRoom() {
             gap: 2,
             overflow: "auto",
           }}>
-            {/* LOCAL VIDEO */}
             <Box sx={{ position: "relative" }}>
               <VideoTile 
                 videoRef={localVideoRef} 
@@ -1009,7 +923,6 @@ export default function ConferenceRoom() {
               </VideoTile>
             </Box>
 
-            {/* REMOTE VIDEOS */}
             {allCameraStreams.map(([socketId, stream]) => {
               const participant = participants.find(p => p.socketId === socketId);
               const userName = participant?.userName || `User ${socketId.slice(0, 4)}`;
@@ -1025,7 +938,6 @@ export default function ConferenceRoom() {
                     {isHandRaised && <RaiseHandIndicator label="Hand Raised" />}
                   </VideoTile>
                   
-                  {/* ADMIN CONTROLS */}
                   {isAdminOrManager && socketId !== socket.id && (
                     <>
                       <IconButton
@@ -1061,7 +973,6 @@ export default function ConferenceRoom() {
                         </IconButton>
                       )}
                       
-                      {/* SET AS SPEAKER OPTION */}
                       {speakerModeEnabled && (
                         <IconButton
                           size="small"
@@ -1087,7 +998,6 @@ export default function ConferenceRoom() {
           </Box>
         )}
 
-        {/* ===================== CONTROLS BAR ===================== */}
         <Box sx={{
           display: "flex",
           justifyContent: "center",
@@ -1096,12 +1006,11 @@ export default function ConferenceRoom() {
           pt: 2,
           borderTop: "1px solid #333",
         }}>
-          {/* MIC CONTROL */}
           <Tooltip title={micOn ? "Mute Microphone" : "Unmute Microphone"}>
             <span>
               <IconButton
                 onClick={handleToggleMic}
-                disabled={speakerModeEnabled && activeSpeaker !== socket.id}
+                disabled={speakerModeEnabled && activeSpeaker !== socket.id && !isAdminOrManager}
                 sx={{
                   background: micOn ? "#2e7d32" : "#424242",
                   color: "white",
@@ -1119,7 +1028,6 @@ export default function ConferenceRoom() {
             </span>
           </Tooltip>
 
-          {/* CAMERA CONTROL */}
           <Tooltip title={camOn ? "Turn Camera Off" : "Turn Camera On"}>
             <IconButton
               onClick={handleToggleCam}
@@ -1140,7 +1048,6 @@ export default function ConferenceRoom() {
             </IconButton>
           </Tooltip>
 
-          {/* SCREEN SHARE */}
           <Tooltip title={sharingScreen ? "Stop Screen Share" : "Start Screen Share"}>
             <IconButton
               onClick={handleScreenShare}
@@ -1161,7 +1068,6 @@ export default function ConferenceRoom() {
             </IconButton>
           </Tooltip>
 
-          {/* RAISE HAND */}
           <Tooltip title={handRaised ? "Lower Hand" : "Raise Hand"}>
             <IconButton
               onClick={handleRaiseHand}
@@ -1177,7 +1083,6 @@ export default function ConferenceRoom() {
             </IconButton>
           </Tooltip>
 
-          {/* SPEAKER MODE CONTROLS */}
           {isAdminOrManager && speakerModeEnabled && (
             <>
               <Tooltip title="Clear Speaker">
@@ -1213,7 +1118,6 @@ export default function ConferenceRoom() {
             </>
           )}
 
-          {/* LEAVE CONFERENCE */}
           <Tooltip title="Leave Conference">
             <IconButton
               onClick={handleLeave}
@@ -1228,7 +1132,6 @@ export default function ConferenceRoom() {
           </Tooltip>
         </Box>
 
-        {/* STATUS BAR */}
         <Box sx={{ mt: 1, display: "flex", justifyContent: "center", alignItems: "center", gap: 1 }}>
           <Typography color="#aaa" variant="caption">
             Participants: {participants.length || allCameraStreams.length + 1}
@@ -1254,7 +1157,6 @@ export default function ConferenceRoom() {
         </Box>
       </Box>
 
-      {/* PARTICIPANTS PANEL */}
       {participantsPanelOpen && (
         <ParticipantsPanel
           participants={participants}
@@ -1263,7 +1165,6 @@ export default function ConferenceRoom() {
           onAdminAction={handleAdminAction}
           currentUserId={currentUser?._id}
           onClose={() => setParticipantsPanelOpen(false)}
-          // Pass speaker mode props
           speakerModeEnabled={speakerModeEnabled}
           activeSpeaker={activeSpeaker}
           onSetSpeaker={setAsSpeaker}
@@ -1271,7 +1172,6 @@ export default function ConferenceRoom() {
         />
       )}
 
-      {/* ADMIN MENU */}
       <Menu
         anchorEl={adminMenuAnchor}
         open={Boolean(adminMenuAnchor)}
@@ -1334,7 +1234,6 @@ export default function ConferenceRoom() {
         </MenuItem>
       </Menu>
 
-      {/* NOTIFICATION SNACKBAR */}
       <Snackbar
         open={notification.open}
         autoHideDuration={4000}
