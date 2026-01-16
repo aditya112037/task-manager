@@ -90,8 +90,9 @@ export default function ConferenceRoom() {
   const [speakerModeEnabled, setSpeakerModeEnabled] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: "", severity: "info" });
 
-  // 🔹 Step 1: Add mic level state
+  // 🔹 Step 1: Add mic level state with smooth transitions
   const [micLevel, setMicLevel] = useState(0);
+  const [smoothMicLevel, setSmoothMicLevel] = useState(0);
 
   // 🟢 Step 1 — LOCK conference join to ONE execution
   const conferenceStartedRef = useRef(false);
@@ -246,13 +247,24 @@ useEffect(() => {
     return cleanup;
   }, [localStream, speakerModeEnabled, conferenceId, socket, activeSpeaker]);
 
-  // 🔹 Step 2: Add audio analyser effect
+  // 🔹 Step 2: Smooth mic level transitions
+  useEffect(() => {
+    // Smooth the mic level for better visual experience
+    const timer = setInterval(() => {
+      setSmoothMicLevel(prev => prev * 0.6 + micLevel * 0.4);
+    }, 50); // Update more frequently for smoother animation
+
+    return () => clearInterval(timer);
+  }, [micLevel]);
+
+  // 🔹 Step 3: Add audio analyser effect with smooth signal
   useEffect(() => {
     if (!localStream) return;
 
     const audioCtx = new AudioContext();
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 256;
+    analyser.smoothingTimeConstant = 0.8; // Smooth the audio data
 
     const source = audioCtx.createMediaStreamSource(localStream);
     source.connect(analyser);
@@ -264,7 +276,10 @@ useEffect(() => {
     const update = () => {
       analyser.getByteFrequencyData(dataArray);
       const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-      setMicLevel(avg);
+      
+      // Apply smoothing to the signal (prevents jitter)
+      setMicLevel(prev => prev * 0.7 + avg * 0.3);
+      
       rafId = requestAnimationFrame(update);
     };
 
@@ -683,8 +698,24 @@ useEffect(() => {
   const activeSpeakerName = activeSpeakerParticipant?.userName || 
     (activeSpeaker === socket.id ? "You" : `User ${activeSpeaker?.slice(0, 4)}`);
 
+  // 🔹 Respect mute state
+  const effectiveMicLevel = micOn ? smoothMicLevel : 0;
+  const isSpeaking = effectiveMicLevel > 15;
+  const isLoud = effectiveMicLevel > 40;
+
   return (
     <Box sx={{ display: "flex", height: "100vh", background: "#000" }}>
+      {/* 🔹 Add global pulse animation */}
+      <style>
+        {`
+          @keyframes pulse {
+            0% { transform: scale(1); opacity: 0.4; }
+            70% { transform: scale(2); opacity: 0; }
+            100% { opacity: 0; }
+          }
+        `}
+      </style>
+      
       <Box sx={{ 
         flex: 1, 
         display: "flex", 
@@ -1054,6 +1085,7 @@ useEffect(() => {
         <Box sx={{
           display: "flex",
           justifyContent: "center",
+          alignItems: "center",
           gap: 2,
           mt: 2,
           pt: 2,
@@ -1081,29 +1113,86 @@ useEffect(() => {
             </span>
           </Tooltip>
 
-          {/* 🔹 Step 3: Add mic level indicator next to mic button */}
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-            <Tooltip title={`Mic level: ${micLevel.toFixed(1)}`}>
+          {/* 🔹 Combined Level 2 + Level 3 Audio Indicator */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 2, minWidth: "200px" }}>
+            {/* Level 3: Ripple effect indicator */}
+            <Box sx={{ position: "relative", width: 24, height: 24 }}>
               <Box
                 sx={{
-                  width: 8,
-                  height: 8,
+                  position: "absolute",
+                  inset: 0,
                   borderRadius: "50%",
-                  background: micLevel > 15 ? "#00e676" : "#555",
-                  transition: "background 0.1s",
-                  boxShadow: micLevel > 15 ? "0 0 4px #00e676" : "none",
+                  background: isSpeaking ? "#00e676" : "#ff5252",
+                  opacity: isSpeaking ? 0.3 : 0,
+                  animation: isSpeaking ? "pulse 1.2s infinite" : "none",
+                  transition: "opacity 0.2s",
                 }}
               />
+              <Box
+                sx={{
+                  width: 14,
+                  height: 14,
+                  borderRadius: "50%",
+                  background: isSpeaking ? (isLoud ? "#ff5252" : "#00e676") : "#555",
+                  position: "absolute",
+                  top: "50%",
+                  left: "50%",
+                  transform: "translate(-50%, -50%)",
+                  transition: "background 0.2s",
+                  boxShadow: isSpeaking ? "0 0 8px rgba(0, 230, 118, 0.5)" : "none",
+                }}
+              />
+            </Box>
+
+            {/* Level 2: Audio bar */}
+            <Tooltip title={`Microphone level: ${Math.round(effectiveMicLevel)}`}>
+              <Box
+                sx={{
+                  flex: 1,
+                  minWidth: "120px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 0.5,
+                }}
+              >
+                <Box
+                  sx={{
+                    width: "100%",
+                    height: 6,
+                    background: "#333",
+                    borderRadius: 3,
+                    overflow: "hidden",
+                    position: "relative",
+                  }}
+                >
+                  <Box
+                    sx={{
+                      height: "100%",
+                      width: `${Math.min(effectiveMicLevel * 1.5, 100)}%`,
+                      background: isSpeaking ? (isLoud ? "#ff5252" : "#00e676") : "#555",
+                      transition: "width 0.05s linear, background 0.2s",
+                      borderRadius: 3,
+                    }}
+                  />
+                </Box>
+                
+                {/* Confidence text */}
+                {isSpeaking && (
+                  <Typography 
+                    variant="caption" 
+                    sx={{ 
+                      color: isLoud ? "#ff5252" : "#00e676",
+                      fontWeight: 500,
+                      textAlign: "center",
+                      fontSize: "0.7rem",
+                      letterSpacing: "0.5px",
+                    }}
+                  >
+                    {isLoud ? "LOUD" : "SPEAKING"}
+                  </Typography>
+                )}
+              </Box>
             </Tooltip>
-            <Typography 
-              variant="caption" 
-              sx={{ 
-                color: micLevel > 15 ? "#00e676" : "#aaa",
-                minWidth: "30px"
-              }}
-            >
-              {micLevel.toFixed(0)}
-            </Typography>
           </Box>
 
           <Tooltip title={camOn ? "Turn Camera Off" : "Turn Camera On"}>
