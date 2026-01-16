@@ -152,6 +152,7 @@ export const createPeer = (userId, socket) => {
         case 'failed':
           console.error(`Connection with ${userId} failed`);
           removePeer(userId);
+          default:
           break;
         case 'disconnected':
           console.warn(`Connection with ${userId} disconnected`);
@@ -588,7 +589,6 @@ export const startSpeakerDetection = (onSpeakingChange) => {
       
       const volume = calculateVolume();
       const speakingThreshold = 20;
-      const silenceThreshold = 15;
       const historyLength = 5;
       
       // Update history
@@ -966,49 +966,44 @@ export const updateAudioConstraints = async (constraints) => {
 /* ----------------------------------------------------
    EXPORT EVERYTHING
 ---------------------------------------------------- */
-export default {
-  // Core
+const WebRTCService = {
   initializeMedia,
   setLocalStream,
   getLocalStream,
   isMediaInitialized,
-  
-  // Peer Connections
+
   createPeer,
   removePeer,
   getPeer,
   getAllPeers,
   closeAllPeers,
-  
-  // Controls
+
   toggleAudio,
   toggleVideo,
   isAudioEnabled,
   isVideoEnabled,
   getAudioTrack,
   getVideoTrack,
-  
-  // Screen Sharing
+
   startScreenShare,
   stopScreenShare,
   isScreenSharingActive,
   getScreenStream,
-  
-  // Speaker Detection
+
   startSpeakerDetection,
   stopSpeakerDetection,
   getSpeakingState,
   getCurrentVolume,
-  
-  // Media Management
+
   restartMedia,
   emergencyCameraRestart,
   cleanup,
-  
-  // Utilities
+
   getWebRTCState,
   debugTracks,
   areTracksHealthy,
   updateVideoConstraints,
   updateAudioConstraints
 };
+
+export default WebRTCService;

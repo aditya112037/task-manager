@@ -12,7 +12,6 @@ export const initSocket = () => {
 
   // 🚨 CRITICAL FIX: Get token from localStorage
   const token = localStorage.getItem("token");
-  const user = JSON.parse(localStorage.getItem("user") || "null");
   
   if (!token) {
     console.warn("No token found in localStorage");
