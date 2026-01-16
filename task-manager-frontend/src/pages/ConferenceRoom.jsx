@@ -196,7 +196,7 @@ export default function ConferenceRoom() {
           showNotification("Joining without camera/microphone", "warning");
         }
 
-        const confData = await fetchConferenceData(conferenceId);
+        const confData = await fetchConferenceData(teamId);
         if (!mounted) return;
         
         setConferenceData(confData);
@@ -219,7 +219,7 @@ export default function ConferenceRoom() {
         showNotification(`Conference initialization failed: ${error.message}`, "error");
         
         try {
-          const confData = await fetchConferenceData(conferenceId);
+          const confData = await fetchConferenceData(teamId);
           if (mounted) {
             setConferenceData(confData);
             
@@ -455,13 +455,13 @@ export default function ConferenceRoom() {
     };
   }, [conferenceId, socket, currentUser]);
 
-const fetchConferenceData = async (confId) => {
+const fetchConferenceData = async (teamId) => {
   try {
     const apiBase =
       process.env.REACT_APP_API_URL || "http://localhost:5000";
 
     const response = await fetch(
-      `${apiBase}/api/conferences/${confId}`,
+      `${apiBase}/api/teams/${teamId}/conference`,
       {
         headers: {
           "Content-Type": "application/json",
@@ -471,15 +471,9 @@ const fetchConferenceData = async (confId) => {
       }
     );
 
-    // 🚨 If backend accidentally returns HTML, catch it early
-    const contentType = response.headers.get("content-type") || "";
-    if (!contentType.includes("application/json")) {
-      throw new Error("Backend returned non-JSON response");
-    }
-
     if (!response.ok) {
       const err = await response.json();
-      throw new Error(err.error || "Failed to fetch conference data");
+      throw new Error(err.error || "Failed to fetch conference state");
     }
 
     return await response.json();
@@ -488,6 +482,7 @@ const fetchConferenceData = async (confId) => {
     return null;
   }
 };
+
 
 
   const handleAdminAction = (action, targetSocketId) => {
