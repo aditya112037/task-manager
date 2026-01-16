@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo, useContext } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { 
   Box, 
   Typography, 
@@ -8,7 +8,6 @@ import {
   MenuItem, 
   ListItemIcon,
   Divider,
-  Paper,
   Chip,
   Snackbar,
   Alert
@@ -20,7 +19,6 @@ import VolumeOffIcon from "@mui/icons-material/VolumeOff";
 import VideocamOffIcon from "@mui/icons-material/VideocamOff";
 import HandshakeIcon from "@mui/icons-material/Handshake";
 import PersonRemoveIcon from "@mui/icons-material/PersonRemove";
-import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
 import GroupsIcon from "@mui/icons-material/Groups";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 import MicExternalOnIcon from "@mui/icons-material/MicExternalOn";
@@ -88,10 +86,9 @@ export default function ConferenceRoom() {
   const [sharingScreen, setSharingScreen] = useState(false);
   const [localStream, setLocalStreamState] = useState(null);
   const [isAdminOrManager, setIsAdminOrManager] = useState(false);
-  const [conferenceData, setConferenceData] = useState(null);
-  
+  const [_conferenceData, setConferenceData] = useState(null);
   const [activeSpeaker, setActiveSpeaker] = useState(null);
-  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [_isSpeaking, setIsSpeaking] = useState(false);
   const [speakerModeEnabled, setSpeakerModeEnabled] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: "", severity: "info" });
 
@@ -132,7 +129,7 @@ export default function ConferenceRoom() {
         console.log("Admin override: Muting because I'm not the speaker");
       }
     });
-  }, [activeSpeaker, speakerModeEnabled, localStream, socket.id]);
+  }, [activeSpeaker, speakerModeEnabled, localStream, socket.id, isAdminOrManager]);
 
   useEffect(() => {
     if (!localStream || !speakerModeEnabled) return;
@@ -454,7 +451,7 @@ export default function ConferenceRoom() {
       socket.off("conference:force-camera-off", handleForceCameraOff);
       socket.off("conference:removed-by-admin", handleRemovedByAdmin);
     };
-  }, [conferenceId, socket, currentUser]);
+  }, [conferenceId, socket, currentUser, activeSpeaker, handleLeave, localStream, teamId,]);
 
 const fetchConferenceData = async (teamId) => {
   try {
@@ -564,8 +561,8 @@ const fetchConferenceData = async (teamId) => {
     return Object.entries(remoteStreams).filter(([socketId, stream]) => stream);
   }, [remoteStreams]);
 
-  const currentParticipant = participants.find(p => p.userId === currentUser?._id);
-  const socketId = socket.id;
+  const _currentParticipant = participants.find(p => p.userId === currentUser?._id);
+  const _socketId = socket.id;
 
   const activeSpeakerParticipant = participants.find(p => p.socketId === activeSpeaker);
   const activeSpeakerName = activeSpeakerParticipant?.userName || 
@@ -892,7 +889,7 @@ const fetchConferenceData = async (teamId) => {
                 .map(([socketId, stream]) => {
                   const participant = participants.find(p => p.socketId === socketId);
                   const userName = participant?.userName || `User ${socketId.slice(0, 4)}`;
-                  const isHandRaised = raisedHands.includes(socketId);
+                  const _isHandRaised = raisedHands.includes(socketId);
                   
                   return (
                     <Box key={socketId} sx={{ position: "relative" }}>
