@@ -18,6 +18,12 @@ export default function ParticipantsPanel({
   raisedHands = [],
   isAdminOrManager,
   onAdminAction,
+  currentUserId,
+  onClose,
+  speakerModeEnabled,
+  activeSpeaker,
+  onSetSpeaker,
+  onToggleSpeakerMode,
 }) {
   return (
     <Box
@@ -30,17 +36,27 @@ export default function ParticipantsPanel({
         overflowY: "auto",
       }}
     >
-      <Typography fontWeight={600} mb={2}>
-        Participants ({participants.length})
-      </Typography>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+        <Typography fontWeight={600}>
+          Participants ({participants.length})
+        </Typography>
+        {onClose && (
+          <IconButton onClick={onClose} size="small" sx={{ color: "#aaa" }}>
+            <CloseIcon />
+          </IconButton>
+        )}
+      </Box>
 
       <Stack spacing={1.5}>
         {participants.map((p) => {
           const handRaised = raisedHands.includes(p.socketId);
-
-          // 🔒 SAFE defaults (until backend sends states)
-          const micOn = p.micOn !== false;
-          const camOn = p.camOn !== false;
+          const isCurrentUser = p.socketId === currentUserId;
+          
+          // ✅ Use the correct property names with fallbacks
+          const displayName = p.userName || p.name || "User";
+          const micOn = p.micOn !== false; // Default to true if undefined
+          const camOn = p.camOn !== false; // Default to true if undefined
+          const isActiveSpeaker = speakerModeEnabled && activeSpeaker === p.socketId;
 
           return (
             <Box
@@ -52,22 +68,46 @@ export default function ParticipantsPanel({
                 gap: 1,
                 p: 1,
                 borderRadius: 1,
-                background: handRaised ? "#1c1c1c" : "transparent",
+                background: isActiveSpeaker 
+                  ? "rgba(0, 230, 118, 0.15)" 
+                  : handRaised 
+                    ? "#1c1c1c" 
+                    : "transparent",
+                border: isActiveSpeaker 
+                  ? "1px solid rgba(0, 230, 118, 0.3)" 
+                  : "1px solid transparent",
               }}
             >
-              {/* USER */}
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <Avatar sx={{ width: 32, height: 32 }}>
-                  {p.userName?.[0]?.toUpperCase() || "U"}
+              {/* USER INFO */}
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, flex: 1 }}>
+                <Avatar sx={{ 
+                  width: 32, 
+                  height: 32,
+                  bgcolor: isCurrentUser ? "#1976d2" : "#333",
+                }}>
+                  {displayName[0]?.toUpperCase() || "U"}
                 </Avatar>
 
-                <Typography fontSize="0.85rem">
-                  {p.userName || "User"}
-                </Typography>
+                <Box sx={{ flex: 1 }}>
+                  <Typography fontSize="0.85rem" fontWeight={isCurrentUser ? 600 : 400}>
+                    {displayName} {isCurrentUser && "(You)"}
+                  </Typography>
+                  <Typography fontSize="0.7rem" color="#aaa">
+                    {p.role || "Participant"}
+                  </Typography>
+                </Box>
               </Box>
 
-              {/* STATUS + ADMIN */}
+              {/* STATUS INDICATORS */}
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                {/* Active Speaker Indicator */}
+                {isActiveSpeaker && (
+                  <Tooltip title="Active Speaker">
+                    <VolumeUpIcon fontSize="small" sx={{ color: "#00e676" }} />
+                  </Tooltip>
+                )}
+                
+                {/* Hand Raised Indicator */}
                 {handRaised && (
                   <Tooltip title="Hand raised">
                     <PanToolIcon
@@ -77,30 +117,29 @@ export default function ParticipantsPanel({
                   </Tooltip>
                 )}
 
+                {/* Mic Status */}
                 {micOn ? (
-                  <MicIcon fontSize="small" />
+                  <MicIcon fontSize="small" sx={{ color: "#4caf50" }} />
                 ) : (
                   <MicOffIcon fontSize="small" color="error" />
                 )}
 
+                {/* Camera Status */}
                 {camOn ? (
-                  <VideocamIcon fontSize="small" />
+                  <VideocamIcon fontSize="small" sx={{ color: "#2196f3" }} />
                 ) : (
                   <VideocamOffIcon fontSize="small" color="error" />
                 )}
 
-                {isAdminOrManager && (
+                {/* Admin Actions */}
+                {isAdminOrManager && !isCurrentUser && (
                   <AdminPanel
                     participantSocketId={p.socketId}
-                    onLowerHand={() =>
-                      onAdminAction("lower-hand", p.socketId)
-                    }
-                    onMute={() =>
-                      onAdminAction("mute", p.socketId)
-                    }
-                    onCameraOff={() =>
-                      onAdminAction("camera-off", p.socketId)
-                    }
+                    onLowerHand={() => onAdminAction("lower-hand", p.socketId)}
+                    onMute={() => onAdminAction("mute", p.socketId)}
+                    onCameraOff={() => onAdminAction("camera-off", p.socketId)}
+                    onSetSpeaker={() => onSetSpeaker && onSetSpeaker(p.socketId)}
+                    speakerModeEnabled={speakerModeEnabled}
                   />
                 )}
               </Box>

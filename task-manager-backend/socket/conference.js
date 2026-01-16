@@ -132,6 +132,7 @@ module.exports = function registerConferenceSocket(io, socket) {
 
       socket.join(getConferenceRoom(conferenceId));
 
+      // ✅ CHANGED: Added micOn and camOn fields with default true
       conferences
         .get(conferenceId)
         .participants.set(socket.id, {
@@ -139,6 +140,8 @@ module.exports = function registerConferenceSocket(io, socket) {
           role: member.role,
           name: user.name,
           socketId: socket.id,
+          micOn: true,    // ✅ NEW: Track mic state
+          camOn: true,    // ✅ NEW: Track camera state
         });
 
       socket.emit("conference:created", {
@@ -189,11 +192,14 @@ module.exports = function registerConferenceSocket(io, socket) {
 
       socket.join(getConferenceRoom(conferenceId));
 
+      // ✅ CHANGED: Added micOn and camOn fields with default true
       conference.participants.set(socket.id, {
         userId: user._id,
         role: member.role,
         name: user.name,
         socketId: socket.id,
+        micOn: true,    // ✅ NEW: Track mic state
+        camOn: true,    // ✅ NEW: Track camera state
       });
 
       // Emit participant list to all
@@ -236,6 +242,34 @@ module.exports = function registerConferenceSocket(io, socket) {
     } catch (err) {
       console.error("conference:join error:", err);
     }
+  });
+
+  /* ---------------------------------------------------
+     MEDIA STATE UPDATES (MIC / CAMERA)
+     ✅ THIS IS THE CORE FIX YOU WERE MISSING
+  --------------------------------------------------- */
+  socket.on("conference:media-update", ({ conferenceId, micOn, camOn }) => {
+    const conference = conferences.get(conferenceId);
+    if (!conference) return;
+
+    const participant = conference.participants.get(socket.id);
+    if (!participant) return;
+
+    // Update server-side truth
+    participant.micOn = micOn;
+    participant.camOn = camOn;
+
+    // Broadcast to others (include socketId)
+    socket.to(getConferenceRoom(conferenceId)).emit(
+      "conference:media-update",
+      {
+        socketId: socket.id,
+        micOn,
+        camOn,
+      }
+    );
+
+    console.log(`User ${participant.userId} updated media: mic=${micOn}, cam=${camOn}`);
   });
 
   /* ---------------------------------------------------
@@ -558,10 +592,26 @@ module.exports = function registerConferenceSocket(io, socket) {
       switch (action) {
         case "mute":
           socket.to(targetSocketId).emit("conference:force-mute");
+          // Update server-side state
+          targetParticipant.micOn = false;
+          // Broadcast update to all participants
+          io.to(getConferenceRoom(conferenceId)).emit("conference:media-update", {
+            socketId: targetSocketId,
+            micOn: false,
+            camOn: targetParticipant.camOn,
+          });
           break;
         
         case "camera-off":
           socket.to(targetSocketId).emit("conference:force-camera-off");
+          // Update server-side state
+          targetParticipant.camOn = false;
+          // Broadcast update to all participants
+          io.to(getConferenceRoom(conferenceId)).emit("conference:media-update", {
+            socketId: targetSocketId,
+            micOn: targetParticipant.micOn,
+            camOn: false,
+          });
           break;
         
         case "lower-hand":

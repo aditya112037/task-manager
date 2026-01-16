@@ -89,10 +89,10 @@ export default function ConferenceRoom() {
   const [speakerModeEnabled, setSpeakerModeEnabled] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: "", severity: "info" });
 
-  // 🔹 Step 1: Add mic level state
+  // 🔹 Mic level state
   const [micLevel, setMicLevel] = useState(0);
 
-  // 🟢 Step 1 — LOCK conference join to ONE execution
+  // 🟢 Conference join lock
   const conferenceStartedRef = useRef(false);
   const mountedRef = useRef(true);
 
@@ -130,9 +130,37 @@ export default function ConferenceRoom() {
       return;
     }
     
-    toggleAudio(!micOn);
-    setMicOn((v) => !v);
-  }, [speakerModeEnabled, activeSpeaker, socket.id, isAdminOrManager, localStream, micOn, showNotification]);
+    const newMicState = !micOn;
+    toggleAudio(newMicState);
+    setMicOn(newMicState);
+    
+    // ✅ Broadcast media state to other participants
+    socket.emit("conference:media-update", {
+      conferenceId,
+      micOn: newMicState,
+      camOn,
+    });
+    
+  }, [speakerModeEnabled, activeSpeaker, socket, isAdminOrManager, localStream, micOn, camOn, conferenceId, showNotification]);
+
+  const handleToggleCam = useCallback(() => {
+    if (!localStream) {
+      showNotification("No camera available", "error");
+      return;
+    }
+    
+    const newCamState = !camOn;
+    toggleVideo(newCamState);
+    setCamOn(newCamState);
+    
+    // ✅ Broadcast media state to other participants
+    socket.emit("conference:media-update", {
+      conferenceId,
+      micOn,
+      camOn: newCamState,
+    });
+    
+  }, [localStream, micOn, camOn, conferenceId, socket, showNotification]);
 
   const handleRaiseHand = useCallback(() => {
     if (!handRaised) {
@@ -142,16 +170,6 @@ export default function ConferenceRoom() {
     }
     setHandRaised(v => !v);
   }, [handRaised, conferenceId]);
-
-  const handleToggleCam = useCallback(() => {
-    if (!localStream) {
-      showNotification("No camera available", "error");
-      return;
-    }
-    
-    toggleVideo(!camOn);
-    setCamOn((v) => !v);
-  }, [localStream, camOn, showNotification]);
 
   const handleScreenShare = useCallback(async () => {
     try {
@@ -180,20 +198,19 @@ export default function ConferenceRoom() {
     }
   }, [sharingScreen, localStream, showNotification]);
 
-const joinedRoomRef = useRef(false);
+  const joinedRoomRef = useRef(false);
 
-useEffect(() => {
-  if (!conferenceId || joinedRoomRef.current) return;
-  joinedRoomRef.current = true;
+  useEffect(() => {
+    if (!conferenceId || joinedRoomRef.current) return;
+    joinedRoomRef.current = true;
 
-  joinConferenceRoom(conferenceId);
+    joinConferenceRoom(conferenceId);
 
-  return () => {
-    joinedRoomRef.current = false;
-    socket?.emit("conference:leave", { conferenceId });
-  };
-}, [conferenceId, socket]);
-
+    return () => {
+      joinedRoomRef.current = false;
+      socket?.emit("conference:leave", { conferenceId });
+    };
+  }, [conferenceId, socket]);
 
   useEffect(() => {
     if (!localStream || !speakerModeEnabled || !activeSpeaker) return;
@@ -245,7 +262,7 @@ useEffect(() => {
     return cleanup;
   }, [localStream, speakerModeEnabled, conferenceId, socket, activeSpeaker]);
 
-  // 🔹 Step 2: Add audio analyser effect
+  // 🔹 Audio analyser for mic level
   useEffect(() => {
     if (!localStream) return;
 
@@ -305,9 +322,8 @@ useEffect(() => {
     }
   }, []);
 
-  // 🟢 Step 2 — modify the BIG useEffect
+  // 🟢 Main conference initialization useEffect
   useEffect(() => {
-    // 🟢 Step 2 — LOCK execution
     if (conferenceStartedRef.current) return;
     conferenceStartedRef.current = true;
     
@@ -553,6 +569,22 @@ useEffect(() => {
       showNotification("You have been removed from the conference by the admin", "error");
     };
 
+    // ✅ NEW: Handle media state updates from other participants
+    const handleMediaUpdate = ({ socketId, micOn, camOn }) => {
+      if (!mounted()) return;
+
+      // 🔒 Ignore self updates — local state is source of truth
+      if (socketId === socket.id) return;
+
+      setParticipants(prev =>
+        prev.map(p =>
+          p.socketId === socketId
+            ? { ...p, micOn, camOn }
+            : p
+        )
+      );
+    };
+
     socket.on("conference:user-joined", handleUserJoined);
     socket.on("conference:offer", handleOffer);
     socket.on("conference:answer", handleAnswer);
@@ -571,6 +603,9 @@ useEffect(() => {
     socket.on("conference:force-mute", handleForceMute);
     socket.on("conference:force-camera-off", handleForceCameraOff);
     socket.on("conference:removed-by-admin", handleRemovedByAdmin);
+    
+    // ✅ Listen for media updates
+    socket.on("conference:media-update", handleMediaUpdate);
 
     return () => {
       mountedRef.current = false;      
@@ -595,10 +630,12 @@ useEffect(() => {
       socket.off("conference:force-mute", handleForceMute);
       socket.off("conference:force-camera-off", handleForceCameraOff);
       socket.off("conference:removed-by-admin", handleRemovedByAdmin);
+      
+      // ✅ Clean up media update listener
+      socket.off("conference:media-update", handleMediaUpdate);
     };
-  // 🟢 Step 3 — Reduce dependency list (CRITICAL)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conferenceId, socket, currentUser, teamId]); // ✅ Only lifecycle dependencies
+  }, [conferenceId, socket, currentUser, teamId]);
   
   const handleAdminAction = useCallback((action, targetSocketId) => {
     adminAction({
@@ -1060,78 +1097,68 @@ useEffect(() => {
         }}>
           <Tooltip title={micOn ? "Mute Microphone" : "Unmute Microphone"}>
             <span>
-<IconButton
-  onClick={handleToggleMic}
-  disabled={speakerModeEnabled && activeSpeaker !== socket.id && !isAdminOrManager}
-  sx={{
-    position: "relative",
-    backgroundColor: "#1e1e1e",
+              <IconButton
+                onClick={handleToggleMic}
+                disabled={speakerModeEnabled && activeSpeaker !== socket.id && !isAdminOrManager}
+                sx={{
+                  position: "relative",
+                  backgroundColor: "#1e1e1e",
+                  color: micOn
+                    ? `rgba(0, 230, 118, ${Math.min(micLevel / 60, 1)})`
+                    : "#9e9e9e",
+                  border:
+                    micOn && micLevel > 12
+                      ? "1px solid #00e676"
+                      : "1px solid #444",
+                  boxShadow:
+                    micOn && micLevel > 15
+                      ? "0 0 14px rgba(0, 230, 118, 0.8)"
+                      : "none",
+                  transition: "all 0.12s ease-out",
+                  "&:hover": { backgroundColor: "#2a2a2a" },
+                  "&.Mui-disabled": {
+                    backgroundColor: "#222",
+                    color: "#555",
+                    boxShadow: "none",
+                  },
+                }}
+              >
+                <MicIcon />
 
-    // 🎤 mic reacts to voice
-    color: micOn
-      ? `rgba(0, 230, 118, ${Math.min(micLevel / 60, 1)})`
-      : "#9e9e9e",
-
-    border:
-      micOn && micLevel > 12
-        ? "1px solid #00e676"
-        : "1px solid #444",
-
-    boxShadow:
-      micOn && micLevel > 15
-        ? "0 0 14px rgba(0, 230, 118, 0.8)"
-        : "none",
-
-    transition: "all 0.12s ease-out",
-
-    "&:hover": { backgroundColor: "#2a2a2a" },
-    "&.Mui-disabled": {
-      backgroundColor: "#222",
-      color: "#555",
-      boxShadow: "none",
-    },
-  }}
->
-  <MicIcon />
-
-  {!micOn && (
-    <Box
-      sx={{
-        position: "absolute",
-        width: "140%",
-        height: 2,
-        background: "#ff5252",
-        transform: "rotate(-45deg)",
-      }}
-    />
-  )}
-</IconButton>
-
-
+                {!micOn && (
+                  <Box
+                    sx={{
+                      position: "absolute",
+                      width: "140%",
+                      height: 2,
+                      background: "#ff5252",
+                      transform: "rotate(-45deg)",
+                    }}
+                  />
+                )}
+              </IconButton>
             </span>
           </Tooltip>
 
-    
           <Tooltip title={camOn ? "Turn Camera Off" : "Turn Camera On"}>
-  <IconButton
-    onClick={handleToggleCam}
-    disabled={!localStream}
-    sx={{
-      background: camOn ? "#1565c0" : "#424242",
-      color: "white",
-      "&:hover": {
-        background: camOn ? "#0d47a1" : "#303030",
-      },
-      "&.Mui-disabled": {
-        background: "#333",
-        color: "#666",
-      },
-    }}
-  >
-    {camOn ? <VideocamIcon /> : <VideocamOffIcon />}
-  </IconButton>
-</Tooltip>
-
+            <IconButton
+              onClick={handleToggleCam}
+              disabled={!localStream}
+              sx={{
+                background: camOn ? "#1565c0" : "#424242",
+                color: "white",
+                "&:hover": {
+                  background: camOn ? "#0d47a1" : "#303030",
+                },
+                "&.Mui-disabled": {
+                  background: "#333",
+                  color: "#666",
+                },
+              }}
+            >
+              {camOn ? <VideocamIcon /> : <VideocamOffIcon />}
+            </IconButton>
+          </Tooltip>
 
           <Tooltip title={sharingScreen ? "Stop Screen Share" : "Start Screen Share"}>
             <IconButton
