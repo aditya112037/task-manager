@@ -1,5 +1,5 @@
 // TeamDetails.jsx - Fixed with Complete Socket-Only Conference System
-import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Box,
   Typography,
@@ -32,7 +32,6 @@ import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
-import ExitToAppIcon from "@mui/icons-material/ExitToApp";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import GroupsIcon from "@mui/icons-material/Groups";
@@ -670,7 +669,7 @@ export default function TeamDetails() {
           prev.map(t => t._id === editingTask._id ? updatedTask : t)
         );
         
-        const res = await teamTasksAPI.updateTask(editingTask._id, data);
+        await teamTasksAPI.updateTask(editingTask._id, data);
         showSnack("Task updated", "success");
       } else {
         // Optimistic update for create

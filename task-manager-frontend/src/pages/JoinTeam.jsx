@@ -30,7 +30,7 @@ const JoinTeam = () => {
   setError("");
 
   try {
-    const res = await teamsAPI.joinTeam(code);
+    await teamsAPI.joinTeam(code);
     navigate(`/teams/${code}`);
   } catch (err) {
     setError("Failed to join team.");
