@@ -90,11 +90,17 @@ export default function ConferenceRoom() {
   const [speakerModeEnabled, setSpeakerModeEnabled] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: "", severity: "info" });
 
+  // 🟢 Step 1 — LOCK conference join to ONE execution
+  const conferenceStartedRef = useRef(false);
+  const mountedRef = useRef(true);
+
   const showNotification = useCallback((message, severity = "info") => {
     setNotification({ open: true, message, severity });
   }, []);
 
   const handleLeave = useCallback(() => {
+    conferenceStartedRef.current = false;
+
     if (socket) {
       socket.emit("conference:leave", { conferenceId });
     }
@@ -172,19 +178,20 @@ export default function ConferenceRoom() {
     }
   }, [sharingScreen, localStream, showNotification]);
 
-  useEffect(() => {
-    if (!conferenceId) return;
-    
-    console.log("Joining conference room:", conferenceId);
-    joinConferenceRoom(conferenceId);
-    
-    return () => {
-      console.log("Leaving conference room:", conferenceId);
-      if (socket) {
-        socket.emit("conference:leave", { conferenceId });
-      }
-    };
-  }, [conferenceId, socket]);
+const joinedRoomRef = useRef(false);
+
+useEffect(() => {
+  if (!conferenceId || joinedRoomRef.current) return;
+  joinedRoomRef.current = true;
+
+  joinConferenceRoom(conferenceId);
+
+  return () => {
+    joinedRoomRef.current = false;
+    socket?.emit("conference:leave", { conferenceId });
+  };
+}, [conferenceId, socket]);
+
 
   useEffect(() => {
     if (!localStream || !speakerModeEnabled || !activeSpeaker) return;
@@ -264,8 +271,14 @@ export default function ConferenceRoom() {
     }
   }, []);
 
+  // 🟢 Step 2 — modify the BIG useEffect
   useEffect(() => {
-    let mounted = true;
+    // 🟢 Step 2 — LOCK execution
+    if (conferenceStartedRef.current) return;
+    conferenceStartedRef.current = true;
+    
+    mountedRef.current = true;
+    const mounted = () => mountedRef.current;
 
     const start = async () => {
       try {
@@ -282,7 +295,7 @@ export default function ConferenceRoom() {
         let stream = null;
         try {
           stream = await initMedia();
-          if (!mounted) return;
+          if (!mounted()) return;
 
           setLocalStream(stream);
           setLocalStreamState(stream);
@@ -297,7 +310,7 @@ export default function ConferenceRoom() {
         }
 
         const confData = await fetchConferenceData(teamId);
-        if (!mounted) return;
+        if (!mounted()) return;
         
         if (confData && currentUser) {
           const isCreator = confData.createdBy === currentUser._id;
@@ -318,7 +331,7 @@ export default function ConferenceRoom() {
         
         try {
           const confData = await fetchConferenceData(teamId);
-          if (mounted) {
+          if (mounted()) {
             if (confData && currentUser) {
               const isCreator = confData.createdBy === currentUser._id;
               setIsAdminOrManager(isCreator);
@@ -337,7 +350,7 @@ export default function ConferenceRoom() {
     start();
 
     const handleUserJoined = async ({ userId, userName, socketId }) => {
-      if (!mounted) return;
+      if (!mounted()) return;
       
       if (!localStream) {
         console.log("No local stream, skipping peer creation for", socketId);
@@ -347,7 +360,7 @@ export default function ConferenceRoom() {
       const pc = createPeer(userId, socket, localStream);
 
       pc.ontrack = (e) => {
-        if (!mounted) return;
+        if (!mounted()) return;
         setRemoteStreams((prev) => ({
           ...prev,
           [socketId]: e.streams[0],
@@ -364,12 +377,12 @@ export default function ConferenceRoom() {
     };
 
     const handleOffer = async ({ from, offer }) => {
-      if (!mounted) return;
+      if (!mounted()) return;
       
       const pc = createPeer(from, socket, localStream);
 
       pc.ontrack = (e) => {
-        if (!mounted) return;
+        if (!mounted()) return;
         setRemoteStreams((prev) => ({
           ...prev,
           [from]: e.streams[0],
@@ -387,7 +400,7 @@ export default function ConferenceRoom() {
     };
 
     const handleAnswer = async ({ from, answer }) => {
-      if (!mounted) return;
+      if (!mounted()) return;
       
       const pc = createPeer(from, socket, localStream);
       try {
@@ -398,7 +411,7 @@ export default function ConferenceRoom() {
     };
 
     const handleIceCandidate = ({ from, candidate }) => {
-      if (!mounted) return;
+      if (!mounted()) return;
       
       const pc = createPeer(from, socket, localStream);
       try {
@@ -409,7 +422,7 @@ export default function ConferenceRoom() {
     };
 
     const handleUserLeft = ({ userId, socketId }) => {
-      if (!mounted) return;
+      if (!mounted()) return;
       removePeer(userId);
       setRemoteStreams((prev) => {
         const copy = { ...prev };
@@ -424,22 +437,22 @@ export default function ConferenceRoom() {
     };
 
     const handleParticipantsUpdate = ({ users }) => {
-      if (!mounted) return;
+      if (!mounted()) return;
       setParticipants(users);
     };
 
     const handleHandsUpdated = ({ raisedHands }) => {
-      if (!mounted) return;
+      if (!mounted()) return;
       setRaisedHands(raisedHands);
     };
 
     const handleConferenceEnded = () => {
-      if (!mounted) return;
+      if (!mounted()) return;
       handleLeave();
     };
 
     const handleActiveSpeakerUpdate = ({ socketId }) => {
-      if (!mounted) return;
+      if (!mounted()) return;
       console.log("Active speaker updated:", socketId);
       setActiveSpeaker(socketId);
       
@@ -449,7 +462,7 @@ export default function ConferenceRoom() {
     };
 
     const handleSpeakerModeToggled = ({ enabled }) => {
-      if (!mounted) return;
+      if (!mounted()) return;
       console.log("Speaker mode toggled:", enabled);
       setSpeakerModeEnabled(enabled);
       
@@ -461,7 +474,7 @@ export default function ConferenceRoom() {
     };
 
     const handleSpeakerAssigned = ({ socketId }) => {
-      if (!mounted) return;
+      if (!mounted()) return;
       console.log("Speaker assigned by admin:", socketId);
       setActiveSpeaker(socketId);
       
@@ -471,7 +484,7 @@ export default function ConferenceRoom() {
     };
 
     const handleUserLeftEvent = ({ socketId }) => {
-      if (!mounted) return;
+      if (!mounted()) return;
       
       if (activeSpeaker === socketId) {
         console.log("Active speaker left via user-left event");
@@ -480,7 +493,7 @@ export default function ConferenceRoom() {
     };
 
     const handleForceMute = () => {
-      if (!mounted) return;
+      if (!mounted()) return;
       console.log("Admin forced mute");
       if (localStream) {
         toggleAudio(false);
@@ -490,7 +503,7 @@ export default function ConferenceRoom() {
     };
 
     const handleForceCameraOff = () => {
-      if (!mounted) return;
+      if (!mounted()) return;
       console.log("Admin turned off camera");
       if (localStream) {
         toggleVideo(false);
@@ -500,7 +513,7 @@ export default function ConferenceRoom() {
     };
 
     const handleRemovedByAdmin = () => {
-      if (!mounted) return;
+      if (!mounted()) return;
       console.log("Removed by admin");
       handleLeave();
       showNotification("You have been removed from the conference by the admin", "error");
@@ -526,7 +539,7 @@ export default function ConferenceRoom() {
     socket.on("conference:removed-by-admin", handleRemovedByAdmin);
 
     return () => {
-      mounted = false;
+      mountedRef.current = false;      
       leaveConference(conferenceId);
       stopSpeakerDetection();
       
@@ -549,8 +562,9 @@ export default function ConferenceRoom() {
       socket.off("conference:force-camera-off", handleForceCameraOff);
       socket.off("conference:removed-by-admin", handleRemovedByAdmin);
     };
-  }, [conferenceId, socket, currentUser, activeSpeaker, handleLeave, localStream, teamId, fetchConferenceData, showNotification]);
-
+  // 🟢 Step 3 — Reduce dependency list (CRITICAL)
+  }, [conferenceId, socket, currentUser, teamId]); // ✅ Only lifecycle dependencies
+  
   const handleAdminAction = useCallback((action, targetSocketId) => {
     adminAction({
       action,
