@@ -1060,26 +1060,40 @@ useEffect(() => {
         }}>
           <Tooltip title={micOn ? "Mute Microphone" : "Unmute Microphone"}>
             <span>
-              <IconButton
+<IconButton
   onClick={handleToggleMic}
   disabled={speakerModeEnabled && activeSpeaker !== socket.id && !isAdminOrManager}
   sx={{
     position: "relative",
-    backgroundColor: micOn ? "#1e1e1e" : "#2b2b2b",
-    color: micOn ? "#00e676" : "#9e9e9e",
-    border: micOn ? "1px solid #00e676" : "1px solid #444",
-    "&:hover": {
-      backgroundColor: "#333",
-    },
+    backgroundColor: "#1e1e1e",
+
+    // 🎤 mic reacts to voice
+    color: micOn
+      ? `rgba(0, 230, 118, ${Math.min(micLevel / 60, 1)})`
+      : "#9e9e9e",
+
+    border:
+      micOn && micLevel > 12
+        ? "1px solid #00e676"
+        : "1px solid #444",
+
+    boxShadow:
+      micOn && micLevel > 15
+        ? "0 0 14px rgba(0, 230, 118, 0.8)"
+        : "none",
+
+    transition: "all 0.12s ease-out",
+
+    "&:hover": { backgroundColor: "#2a2a2a" },
     "&.Mui-disabled": {
       backgroundColor: "#222",
       color: "#555",
+      boxShadow: "none",
     },
   }}
 >
   <MicIcon />
 
-  {/* 🔴 Slash when muted */}
   {!micOn && (
     <Box
       sx={{
@@ -1092,6 +1106,7 @@ useEffect(() => {
     />
   )}
 </IconButton>
+
 
             </span>
           </Tooltip>
