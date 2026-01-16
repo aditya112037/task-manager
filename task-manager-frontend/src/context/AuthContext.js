@@ -86,7 +86,7 @@ export const AuthProvider = ({ children }) => {
     return () => {
       cleanupSocket();
     };
-  }, [user]); // Re-run when user changes
+  }, [user, initializeSocket]); // Re-run when user changes
 
   /* ---------------------------------------------------
      INITIAL AUTH CHECK (HYDRATE + VERIFY)
@@ -127,7 +127,7 @@ export const AuthProvider = ({ children }) => {
     };
 
     verifyAuthAndSetupSocket();
-  }, []);
+  }, [handleLogout]);
 
   /* ---------------------------------------------------
      LOGIN

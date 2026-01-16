@@ -1,10 +1,10 @@
 import React from "react";
 import {
-  Paper,
+  
   Typography,
   Box,
   LinearProgress,
-  Stack,
+  
 } from "@mui/material";
 import { styles } from "./overview.styles";
 
