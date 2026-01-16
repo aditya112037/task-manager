@@ -4,12 +4,15 @@ import {
   Stack,
   Tooltip,
   Avatar,
+  IconButton,
 } from "@mui/material";
 import MicIcon from "@mui/icons-material/Mic";
 import MicOffIcon from "@mui/icons-material/MicOff";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import VideocamOffIcon from "@mui/icons-material/VideocamOff";
 import PanToolIcon from "@mui/icons-material/PanTool";
+import CloseIcon from "@mui/icons-material/Close";
+import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 
 import AdminPanel from "./AdminPanel";
 
