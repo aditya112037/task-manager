@@ -563,6 +563,7 @@ useEffect(() => {
       socket.off("conference:removed-by-admin", handleRemovedByAdmin);
     };
   // 🟢 Step 3 — Reduce dependency list (CRITICAL)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conferenceId, socket, currentUser, teamId]); // ✅ Only lifecycle dependencies
   
   const handleAdminAction = useCallback((action, targetSocketId) => {
