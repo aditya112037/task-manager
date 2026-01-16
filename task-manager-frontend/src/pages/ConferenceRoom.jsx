@@ -32,6 +32,7 @@ import StopScreenShareIcon from "@mui/icons-material/StopScreenShare";
 import ClearAllIcon from "@mui/icons-material/ClearAll";
 import PersonIcon from "@mui/icons-material/Person";
 import PresentToAllIcon from "@mui/icons-material/PresentToAll";
+import VideocamOffIcon from "@mui/icons-material/VideocamOff"
 
 import { getSocket, joinConferenceRoom } from "../services/socket";
 import {
