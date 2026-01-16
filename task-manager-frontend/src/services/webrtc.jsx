@@ -145,23 +145,28 @@ export const createPeer = (userId, socket) => {
     };
     
     // Connection state handling
-    pc.onconnectionstatechange = () => {
-      console.log(`Connection state for ${userId}: ${pc.connectionState}`);
-      
-      switch(pc.connectionState) {
-        case 'failed':
-          console.error(`Connection with ${userId} failed`);
-          removePeer(userId);
-          default:
-          break;
-        case 'disconnected':
-          console.warn(`Connection with ${userId} disconnected`);
-          break;
-        case 'connected':
-          console.log(`Connected to ${userId}`);
-          break;
-      }
-    };
+pc.onconnectionstatechange = () => {
+  console.log(`Connection state for ${userId}: ${pc.connectionState}`);
+
+  switch (pc.connectionState) {
+    case "failed":
+      console.error(`Connection with ${userId} failed`);
+      removePeer(userId);
+      break;
+
+    case "disconnected":
+      console.warn(`Connection with ${userId} disconnected`);
+      break;
+
+    case "connected":
+      console.log(`Connected to ${userId}`);
+      break;
+
+    default:
+      break;
+  }
+};
+
     
     // ICE connection state
     pc.oniceconnectionstatechange = () => {
