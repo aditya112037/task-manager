@@ -67,6 +67,7 @@ const LAYOUT = {
 
 export default function ConferenceRoom() {
   const { conferenceId } = useParams();
+  const teamId = conferenceId?.split("-")[0];
   const navigate = useNavigate();
   const socket = getSocket();
   const { user: currentUser } = useAuth();
