@@ -16,6 +16,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import PanToolIcon from "@mui/icons-material/PanTool";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import VolumeOffIcon from "@mui/icons-material/VolumeOff";
+import VideocamIcon from "@mui/icons-material/Videocam";
 import VideocamOffIcon from "@mui/icons-material/VideocamOff";
 import HandshakeIcon from "@mui/icons-material/Handshake";
 import PersonRemoveIcon from "@mui/icons-material/PersonRemove";
