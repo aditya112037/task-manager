@@ -90,6 +90,9 @@ export default function ConferenceRoom() {
   const [speakerModeEnabled, setSpeakerModeEnabled] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: "", severity: "info" });
 
+  // 🔹 Step 1: Add mic level state
+  const [micLevel, setMicLevel] = useState(0);
+
   // 🟢 Step 1 — LOCK conference join to ONE execution
   const conferenceStartedRef = useRef(false);
   const mountedRef = useRef(true);
@@ -242,6 +245,38 @@ useEffect(() => {
     
     return cleanup;
   }, [localStream, speakerModeEnabled, conferenceId, socket, activeSpeaker]);
+
+  // 🔹 Step 2: Add audio analyser effect
+  useEffect(() => {
+    if (!localStream) return;
+
+    const audioCtx = new AudioContext();
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+
+    const source = audioCtx.createMediaStreamSource(localStream);
+    source.connect(analyser);
+
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+    let rafId;
+
+    const update = () => {
+      analyser.getByteFrequencyData(dataArray);
+      const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+      setMicLevel(avg);
+      rafId = requestAnimationFrame(update);
+    };
+
+    update();
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      analyser.disconnect();
+      source.disconnect();
+      audioCtx.close();
+    };
+  }, [localStream]);
 
   const fetchConferenceData = useCallback(async (teamId) => {
     try {
@@ -1045,6 +1080,31 @@ useEffect(() => {
               </IconButton>
             </span>
           </Tooltip>
+
+          {/* 🔹 Step 3: Add mic level indicator next to mic button */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+            <Tooltip title={`Mic level: ${micLevel.toFixed(1)}`}>
+              <Box
+                sx={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: "50%",
+                  background: micLevel > 15 ? "#00e676" : "#555",
+                  transition: "background 0.1s",
+                  boxShadow: micLevel > 15 ? "0 0 4px #00e676" : "none",
+                }}
+              />
+            </Tooltip>
+            <Typography 
+              variant="caption" 
+              sx={{ 
+                color: micLevel > 15 ? "#00e676" : "#aaa",
+                minWidth: "30px"
+              }}
+            >
+              {micLevel.toFixed(0)}
+            </Typography>
+          </Box>
 
           <Tooltip title={camOn ? "Turn Camera Off" : "Turn Camera On"}>
             <IconButton
