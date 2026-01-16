@@ -1,5 +1,5 @@
 // AuthContext.jsx
-import React, { createContext, useState, useContext, useEffect, useRef } from "react";
+import React, { createContext, useState, useContext, useEffect, useRef, useCallback } from "react";
 import { authAPI } from "../services/api";
 import { initSocket, connectSocket, disconnectSocket, getSocket } from "../services/socket";
 
@@ -23,7 +23,7 @@ export const AuthProvider = ({ children }) => {
      🚨 CRITICAL: SOCKET AUTH INITIALIZATION
      Backend depends on socket.user = { _id, token }
   --------------------------------------------------- */
-  const initializeSocket = async () => {
+  const initializeSocket = useCallback(async () => {
     const token = localStorage.getItem("token");
     const userData = user || JSON.parse(localStorage.getItem("user") || "null");
     
@@ -51,19 +51,36 @@ export const AuthProvider = ({ children }) => {
       socketInitializedRef.current = false;
       setSocketConnected(false);
     }
-  };
+  }, [user]); // Add user as dependency since we use it inside
 
   /* ---------------------------------------------------
      🚨 CRITICAL: SOCKET CLEANUP
   --------------------------------------------------- */
-  const cleanupSocket = () => {
+  const cleanupSocket = useCallback(() => {
     if (socketInitializedRef.current) {
       console.log("🔌 Cleaning up socket connection...");
       disconnectSocket();
       socketInitializedRef.current = false;
       setSocketConnected(false);
     }
-  };
+  }, []); // No dependencies needed
+
+  /* ---------------------------------------------------
+     LOGOUT
+  --------------------------------------------------- */
+  const handleLogout = useCallback(() => {
+    // Clean up socket first
+    cleanupSocket();
+    
+    // Clear auth data
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    setUser(null);
+    setSocketConnected(false);
+    
+    // Redirect
+    window.location.href = "/login";
+  }, [cleanupSocket]); // Add cleanupSocket as dependency
 
   /* ---------------------------------------------------
      🚨 CRITICAL: RE-INITIALIZE SOCKET WHEN USER CHANGES
@@ -86,7 +103,7 @@ export const AuthProvider = ({ children }) => {
     return () => {
       cleanupSocket();
     };
-  }, [user, initializeSocket]); // Re-run when user changes
+  }, [user, initializeSocket, cleanupSocket]);
 
   /* ---------------------------------------------------
      INITIAL AUTH CHECK (HYDRATE + VERIFY)
@@ -132,7 +149,7 @@ export const AuthProvider = ({ children }) => {
   /* ---------------------------------------------------
      LOGIN
   --------------------------------------------------- */
-  const login = async (email, password) => {
+  const login = useCallback(async (email, password) => {
     try {
       const res = await authAPI.login({ email, password });
       const { token, ...userData } = res.data;
@@ -147,12 +164,12 @@ export const AuthProvider = ({ children }) => {
       console.error("Login failed:", error);
       throw error;
     }
-  };
+  }, []);
 
   /* ---------------------------------------------------
      REGISTER
   --------------------------------------------------- */
-  const register = async (name, email, password) => {
+  const register = useCallback(async (name, email, password) => {
     try {
       const res = await authAPI.register({ name, email, password });
       const { token, ...userData } = res.data;
@@ -167,50 +184,34 @@ export const AuthProvider = ({ children }) => {
       console.error("Registration failed:", error);
       throw error;
     }
-  };
-
-  /* ---------------------------------------------------
-     LOGOUT
-  --------------------------------------------------- */
-  const handleLogout = () => {
-    // Clean up socket first
-    cleanupSocket();
-    
-    // Clear auth data
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    setUser(null);
-    setSocketConnected(false);
-    
-    // Redirect
-    window.location.href = "/login";
-  };
+  }, []);
 
   /* ---------------------------------------------------
      UPDATE USER PROFILE
   --------------------------------------------------- */
-  const updateUser = (updates) => {
+  const updateUser = useCallback((updates) => {
     setUser(prev => {
+      if (!prev) return prev;
       const updated = { ...prev, ...updates };
       localStorage.setItem("user", JSON.stringify(updated));
       return updated;
     });
-  };
+  }, []);
 
   /* ---------------------------------------------------
      CHECK AUTH STATUS
   --------------------------------------------------- */
-  const isAuthenticated = () => {
+  const isAuthenticated = useCallback(() => {
     return !!localStorage.getItem("token") && !!user;
-  };
+  }, [user]);
 
   /* ---------------------------------------------------
      CHECK SOCKET STATUS
   --------------------------------------------------- */
-  const checkSocketConnected = () => {
+  const checkSocketConnected = useCallback(() => {
     const socket = getSocket();
     return socket && socket.connected;
-  };
+  }, []);
 
   const value = {
     user,
