@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from "react";
+import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { 
   Box, 
   Typography, 
@@ -86,11 +86,91 @@ export default function ConferenceRoom() {
   const [sharingScreen, setSharingScreen] = useState(false);
   const [localStream, setLocalStreamState] = useState(null);
   const [isAdminOrManager, setIsAdminOrManager] = useState(false);
-  const [_conferenceData, setConferenceData] = useState(null);
   const [activeSpeaker, setActiveSpeaker] = useState(null);
-  const [_isSpeaking, setIsSpeaking] = useState(false);
   const [speakerModeEnabled, setSpeakerModeEnabled] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: "", severity: "info" });
+
+  const showNotification = useCallback((message, severity = "info") => {
+    setNotification({ open: true, message, severity });
+  }, []);
+
+  const handleLeave = useCallback(() => {
+    if (socket) {
+      socket.emit("conference:leave", { conferenceId });
+    }
+    
+    leaveConference(conferenceId);
+    stopSpeakerDetection();
+    
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
+    }
+    
+    setRemoteStreams({});
+    
+    navigate(-1);
+  }, [socket, conferenceId, localStream, navigate]);
+
+  const handleToggleMic = useCallback(() => {
+    if (speakerModeEnabled && activeSpeaker !== socket.id && !isAdminOrManager) {
+      showNotification("Only the active speaker can unmute", "warning");
+      return;
+    }
+    
+    if (!localStream) {
+      showNotification("No microphone available", "error");
+      return;
+    }
+    
+    toggleAudio(!micOn);
+    setMicOn((v) => !v);
+  }, [speakerModeEnabled, activeSpeaker, socket.id, isAdminOrManager, localStream, micOn, showNotification]);
+
+  const handleRaiseHand = useCallback(() => {
+    if (!handRaised) {
+      raiseHand(conferenceId);
+    } else {
+      lowerHand(conferenceId);
+    }
+    setHandRaised(v => !v);
+  }, [handRaised, conferenceId]);
+
+  const handleToggleCam = useCallback(() => {
+    if (!localStream) {
+      showNotification("No camera available", "error");
+      return;
+    }
+    
+    toggleVideo(!camOn);
+    setCamOn((v) => !v);
+  }, [localStream, camOn, showNotification]);
+
+  const handleScreenShare = useCallback(async () => {
+    try {
+      if (!sharingScreen) {
+        await startScreenShare(localVideoRef);
+        setLayout(LAYOUT.PRESENTATION);
+        setScreenSharer("me");
+      } else {
+        await stopScreenShare(localVideoRef);
+        
+        setMicOn(true);
+        setCamOn(true);
+        
+        if (localStream) {
+          localStream.getAudioTracks().forEach(t => (t.enabled = true));
+          localStream.getVideoTracks().forEach(t => (t.enabled = true));
+        }
+        
+        setLayout(LAYOUT.GRID);
+        setScreenSharer(null);
+      }
+      setSharingScreen((v) => !v);
+    } catch (error) {
+      console.error("Screen share error:", error);
+      showNotification("Screen share failed", "error");
+    }
+  }, [sharingScreen, localStream, showNotification]);
 
   useEffect(() => {
     if (!conferenceId) return;
@@ -105,10 +185,6 @@ export default function ConferenceRoom() {
       }
     };
   }, [conferenceId, socket]);
-
-  const showNotification = (message, severity = "info") => {
-    setNotification({ open: true, message, severity });
-  };
 
   useEffect(() => {
     if (!localStream || !speakerModeEnabled || !activeSpeaker) return;
@@ -142,14 +218,12 @@ export default function ConferenceRoom() {
           conferenceId,
           speaking: false,
         });
-        setIsSpeaking(false);
         return;
       }
       
       const canTakeOverSpeaker = !activeSpeaker || activeSpeaker === socket.id;
       
       if (canTakeOverSpeaker) {
-        setIsSpeaking(true);
         socket.emit("conference:speaking", {
           conferenceId,
           speaking: true,
@@ -161,6 +235,34 @@ export default function ConferenceRoom() {
     
     return cleanup;
   }, [localStream, speakerModeEnabled, conferenceId, socket, activeSpeaker]);
+
+  const fetchConferenceData = useCallback(async (teamId) => {
+    try {
+      const apiBase =
+        process.env.REACT_APP_API_URL || "http://localhost:5000";
+
+      const response = await fetch(
+        `${apiBase}/api/teams/${teamId}/conference`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+          credentials: "include",
+        }
+      );
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Failed to fetch conference state");
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching conference data:", error);
+      return null;
+    }
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -197,8 +299,6 @@ export default function ConferenceRoom() {
         const confData = await fetchConferenceData(teamId);
         if (!mounted) return;
         
-        setConferenceData(confData);
-        
         if (confData && currentUser) {
           const isCreator = confData.createdBy === currentUser._id;
           setIsAdminOrManager(isCreator);
@@ -219,8 +319,6 @@ export default function ConferenceRoom() {
         try {
           const confData = await fetchConferenceData(teamId);
           if (mounted) {
-            setConferenceData(confData);
-            
             if (confData && currentUser) {
               const isCreator = confData.createdBy === currentUser._id;
               setIsAdminOrManager(isCreator);
@@ -451,70 +549,40 @@ export default function ConferenceRoom() {
       socket.off("conference:force-camera-off", handleForceCameraOff);
       socket.off("conference:removed-by-admin", handleRemovedByAdmin);
     };
-  }, [conferenceId, socket, currentUser, activeSpeaker, handleLeave, localStream, teamId,]);
+  }, [conferenceId, socket, currentUser, activeSpeaker, handleLeave, localStream, teamId, fetchConferenceData, showNotification]);
 
-const fetchConferenceData = async (teamId) => {
-  try {
-    const apiBase =
-      process.env.REACT_APP_API_URL || "http://localhost:5000";
-
-    const response = await fetch(
-      `${apiBase}/api/teams/${teamId}/conference`,
-      {
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token")}`,
-        },
-        credentials: "include",
-      }
-    );
-
-    if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.error || "Failed to fetch conference state");
-    }
-
-    return await response.json();
-  } catch (error) {
-    console.error("Error fetching conference data:", error);
-    return null;
-  }
-};
-
-
-
-  const handleAdminAction = (action, targetSocketId) => {
+  const handleAdminAction = useCallback((action, targetSocketId) => {
     adminAction({
       action,
       targetSocketId,
       conferenceId,
       userId: currentUser._id,
     });
-  };
+  }, [conferenceId, currentUser]);
 
-  const handleClearAllHands = () => {
+  const handleClearAllHands = useCallback(() => {
     adminAction({
       action: "clear-hands",
       conferenceId,
       userId: currentUser._id,
     });
-  };
+  }, [conferenceId, currentUser]);
 
-  const handleOpenAdminMenu = (event, participantId) => {
+  const handleOpenAdminMenu = useCallback((event, participantId) => {
     setAdminMenuAnchor(event.currentTarget);
     setSelectedParticipantId(participantId);
-  };
+  }, []);
 
-  const handleCloseAdminMenu = () => {
+  const handleCloseAdminMenu = useCallback(() => {
     setAdminMenuAnchor(null);
     setSelectedParticipantId(null);
-  };
+  }, []);
 
-  const toggleParticipantsPanel = () => {
+  const toggleParticipantsPanel = useCallback(() => {
     setParticipantsPanelOpen(!participantsPanelOpen);
-  };
+  }, [participantsPanelOpen]);
 
-  const toggleSpeakerMode = () => {
+  const toggleSpeakerMode = useCallback(() => {
     const newMode = !speakerModeEnabled;
     setSpeakerModeEnabled(newMode);
     
@@ -536,115 +604,34 @@ const fetchConferenceData = async (teamId) => {
     });
     
     showNotification(`Speaker mode ${newMode ? "enabled" : "disabled"}`, "info");
-  };
+  }, [speakerModeEnabled, localStream, conferenceId, socket, showNotification]);
 
-  const setAsSpeaker = (socketId) => {
+  const setAsSpeaker = useCallback((socketId) => {
     socket.emit("conference:set-speaker", {
       conferenceId,
       targetSocketId: socketId,
     });
     setActiveSpeaker(socketId);
     showNotification(`Set as active speaker`, "success");
-  };
+  }, [conferenceId, socket, showNotification]);
 
-  const clearSpeaker = () => {
+  const clearSpeaker = useCallback(() => {
     setActiveSpeaker(null);
     socket.emit("conference:clear-speaker", { conferenceId });
     showNotification("Speaker cleared", "info");
-  };
+  }, [conferenceId, socket, showNotification]);
 
-  const toggleLayout = (newLayout) => {
+  const toggleLayout = useCallback((newLayout) => {
     setLayout(newLayout);
-  };
+  }, []);
 
   const allCameraStreams = useMemo(() => {
     return Object.entries(remoteStreams).filter(([socketId, stream]) => stream);
   }, [remoteStreams]);
 
-  const _currentParticipant = participants.find(p => p.userId === currentUser?._id);
-  const _socketId = socket.id;
-
   const activeSpeakerParticipant = participants.find(p => p.socketId === activeSpeaker);
   const activeSpeakerName = activeSpeakerParticipant?.userName || 
     (activeSpeaker === socket.id ? "You" : `User ${activeSpeaker?.slice(0, 4)}`);
-
-  const handleLeave = () => {
-    if (socket) {
-      socket.emit("conference:leave", { conferenceId });
-    }
-    
-    leaveConference(conferenceId);
-    stopSpeakerDetection();
-    
-    if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
-    }
-    
-    setRemoteStreams({});
-    
-    navigate(-1);
-  };
-
-  const handleToggleMic = () => {
-    if (speakerModeEnabled && activeSpeaker !== socket.id && !isAdminOrManager) {
-      showNotification("Only the active speaker can unmute", "warning");
-      return;
-    }
-    
-    if (!localStream) {
-      showNotification("No microphone available", "error");
-      return;
-    }
-    
-    toggleAudio(!micOn);
-    setMicOn((v) => !v);
-  };
-
-  const handleRaiseHand = () => {
-    if (!handRaised) {
-      raiseHand(conferenceId);
-    } else {
-      lowerHand(conferenceId);
-    }
-    setHandRaised(v => !v);
-  };
-
-  const handleToggleCam = () => {
-    if (!localStream) {
-      showNotification("No camera available", "error");
-      return;
-    }
-    
-    toggleVideo(!camOn);
-    setCamOn((v) => !v);
-  };
-
-  const handleScreenShare = async () => {
-    try {
-      if (!sharingScreen) {
-        await startScreenShare(localVideoRef);
-        setLayout(LAYOUT.PRESENTATION);
-        setScreenSharer("me");
-      } else {
-        await stopScreenShare(localVideoRef);
-        
-        setMicOn(true);
-        setCamOn(true);
-        
-        if (localStream) {
-          localStream.getAudioTracks().forEach(t => (t.enabled = true));
-          localStream.getVideoTracks().forEach(t => (t.enabled = true));
-        }
-        
-        setLayout(LAYOUT.GRID);
-        setScreenSharer(null);
-      }
-      setSharingScreen((v) => !v);
-    } catch (error) {
-      console.error("Screen share error:", error);
-      showNotification("Screen share failed", "error");
-    }
-  };
 
   return (
     <Box sx={{ display: "flex", height: "100vh", background: "#000" }}>
@@ -889,7 +876,6 @@ const fetchConferenceData = async (teamId) => {
                 .map(([socketId, stream]) => {
                   const participant = participants.find(p => p.socketId === socketId);
                   const userName = participant?.userName || `User ${socketId.slice(0, 4)}`;
-                  const _isHandRaised = raisedHands.includes(socketId);
                   
                   return (
                     <Box key={socketId} sx={{ position: "relative" }}>
