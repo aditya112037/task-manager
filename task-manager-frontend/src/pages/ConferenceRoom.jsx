@@ -27,7 +27,6 @@ import RaiseHandIndicator from "../components/Conference/RaiseHandIndicator";
 import ParticipantsPanel from "../components/Conference/ParticipantsPanel";
 import CallEndIcon from "@mui/icons-material/CallEnd";
 import MicIcon from "@mui/icons-material/Mic";
-import VideocamIcon from "@mui/icons-material/Videocam";
 import ScreenShareIcon from "@mui/icons-material/ScreenShare";
 import StopScreenShareIcon from "@mui/icons-material/StopScreenShare";
 import ClearAllIcon from "@mui/icons-material/ClearAll";
@@ -1098,61 +1097,25 @@ useEffect(() => {
 
     
           <Tooltip title={camOn ? "Turn Camera Off" : "Turn Camera On"}>
-            <IconButton
-  onClick={handleToggleMic}
-  disabled={speakerModeEnabled && activeSpeaker !== socket.id && !isAdminOrManager}
-  sx={{
-    position: "relative",
+  <IconButton
+    onClick={handleToggleCam}
+    disabled={!localStream}
+    sx={{
+      background: camOn ? "#1565c0" : "#424242",
+      color: "white",
+      "&:hover": {
+        background: camOn ? "#0d47a1" : "#303030",
+      },
+      "&.Mui-disabled": {
+        background: "#333",
+        color: "#666",
+      },
+    }}
+  >
+    {camOn ? <VideocamIcon /> : <VideocamOffIcon />}
+  </IconButton>
+</Tooltip>
 
-    // Base background
-    backgroundColor: "#1e1e1e",
-
-    // 🎤 Mic fill reacts to loudness
-    color: micOn
-      ? `rgba(0, 230, 118, ${Math.min(micLevel / 60, 1)})`
-      : "#9e9e9e",
-
-    // Border reacts to speaking
-    border: micOn && micLevel > 12
-      ? "1px solid #00e676"
-      : "1px solid #444",
-
-    // 🔥 Glow when speaking
-    boxShadow:
-      micOn && micLevel > 15
-        ? "0 0 14px rgba(0, 230, 118, 0.8)"
-        : "none",
-
-    transition: "all 0.12s ease-out",
-
-    "&:hover": {
-      backgroundColor: "#2a2a2a",
-    },
-
-    "&.Mui-disabled": {
-      backgroundColor: "#222",
-      color: "#555",
-      boxShadow: "none",
-    },
-  }}
->
-  <MicIcon />
-
-  {/* 🔴 Slash when muted */}
-  {!micOn && (
-    <Box
-      sx={{
-        position: "absolute",
-        width: "140%",
-        height: 2,
-        background: "#ff5252",
-        transform: "rotate(-45deg)",
-      }}
-    />
-  )}
-</IconButton>
-
-          </Tooltip>
 
           <Tooltip title={sharingScreen ? "Stop Screen Share" : "Start Screen Share"}>
             <IconButton
