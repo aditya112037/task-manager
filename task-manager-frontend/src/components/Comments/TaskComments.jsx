@@ -4,10 +4,8 @@ import { commentsAPI } from "../../services/api";
 import CommentItem from "./CommentItem";
 import CommentInput from "./CommentInput";
 import SystemComment from "./SystemComment";
-import { useAuth } from "../../context/AuthContext";
 
 export default function TaskComments({ taskId, myRole }) {
-  const { user } = useAuth();
 
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
