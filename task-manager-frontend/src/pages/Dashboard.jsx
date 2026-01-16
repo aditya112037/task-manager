@@ -189,7 +189,7 @@ const Dashboard = () => {
       window.removeEventListener("invalidate:tasks", onTasksInvalidate);
       window.removeEventListener("invalidate:teams", onTeamsInvalidate);
     };
-  }, [fetchAllTeamTasks, fetchTeams]);
+  }, [fetchAllTeamTasks, fetchTeams, teams.length]);
 
   // Fixed handlers - no refetch after mutations
   const handleStatusChange = async (taskId, status) => {
