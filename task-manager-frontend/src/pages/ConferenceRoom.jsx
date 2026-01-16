@@ -263,7 +263,7 @@ useEffect(() => {
     const update = () => {
       analyser.getByteFrequencyData(dataArray);
       const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-      setMicLevel(avg);
+      setMicLevel(prev => prev * 0.75 + avg * 0.25);
       rafId = requestAnimationFrame(update);
     };
 
@@ -1096,49 +1096,62 @@ useEffect(() => {
             </span>
           </Tooltip>
 
-          {/* 🔹 Step 3: Add mic level indicator next to mic button */}
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-            <Tooltip title={`Mic level: ${micLevel.toFixed(1)}`}>
-              <Box
-                sx={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: "50%",
-                  background: micLevel > 15 ? "#00e676" : "#555",
-                  boxShadow: micOn && micLevel > 15 ? "0 0 10px rgba(0, 230, 118, 0.8)" : "none",
-                  transition: "box-shadow 0.15s ease",
-                }}
-              />
-            </Tooltip>
-            <Typography 
-              variant="caption" 
-              sx={{ 
-                color: micLevel > 15 ? "#00e676" : "#aaa",
-                minWidth: "30px"
-              }}
-            >
-              {micLevel.toFixed(0)}
-            </Typography>
-          </Box>
-
+    
           <Tooltip title={camOn ? "Turn Camera Off" : "Turn Camera On"}>
             <IconButton
-              onClick={handleToggleCam}
-              disabled={!localStream}
-              sx={{
-                background: camOn ? "#1565c0" : "#424242",
-                color: "white",
-                "&:hover": {
-                  background: camOn ? "#0d47a1" : "#303030",
-                },
-                "&.Mui-disabled": {
-                  background: "#333",
-                  color: "#666",
-                },
-              }}
-            >
-              {camOn ? <VideocamIcon /> : <VideocamOffIcon />}
-            </IconButton>
+  onClick={handleToggleMic}
+  disabled={speakerModeEnabled && activeSpeaker !== socket.id && !isAdminOrManager}
+  sx={{
+    position: "relative",
+
+    // Base background
+    backgroundColor: "#1e1e1e",
+
+    // 🎤 Mic fill reacts to loudness
+    color: micOn
+      ? `rgba(0, 230, 118, ${Math.min(micLevel / 60, 1)})`
+      : "#9e9e9e",
+
+    // Border reacts to speaking
+    border: micOn && micLevel > 12
+      ? "1px solid #00e676"
+      : "1px solid #444",
+
+    // 🔥 Glow when speaking
+    boxShadow:
+      micOn && micLevel > 15
+        ? "0 0 14px rgba(0, 230, 118, 0.8)"
+        : "none",
+
+    transition: "all 0.12s ease-out",
+
+    "&:hover": {
+      backgroundColor: "#2a2a2a",
+    },
+
+    "&.Mui-disabled": {
+      backgroundColor: "#222",
+      color: "#555",
+      boxShadow: "none",
+    },
+  }}
+>
+  <MicIcon />
+
+  {/* 🔴 Slash when muted */}
+  {!micOn && (
+    <Box
+      sx={{
+        position: "absolute",
+        width: "140%",
+        height: 2,
+        background: "#ff5252",
+        transform: "rotate(-45deg)",
+      }}
+    />
+  )}
+</IconButton>
+
           </Tooltip>
 
           <Tooltip title={sharingScreen ? "Stop Screen Share" : "Start Screen Share"}>
