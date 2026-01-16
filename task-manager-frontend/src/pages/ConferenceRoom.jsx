@@ -27,7 +27,6 @@ import RaiseHandIndicator from "../components/Conference/RaiseHandIndicator";
 import ParticipantsPanel from "../components/Conference/ParticipantsPanel";
 import CallEndIcon from "@mui/icons-material/CallEnd";
 import MicIcon from "@mui/icons-material/Mic";
-import MicOffIcon from "@mui/icons-material/MicOff";
 import VideocamIcon from "@mui/icons-material/Videocam";
 import ScreenShareIcon from "@mui/icons-material/ScreenShare";
 import StopScreenShareIcon from "@mui/icons-material/StopScreenShare";
