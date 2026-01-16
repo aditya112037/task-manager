@@ -1,7 +1,6 @@
 import {
   Box,
   Typography,
-  IconButton,
   Stack,
   Tooltip,
   Avatar,

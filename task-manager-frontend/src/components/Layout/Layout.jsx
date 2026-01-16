@@ -17,8 +17,7 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const socketRef = useRef(null);
 
-  const sidebarWidthOpen = 240;
-  const sidebarWidthClosed = 64;
+
 
   const toggleSidebar = () => {
     setSidebarOpen((prev) => !prev);
