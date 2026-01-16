@@ -4,7 +4,6 @@ import {
   Stack,
   Tooltip,
   Avatar,
-  Chip,
 } from "@mui/material";
 import MicIcon from "@mui/icons-material/Mic";
 import MicOffIcon from "@mui/icons-material/MicOff";
@@ -15,8 +14,8 @@ import PanToolIcon from "@mui/icons-material/PanTool";
 import AdminPanel from "./AdminPanel";
 
 export default function ParticipantsPanel({
-  participants,
-  raisedHands,
+  participants = [],
+  raisedHands = [],
   isAdminOrManager,
   onAdminAction,
 }) {
@@ -39,6 +38,10 @@ export default function ParticipantsPanel({
         {participants.map((p) => {
           const handRaised = raisedHands.includes(p.socketId);
 
+          // 🔒 SAFE defaults (until backend sends states)
+          const micOn = p.micOn !== false;
+          const camOn = p.camOn !== false;
+
           return (
             <Box
               key={p.socketId}
@@ -55,23 +58,12 @@ export default function ParticipantsPanel({
               {/* USER */}
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                 <Avatar sx={{ width: 32, height: 32 }}>
-                  {p.name?.[0]?.toUpperCase()}
+                  {p.userName?.[0]?.toUpperCase() || "U"}
                 </Avatar>
 
-                <Box>
-                  <Typography fontSize="0.85rem">
-                    {p.name || "User"}
-                  </Typography>
-
-                  {p.role !== "member" && (
-                    <Chip
-                      size="small"
-                      label={p.role}
-                      color="primary"
-                      sx={{ height: 18 }}
-                    />
-                  )}
-                </Box>
+                <Typography fontSize="0.85rem">
+                  {p.userName || "User"}
+                </Typography>
               </Box>
 
               {/* STATUS + ADMIN */}
@@ -85,19 +77,19 @@ export default function ParticipantsPanel({
                   </Tooltip>
                 )}
 
-                {p.micOn ? (
+                {micOn ? (
                   <MicIcon fontSize="small" />
                 ) : (
                   <MicOffIcon fontSize="small" color="error" />
                 )}
 
-                {p.camOn ? (
+                {camOn ? (
                   <VideocamIcon fontSize="small" />
                 ) : (
                   <VideocamOffIcon fontSize="small" color="error" />
                 )}
 
-                {isAdminOrManager && p.role === "member" && (
+                {isAdminOrManager && (
                   <AdminPanel
                     participantSocketId={p.socketId}
                     onLowerHand={() =>
