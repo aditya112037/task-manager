@@ -333,7 +333,7 @@ useEffect(() => {
           setIsAdminOrManager(isCreator);
         }
 
-        joinConference(conferenceId, confData);
+        
         
         if (stream) {
           showNotification("Media initialized successfully", "success");
@@ -353,7 +353,7 @@ useEffect(() => {
               setIsAdminOrManager(isCreator);
             }
             
-            joinConference(conferenceId, confData);
+            
             showNotification("Joined conference with limited functionality", "warning");
           }
         } catch (confError) {
