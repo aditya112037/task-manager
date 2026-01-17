@@ -23,7 +23,7 @@ import PersonRemoveIcon from "@mui/icons-material/PersonRemove";
 import GroupsIcon from "@mui/icons-material/Groups";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 import MicExternalOnIcon from "@mui/icons-material/MicExternalOn";
-import { raiseHand, lowerHand, adminAction } from "../services/conferenceSocket";
+import { raiseHand, lowerHand } from "../services/conferenceSocket";
 import RaiseHandIndicator from "../components/Conference/RaiseHandIndicator";
 import ParticipantsPanel from "../components/Conference/ParticipantsPanel";
 import CallEndIcon from "@mui/icons-material/CallEnd";
