@@ -23,7 +23,7 @@ import PersonRemoveIcon from "@mui/icons-material/PersonRemove";
 import GroupsIcon from "@mui/icons-material/Groups";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 import MicExternalOnIcon from "@mui/icons-material/MicExternalOn";
-import { raiseHand, lowerHand } from "../services/conferenceSocket";
+import { raiseHand, lowerHand, leaveConference } from "../services/conferenceSocket";
 import RaiseHandIndicator from "../components/Conference/RaiseHandIndicator";
 import ParticipantsPanel from "../components/Conference/ParticipantsPanel";
 import CallEndIcon from "@mui/icons-material/CallEnd";
@@ -35,15 +35,9 @@ import PersonIcon from "@mui/icons-material/Person";
 import PresentToAllIcon from "@mui/icons-material/PresentToAll";
 import { getSocket} from "../services/socket";
 import {
-  initMedia,
-  joinConference,
-  leaveConference,
-} from "../services/conferenceSocket";
-
-import {
+  initializeMedia,
   createPeer,
   removePeer,
-  setLocalStream,
   toggleAudio,
   toggleVideo,
   startScreenShare,
@@ -105,7 +99,6 @@ export default function ConferenceRoom() {
     if (socket) {
       socket.emit("conference:leave", { conferenceId });
     }
-    
     leaveConference(conferenceId);
     stopSpeakerDetection();
     
@@ -218,34 +211,21 @@ export default function ConferenceRoom() {
     });
   }, [activeSpeaker, speakerModeEnabled, localStream, socket.id, isAdminOrManager]);
 
-  useEffect(() => {
-    if (!localStream || !speakerModeEnabled) return;
-    
-    const cleanup = startSpeakerDetection(localStream, (speaking) => {
-      if (!speakerModeEnabled) return;
-      
-      if (!speaking) {
-        socket.emit("conference:speaking", {
-          conferenceId,
-          speaking: false,
-        });
-        return;
-      }
-      
-      const canTakeOverSpeaker = !activeSpeaker || activeSpeaker === socket.id;
-      
-      if (canTakeOverSpeaker) {
-        socket.emit("conference:speaking", {
-          conferenceId,
-          speaking: true,
-        });
-      } else {
-        console.log("Not taking over speaker - ", activeSpeaker, "is speaking");
-      }
+useEffect(() => {
+  if (!localStream || !speakerModeEnabled) return;
+
+  const cleanup = startSpeakerDetection((speaking) => {
+    if (!speakerModeEnabled) return;
+
+    socket.emit("conference:speaking", {
+      conferenceId,
+      speaking,
     });
-    
-    return cleanup;
-  }, [localStream, speakerModeEnabled, conferenceId, socket, activeSpeaker]);
+  });
+
+  return cleanup;
+}, [localStream, speakerModeEnabled, conferenceId, socket]);
+
 
   // 🔹 Audio analyser for mic level
   useEffect(() => {
@@ -329,11 +309,12 @@ export default function ConferenceRoom() {
 
         let stream = null;
         try {
-          stream = await initMedia();
-          if (!mounted()) return;
-
-          setLocalStream(stream);
+          stream = await initializeMedia({ audio: true, video: true });
           setLocalStreamState(stream);
+
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = stream;
+          }
           
           if (localVideoRef.current) {
             localVideoRef.current.srcObject = stream;
@@ -594,7 +575,6 @@ export default function ConferenceRoom() {
 
     return () => {
       mountedRef.current = false;      
-      leaveConference(conferenceId);
       stopSpeakerDetection();
       
       socket.off("conference:user-joined", handleUserJoined);
