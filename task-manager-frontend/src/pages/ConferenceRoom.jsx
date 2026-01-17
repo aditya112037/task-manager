@@ -87,6 +87,7 @@ export default function ConferenceRoom() {
 
   // 🟢 Conference join lock
   const conferenceStartedRef = useRef(false);
+
   const mountedRef = useRef(true);
 
   const showNotification = useCallback((message, severity = "info") => {
@@ -333,7 +334,7 @@ useEffect(() => {
           setIsAdminOrManager(isCreator);
         }
 
-        
+        socket.emit("conference:join", { conferenceId });
         
         if (stream) {
           showNotification("Media initialized successfully", "success");
