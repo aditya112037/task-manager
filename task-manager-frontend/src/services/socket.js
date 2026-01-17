@@ -106,20 +106,6 @@ export const leaveTeamRoom = (teamId) => {
   }
 };
 
-export const joinConferenceRoom = (conferenceId) => {
-  if (socket && socket.connected && conferenceId) {
-    console.log("Joining conference:", conferenceId);
-    socket.emit("conference:join", { conferenceId });
-  }
-};
-
-
-export const leaveConferenceRoom = (conferenceId) => {
-  if (socket && socket.connected && conferenceId) {
-    console.log("Leaving conference room:", `conference_${conferenceId}`);
-    socket.emit("leaveConference", conferenceId);
-  }
-};
 
 // Generic event listener management
 export const addSocketListener = (event, callback) => {
@@ -140,111 +126,7 @@ export const removeAllSocketListeners = (event) => {
   }
 };
 
-// Conference specific event helpers
-export const setupConferenceListeners = (handlers) => {
-  if (!socket) return;
 
-  const {
-    onConferenceStarted,
-    onConferenceEnded,
-    onConferenceCreated,
-    onConferenceError,
-    onUserJoined,
-    onUserLeft,
-    onActiveSpeaker,
-    onSpeakerModeToggled,
-    onSpeakerAssigned,
-    onHandsUpdated,
-    onForceMute,
-    onForceCameraOff,
-    onRemovedByAdmin,
-    onParticipantsUpdated,
-    onConferenceState,
-  } = handlers;
-
-  // Conference lifecycle events
-  if (onConferenceStarted) {
-    socket.on("conference:started", onConferenceStarted);
-  }
-  
-  if (onConferenceEnded) {
-    socket.on("conference:ended", onConferenceEnded);
-  }
-  
-  if (onConferenceCreated) {
-    socket.on("conference:created", onConferenceCreated);
-  }
-  
-  if (onConferenceError) {
-    socket.on("conference:error", onConferenceError);
-  }
-
-  // Participant events
-  if (onUserJoined) {
-    socket.on("conference:user-joined", onUserJoined);
-  }
-  
-  if (onUserLeft) {
-    socket.on("conference:user-left", onUserLeft);
-  }
-  
-  if (onParticipantsUpdated) {
-    socket.on("conference:participants", onParticipantsUpdated);
-  }
-
-  // Speaker mode events
-  if (onActiveSpeaker) {
-    socket.on("conference:active-speaker", onActiveSpeaker);
-  }
-  
-  if (onSpeakerModeToggled) {
-    socket.on("conference:speaker-mode-toggled", onSpeakerModeToggled);
-  }
-  
-  if (onSpeakerAssigned) {
-    socket.on("conference:speaker-assigned", onSpeakerAssigned);
-  }
-
-  // Hand raise events
-  if (onHandsUpdated) {
-    socket.on("conference:hands-updated", onHandsUpdated);
-  }
-
-  // Admin action events
-  if (onForceMute) {
-    socket.on("conference:force-mute", onForceMute);
-  }
-  
-  if (onForceCameraOff) {
-    socket.on("conference:force-camera-off", onForceCameraOff);
-  }
-  
-  if (onRemovedByAdmin) {
-    socket.on("conference:removed-by-admin", onRemovedByAdmin);
-  }
-
-  // State sync
-  if (onConferenceState) {
-    socket.on("conference:state", onConferenceState);
-  }
-};
-
-export const cleanupConferenceListeners = (handlers) => {
-  if (!socket) return;
-
-  const handlerKeys = Object.keys(handlers || {});
-  
-  handlerKeys.forEach(key => {
-    const event = key.replace(/^on/, '').replace(/([A-Z])/g, '-$1').toLowerCase().substring(1);
-    const fullEvent = `conference:${event}`;
-    
-    if (handlers[key]) {
-      socket.off(fullEvent, handlers[key]);
-    }
-  });
-};
-
-// WebRTC signaling helpers
 export const sendOffer = (to, offer) => {
   if (socket && socket.connected) {
     socket.emit("conference:offer", { to, offer });

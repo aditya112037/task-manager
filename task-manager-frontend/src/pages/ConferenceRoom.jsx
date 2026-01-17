@@ -33,8 +33,7 @@ import StopScreenShareIcon from "@mui/icons-material/StopScreenShare";
 import ClearAllIcon from "@mui/icons-material/ClearAll";
 import PersonIcon from "@mui/icons-material/Person";
 import PresentToAllIcon from "@mui/icons-material/PresentToAll";
-
-import { getSocket, joinConferenceRoom } from "../services/socket";
+import { getSocket} from "../services/socket";
 import {
   initMedia,
   joinConference,
@@ -200,17 +199,7 @@ export default function ConferenceRoom() {
 
   const joinedRoomRef = useRef(false);
 
-  useEffect(() => {
-    if (!conferenceId || joinedRoomRef.current) return;
-    joinedRoomRef.current = true;
 
-    joinConferenceRoom(conferenceId);
-
-    return () => {
-      joinedRoomRef.current = false;
-      socket?.emit("conference:leave", { conferenceId });
-    };
-  }, [conferenceId, socket]);
 
   useEffect(() => {
     if (!localStream || !speakerModeEnabled || !activeSpeaker) return;
