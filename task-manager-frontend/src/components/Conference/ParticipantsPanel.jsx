@@ -53,17 +53,17 @@ export default function ParticipantsPanel({
       <Stack spacing={1.5}>
         {participants.map((p) => {
           const handRaised = raisedHands.includes(p.socketId);
-          const isCurrentUser = p.socketId === currentUserId;
+          const isCurrentUser = p.userId === currentUserId;
           
           // ✅ Use the correct property names with fallbacks
           const displayName = p.userName || p.name || "User";
-          const micOn = p.micOn !== false; // Default to true if undefined
-          const camOn = p.camOn !== false; // Default to true if undefined
+          const micOn = Boolean(p.micOn ?? true);
+          const camOn = Boolean(p.camOn ?? true);
           const isActiveSpeaker = speakerModeEnabled && activeSpeaker === p.socketId;
 
           return (
             <Box
-              key={p.socketId}
+              key={p.socketId || p.userId}
               sx={{
                 display: "flex",
                 alignItems: "center",
