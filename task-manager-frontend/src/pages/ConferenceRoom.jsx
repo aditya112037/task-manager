@@ -637,14 +637,21 @@ export default function ConferenceRoom() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conferenceId, socket, currentUser, teamId]);
   
-  const handleAdminAction = useCallback((action, targetSocketId) => {
-    adminAction({
-      action,
-      targetSocketId,
-      conferenceId,
-      userId: currentUser._id,
-    });
-  }, [conferenceId, currentUser]);
+const handleAdminAction = useCallback((action, targetSocketId) => {
+  const socket = getSocket();
+
+  if (!socket || !socket.connected) {
+    console.warn("Socket not connected, admin action blocked");
+    return;
+  }
+
+  socket.emit("conference:admin-action", {
+    action,
+    targetSocketId,
+    conferenceId,
+  });
+}, [conferenceId]);
+
 
   const handleClearAllHands = useCallback(() => {
     adminAction({
