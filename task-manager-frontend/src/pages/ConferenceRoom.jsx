@@ -197,10 +197,6 @@ export default function ConferenceRoom() {
     }
   }, [sharingScreen, localStream, showNotification]);
 
-  const joinedRoomRef = useRef(false);
-
-
-
   useEffect(() => {
     if (!localStream || !speakerModeEnabled || !activeSpeaker) return;
     
