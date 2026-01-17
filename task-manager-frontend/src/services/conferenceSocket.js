@@ -183,9 +183,7 @@ export const joinConference = (conferenceId) => {
   socket.emit("conference:join", { conferenceId });
 
   // Setup automatic lock release
-  const releaseLock = () => {
-    locks.conference.joinInProgress = false;
-  };
+
 
   // Event-based lock management
   const handleJoined = () => {
@@ -207,7 +205,7 @@ export const joinConference = (conferenceId) => {
   socket.once("conference:error", handleError);
 
   // Safety timeout to release lock
-  setTimeout(releaseLock, 5000);
+  
 
   return true;
 };
@@ -456,6 +454,7 @@ export const cleanupConference = () => {
   }
   
   // Reset media locks (keep attempted flag for session)
+  locks.media.initAttempted = false;
   locks.media.initInProgress = false;
   locks.media.initialized = false;
   
