@@ -45,6 +45,7 @@ import {
   startSpeakerDetection,
   stopSpeakerDetection,
 } from "../services/webrtc";
+import { joinConference } from "../services/conferenceSocket";
 
 import VideoTile from "../components/Conference/VideoTile";
 import { useAuth } from "../context/AuthContext";
@@ -334,7 +335,9 @@ useEffect(() => {
           setIsAdminOrManager(isCreator);
         }
 
-        socket.emit("conference:join", { conferenceId });
+        
+
+        joinConference(conferenceId);
         
         if (stream) {
           showNotification("Media initialized successfully", "success");
