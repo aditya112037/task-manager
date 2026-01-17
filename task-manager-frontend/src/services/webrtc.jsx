@@ -20,6 +20,40 @@ let isSpeaking = false;
 let onSpeakingChangeCallback = null;
 let audioDetectionEnabled = false;
 
+/**
+ * Initialize camera + microphone (ONE TIME)
+ * @param {MediaStreamConstraints} constraints
+ * @returns {Promise<MediaStream>}
+ */
+export const initializeMedia = async (
+  constraints = { audio: true, video: true }
+) => {
+  // ✅ Prevent duplicate initialization
+  if (mediaInitialized && localStream && localStream.active) {
+    console.warn("Media already initialized, reusing stream");
+    return localStream;
+  }
+
+  try {
+    console.log("🎥 Initializing media...", constraints);
+
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+
+    const success = setLocalStream(stream);
+    if (!success) {
+      throw new Error("Failed to set local stream");
+    }
+
+    mediaInitialized = true;
+    return stream;
+
+  } catch (error) {
+    console.error("❌ initializeMedia failed:", error);
+    throw error;
+  }
+};
+
+
 
 export const setLocalStream = (stream) => {
   if (!stream || !stream.active) {
@@ -941,7 +975,7 @@ const WebRTCService = {
   setLocalStream,
   getLocalStream,
   isMediaInitialized,
-
+  initializeMedia,
   createPeer,
   removePeer,
   getPeer,
