@@ -1,29 +1,105 @@
-// services/conferenceSocket.js
+// services/conferenceSocket.js - LOCKED VERSION (Demo-Safe)
 import { getSocket } from "./socket";
-import { getLocalStream, isMediaInitialized, cleanup as cleanupWebRTC } from "./webrtc";
+import { getLocalStream, cleanup as cleanupWebRTC } from "./webrtc";
 
 /* ----------------------------------------------------
-   MEDIA INITIALIZATION
+   ATOMIC LOCKS - Module-level, single source of truth
+---------------------------------------------------- */
+const locks = {
+  media: {
+    initAttempted: false,
+    initInProgress: false,
+    initialized: false
+  },
+  conference: {
+    joinInProgress: false,
+    joined: false,
+    currentConferenceId: null
+  }
+};
+
+/* ----------------------------------------------------
+   SAFE HELPER FUNCTIONS
 ---------------------------------------------------- */
 
 /**
- * Initializes media (camera and microphone)
- * @returns {Promise<MediaStream>} The media stream
+ * Safe socket check - never throws
+ */
+const getSafeSocket = () => {
+  const socket = getSocket();
+  if (!socket || !socket.connected) {
+    console.warn("Socket not available or disconnected");
+    return null;
+  }
+  return socket;
+};
+
+/**
+ * Safe media access with cleanup
+ */
+const safeGetUserMedia = async (constraints) => {
+  try {
+    return await navigator.mediaDevices.getUserMedia(constraints);
+  } catch (error) {
+    console.error("getUserMedia failed:", error.name, error.message);
+    
+    // Stop all tracks if partially initialized
+    if (error.name === 'NotReadableError') {
+      console.warn("Camera/mic already in use - stopping attempts");
+    }
+    
+    throw error;
+  }
+};
+
+/* ----------------------------------------------------
+   MEDIA INITIALIZATION - ATOMICALLY LOCKED
+   Rule: One attempt per session, no retries
+---------------------------------------------------- */
+
+/**
+ * Initializes media once and only once
+ * @returns {Promise<MediaStream|null>} Stream or null on failure
  */
 export const initMedia = async () => {
-  try {
-    // Check if media is already initialized
-    if (isMediaInitialized()) {
-      const existingStream = getLocalStream();
-      if (existingStream && existingStream.active) {
-        console.log("Media already initialized, returning existing stream");
-        return existingStream;
+  // ATOMIC CHECK: Already attempted? Stop.
+  if (locks.media.initAttempted) {
+    console.warn("Media initialization already attempted this session. Returning existing stream or null.");
+    
+    const existingStream = getLocalStream();
+    if (existingStream && existingStream.active) {
+      return existingStream;
+    }
+    return null;
+  }
+
+  // ATOMIC LOCK: Mark attempt in progress
+  if (locks.media.initInProgress) {
+    console.warn("Media initialization already in progress. Waiting...");
+    
+    // Wait up to 2 seconds for completion
+    for (let i = 0; i < 20; i++) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      if (!locks.media.initInProgress) {
+        const existingStream = getLocalStream();
+        if (existingStream && existingStream.active) {
+          return existingStream;
+        }
+        return null;
       }
     }
+    console.warn("Media init timeout, returning null");
+    return null;
+  }
 
-    console.log("Initializing media...");
+  // SET LOCKS
+  locks.media.initAttempted = true;
+  locks.media.initInProgress = true;
+
+  try {
+    console.log("Initializing media (one-time attempt)...");
     
-    const stream = await navigator.mediaDevices.getUserMedia({
+    const stream = await safeGetUserMedia({
       video: {
         width: { ideal: 1280 },
         height: { ideal: 720 },
@@ -37,492 +113,262 @@ export const initMedia = async () => {
       }
     });
 
-    console.log("Media initialized successfully", {
-      audioTracks: stream.getAudioTracks().length,
-      videoTracks: stream.getVideoTracks().length,
-      active: stream.active
-    });
-
+    console.log("Media initialized successfully");
+    locks.media.initialized = true;
     return stream;
 
   } catch (error) {
-    console.error("Error initializing media:", error);
+    console.error("Media initialization failed:", error.message);
     
-    // Enhanced error handling with user-friendly messages
-    let userMessage = "Failed to access camera/microphone";
+    // User-friendly error without throwing
+    const errorMap = {
+      'NotReadableError': 'Camera/microphone is already in use by another application.',
+      'NotFoundError': 'No camera or microphone found.',
+      'NotAllowedError': 'Permission denied for camera/microphone.',
+      'AbortError': 'Camera/microphone access was aborted.',
+      'OverconstrainedError': 'Camera constraints could not be met.'
+    };
     
-    if (error.name === 'NotReadableError') {
-      userMessage = "Camera/microphone is already in use by another application. Please close other applications using your camera/mic and try again.";
-      console.error("Camera/microphone already in use");
-    } else if (error.name === 'NotFoundError') {
-      userMessage = "No camera or microphone found. Please check if your device has a camera/microphone connected.";
-      console.error("Camera/microphone not found");
-    } else if (error.name === 'NotAllowedError') {
-      userMessage = "Permission denied for camera/microphone. Please allow camera and microphone access in your browser settings.";
-      console.error("Permission denied");
-    } else if (error.name === 'AbortError') {
-      userMessage = "Camera/microphone access was aborted. Please try again.";
-      console.error("Access aborted");
-    } else if (error.name === 'OverconstrainedError') {
-      userMessage = "Camera constraints could not be met. Please try with different camera settings.";
-      console.error("Constraints could not be met:", error.constraint);
-    }
+    console.warn(errorMap[error.name] || 'Failed to access camera/microphone.');
+    return null;
     
-    throw new Error(userMessage);
+  } finally {
+    // RELEASE PROGRESS LOCK (keep attempted lock)
+    locks.media.initInProgress = false;
   }
 };
 
 /**
- * Initializes media with specific constraints
- * @param {Object} constraints - Media constraints
- * @returns {Promise<MediaStream>} The media stream
+ * Check if media was initialized (safe, no side effects)
  */
-export const initMediaWithConstraints = async (constraints) => {
-  try {
-    console.log("Initializing media with custom constraints:", constraints);
-    
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
-    
-    console.log("Media initialized with custom constraints", {
-      audioTracks: stream.getAudioTracks().length,
-      videoTracks: stream.getVideoTracks().length
-    });
-
-    return stream;
-
-  } catch (error) {
-    console.error("Error initializing media with constraints:", error);
-    throw error;
-  }
+export const isMediaInitialized = () => {
+  return locks.media.initialized;
 };
 
 /* ----------------------------------------------------
-   CONFERENCE MANAGEMENT
+   CONFERENCE JOIN - ATOMICALLY LOCKED
+   Rule: One join per conference, no duplicates
 ---------------------------------------------------- */
 
 /**
- * Starts a new conference for a team
- * @param {string} teamId - The team ID
- * @returns {Promise<string>} Conference ID
+ * Joins a conference with atomic locking
+ * @param {string} conferenceId - Conference ID to join
+ * @returns {boolean} True if join was attempted, false if blocked
  */
-export const startConference = (teamId) => {
-  return new Promise((resolve, reject) => {
-    const socket = getSocket();
-    
-    if (!socket) {
-      reject(new Error("Socket not connected"));
-      return;
-    }
-
-    if (!socket.connected) {
-      reject(new Error("Socket is not connected"));
-      return;
-    }
-
-    console.log("Starting conference for team:", teamId);
-    
-    socket.emit("conference:create", { teamId }, (response) => {
-      if (response.error) {
-        console.error("Failed to start conference:", response.error);
-        reject(new Error(response.error));
-      } else {
-        console.log("Conference started successfully:", response.conferenceId);
-        resolve(response.conferenceId);
-      }
-    });
-  });
-};
-
-/**
- * Joins an existing conference
- * @param {string} conferenceId - The conference ID
- * @param {Object} conferenceData - Optional conference data
- */
-export const joinConference = (conferenceId, conferenceData = null) => {
-  const socket = getSocket();
-  
-  if (!socket) {
-    throw new Error("Socket not connected");
-  }
-
-  if (!socket.connected) {
-    throw new Error("Socket is not connected");
-  }
-
-  console.log("Joining conference:", conferenceId);
-  
-  socket.emit("conference:join", { 
-    conferenceId, 
-    conferenceData 
-  });
-};
-
-/**
- * Leaves a conference
- * @param {string} conferenceId - The conference ID
- */
-export const leaveConference = (conferenceId) => {
-  const socket = getSocket();
-  
-  if (!socket) {
-    console.warn("Socket not connected, cannot leave conference");
-    return;
-  }
-
-  console.log("Leaving conference:", conferenceId);
-  
-  socket.emit("conference:leave", { conferenceId });
-};
-
-/* ----------------------------------------------------
-   PARTICIPANT INTERACTIONS
----------------------------------------------------- */
-
-/**
- * Raises hand in conference
- * @param {string} conferenceId - The conference ID
- */
-export const raiseHand = (conferenceId) => {
-  const socket = getSocket();
-  
-  if (!socket) {
-    throw new Error("Socket not connected");
-  }
-
-  if (!socket.connected) {
-    throw new Error("Socket is not connected");
-  }
-
-  console.log("Raising hand in conference:", conferenceId);
-  
-  socket.emit("conference:raise-hand", { conferenceId });
-};
-
-/**
- * Lowers hand in conference
- * @param {string} conferenceId - The conference ID
- */
-export const lowerHand = (conferenceId) => {
-  const socket = getSocket();
-  
-  if (!socket) {
-    throw new Error("Socket not connected");
-  }
-
-  if (!socket.connected) {
-    throw new Error("Socket is not connected");
-  }
-
-  console.log("Lowering hand in conference:", conferenceId);
-  
-  socket.emit("conference:lower-hand", { conferenceId });
-};
-
-/**
- * Sends speaking status to conference
- * @param {string} conferenceId - The conference ID
- * @param {boolean} speaking - Whether the user is speaking
- */
-export const sendSpeakingStatus = (conferenceId, speaking) => {
-  const socket = getSocket();
-  
-  if (!socket) {
-    console.warn("Socket not connected, cannot send speaking status");
-    return;
-  }
-
-  if (!socket.connected) {
-    console.warn("Socket is not connected, cannot send speaking status");
-    return;
-  }
-
-  socket.emit("conference:speaking", { conferenceId, speaking });
-};
-
-/* ----------------------------------------------------
-   ADMIN ACTIONS
----------------------------------------------------- */
-
-/**
- * Performs an admin action on a participant
- * @param {Object} options - Admin action options
- * @param {string} options.action - Action to perform
- * @param {string} options.targetSocketId - Target socket ID
- * @param {string} options.conferenceId - Conference ID
- * @param {string} options.userId - Admin user ID
- */
-export const adminAction = ({
-  action,
-  targetSocketId,
-  conferenceId,
-  userId,
-}) => {
-  const socket = getSocket();
-  
-  if (!socket) {
-    throw new Error("Socket not connected");
-  }
-
-  if (!socket.connected) {
-    throw new Error("Socket is not connected");
-  }
-
-  console.log("Performing admin action:", { action, targetSocketId, conferenceId });
-  
-  socket.emit("conference:admin-action", {
-    action,
-    targetSocketId,
-    conferenceId,
-    userId,
-  });
-};
-
-/**
- * Clears all raised hands in conference
- * @param {string} conferenceId - The conference ID
- * @param {string} userId - Admin user ID
- */
-export const clearAllHands = (conferenceId, userId) => {
-  adminAction({
-    action: "clear-hands",
-    targetSocketId: null,
-    conferenceId,
-    userId,
-  });
-};
-
-/**
- * Removes a participant from conference
- * @param {string} targetSocketId - Target socket ID
- * @param {string} conferenceId - Conference ID
- * @param {string} userId - Admin user ID
- */
-export const removeParticipant = (targetSocketId, conferenceId, userId) => {
-  adminAction({
-    action: "remove-from-conference",
-    targetSocketId,
-    conferenceId,
-    userId,
-  });
-};
-
-/**
- * Forces mute on a participant
- * @param {string} targetSocketId - Target socket ID
- * @param {string} conferenceId - Conference ID
- * @param {string} userId - Admin user ID
- */
-export const forceMute = (targetSocketId, conferenceId, userId) => {
-  adminAction({
-    action: "mute",
-    targetSocketId,
-    conferenceId,
-    userId,
-  });
-};
-
-/**
- * Forces camera off on a participant
- * @param {string} targetSocketId - Target socket ID
- * @param {string} conferenceId - Conference ID
- * @param {string} userId - Admin user ID
- */
-export const forceCameraOff = (targetSocketId, conferenceId, userId) => {
-  adminAction({
-    action: "camera-off",
-    targetSocketId,
-    conferenceId,
-    userId,
-  });
-};
-
-/* ----------------------------------------------------
-   SPEAKER MODE CONTROLS
----------------------------------------------------- */
-
-/**
- * Toggles speaker mode in conference
- * @param {string} conferenceId - The conference ID
- * @param {boolean} enabled - Whether speaker mode should be enabled
- */
-export const toggleSpeakerMode = (conferenceId, enabled) => {
-  const socket = getSocket();
-  
-  if (!socket) {
-    throw new Error("Socket not connected");
-  }
-
-  if (!socket.connected) {
-    throw new Error("Socket is not connected");
-  }
-
-  console.log("Toggling speaker mode:", { conferenceId, enabled });
-  
-  socket.emit("conference:toggle-speaker-mode", { conferenceId, enabled });
-};
-
-/**
- * Sets a participant as the active speaker
- * @param {string} conferenceId - The conference ID
- * @param {string} targetSocketId - Target socket ID
- */
-export const setSpeaker = (conferenceId, targetSocketId) => {
-  const socket = getSocket();
-  
-  if (!socket) {
-    throw new Error("Socket not connected");
-  }
-
-  if (!socket.connected) {
-    throw new Error("Socket is not connected");
-  }
-
-  console.log("Setting speaker:", { conferenceId, targetSocketId });
-  
-  socket.emit("conference:set-speaker", { conferenceId, targetSocketId });
-};
-
-/**
- * Clears the active speaker
- * @param {string} conferenceId - The conference ID
- */
-export const clearSpeaker = (conferenceId) => {
-  const socket = getSocket();
-  
-  if (!socket) {
-    throw new Error("Socket not connected");
-  }
-
-  if (!socket.connected) {
-    throw new Error("Socket is not connected");
-  }
-
-  console.log("Clearing speaker for conference:", conferenceId);
-  
-  socket.emit("conference:clear-speaker", { conferenceId });
-};
-
-/* ----------------------------------------------------
-   CONFERENCE STATE MANAGEMENT
----------------------------------------------------- */
-
-/**
- * Gets active conference for a team
- * @param {string} teamId - The team ID
- * @returns {Promise<Object>} Conference data
- */
-export const getActiveConference = (teamId) => {
-  return new Promise((resolve, reject) => {
-    const socket = getSocket();
-    
-    if (!socket) {
-      reject(new Error("Socket not connected"));
-      return;
-    }
-
-    fetch(`/api/teams/${teamId}/conference`)
-      .then(response => {
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        return response.json();
-      })
-      .then(data => {
-        if (data.error) {
-          reject(new Error(data.error));
-        } else {
-          resolve(data);
-        }
-      })
-      .catch(error => {
-        console.error("Error getting active conference:", error);
-        reject(error);
-      });
-  });
-};
-
-/**
- * Ends a conference
- * @param {string} conferenceId - The conference ID
- * @param {string} userId - Admin user ID
- */
-export const endConference = (conferenceId, userId) => {
-  const socket = getSocket();
-  
-  if (!socket) {
-    throw new Error("Socket not connected");
-  }
-
-  if (!socket.connected) {
-    throw new Error("Socket is not connected");
-  }
-
-  console.log("Ending conference:", conferenceId);
-  
-  socket.emit("conference:end", { conferenceId, userId });
-};
-
-/* ----------------------------------------------------
-   PERMISSION HELPERS
----------------------------------------------------- */
-
-/**
- * Checks if user can start a conference
- * @param {string} userRole - User's role
- * @returns {boolean} True if user can start conference
- */
-export const canStartConference = (userRole) => {
-  return ["admin", "manager", "owner"].includes(userRole);
-};
-
-/**
- * Checks if user can join a conference
- * @param {Object} conference - Conference object
- * @param {string} userId - User ID
- * @returns {boolean} True if user can join
- */
-export const canJoinConference = (conference, userId) => {
-  if (!conference) return false;
-  
-  // Check if conference is active
-  if (conference.status !== 'active') {
+export const joinConference = (conferenceId) => {
+  // SAFETY CHECK: Already joined this conference? Stop.
+  if (locks.conference.joined && locks.conference.currentConferenceId === conferenceId) {
+    console.warn("Already joined conference:", conferenceId);
     return false;
   }
-  
-  // Check if user is the creator
-  if (conference.createdBy === userId) {
-    return true;
+
+  // ATOMIC LOCK: Join in progress? Stop.
+  if (locks.conference.joinInProgress) {
+    console.warn("Conference join already in progress. Skipping duplicate.");
+    return false;
   }
+
+  const socket = getSafeSocket();
+  if (!socket) {
+    console.warn("Cannot join conference: socket not available");
+    return false;
+  }
+
+  // SET LOCKS
+  locks.conference.joinInProgress = true;
+  locks.conference.currentConferenceId = conferenceId;
+
+  console.log("Joining conference (atomic):", conferenceId);
   
-  // Check if user is in the team (you would need team membership data)
-  // For now, assume they can join if they have the link
+  socket.emit("conference:join", { conferenceId });
+
+  // Setup automatic lock release
+  const releaseLock = () => {
+    locks.conference.joinInProgress = false;
+  };
+
+  // Event-based lock management
+  const handleJoined = () => {
+    locks.conference.joined = true;
+    locks.conference.joinInProgress = false;
+    socket.off("conference:joined", handleJoined);
+    socket.off("conference:error", handleError);
+  };
+
+  const handleError = () => {
+    locks.conference.joined = false;
+    locks.conference.joinInProgress = false;
+    locks.conference.currentConferenceId = null;
+    socket.off("conference:joined", handleJoined);
+    socket.off("conference:error", handleError);
+  };
+
+  socket.once("conference:joined", handleJoined);
+  socket.once("conference:error", handleError);
+
+  // Safety timeout to release lock
+  setTimeout(releaseLock, 5000);
+
   return true;
 };
 
 /**
- * Checks if user can perform admin actions
- * @param {Object} conference - Conference object
- * @param {string} userId - User ID
- * @returns {boolean} True if user is admin
+ * Leaves current conference safely
  */
-export const isConferenceAdmin = (conference, userId) => {
-  if (!conference) return false;
-  
-  // User is admin if they created the conference
-  return conference.createdBy === userId;
+export const leaveConference = () => {
+  if (!locks.conference.joined || !locks.conference.currentConferenceId) {
+    console.warn("Not in a conference, nothing to leave");
+    return;
+  }
+
+  const socket = getSafeSocket();
+  const conferenceId = locks.conference.currentConferenceId;
+
+  console.log("Leaving conference:", conferenceId);
+
+  if (socket) {
+    socket.emit("conference:leave", { conferenceId });
+  }
+
+  // RESET LOCKS IMMEDIATELY
+  locks.conference.joined = false;
+  locks.conference.joinInProgress = false;
+  locks.conference.currentConferenceId = null;
 };
 
 /* ----------------------------------------------------
-   EVENT LISTENER HELPERS
+   CONFERENCE CREATION - EVENT-DRIVEN ONLY
+   Rule: No promises, only events
+---------------------------------------------------- */
+
+/**
+ * Request conference creation (event-driven, no promise)
+ * @param {string} teamId - Team ID
+ */
+export const requestConferenceCreation = (teamId) => {
+  const socket = getSafeSocket();
+  if (!socket) {
+    console.warn("Cannot create conference: socket not available");
+    return false;
+  }
+
+  console.log("Requesting conference creation for team:", teamId);
+  socket.emit("conference:create", { teamId });
+  return true;
+};
+
+/**
+ * Conference creation helper - sets up listeners for creation flow
+ * @param {Object} handlers - onCreated, onCreateError
+ * @returns {Function} Cleanup function
+ */
+export const setupConferenceCreationListeners = (handlers) => {
+  const socket = getSafeSocket();
+  if (!socket) {
+    console.warn("Cannot setup creation listeners: socket not available");
+    return () => {};
+  }
+
+  const { onCreated, onCreateError } = handlers;
+
+  if (onCreated) socket.on("conference:created", onCreated);
+  if (onCreateError) socket.on("conference:create:error", onCreateError);
+
+  return () => {
+    if (onCreated) socket.off("conference:created", onCreated);
+    if (onCreateError) socket.off("conference:create:error", onCreateError);
+  };
+};
+
+/* ----------------------------------------------------
+   PARTICIPANT INTERACTIONS - SAFE VERSIONS
+---------------------------------------------------- */
+
+/**
+ * Raise hand (safe, no throws)
+ */
+export const raiseHand = () => {
+  if (!locks.conference.joined || !locks.conference.currentConferenceId) {
+    console.warn("Cannot raise hand: not in a conference");
+    return false;
+  }
+
+  const socket = getSafeSocket();
+  if (!socket) return false;
+
+  socket.emit("conference:raise-hand", { 
+    conferenceId: locks.conference.currentConferenceId 
+  });
+  return true;
+};
+
+/**
+ * Lower hand (safe, no throws)
+ */
+export const lowerHand = () => {
+  if (!locks.conference.joined || !locks.conference.currentConferenceId) {
+    console.warn("Cannot lower hand: not in a conference");
+    return false;
+  }
+
+  const socket = getSafeSocket();
+  if (!socket) return false;
+
+  socket.emit("conference:lower-hand", { 
+    conferenceId: locks.conference.currentConferenceId 
+  });
+  return true;
+};
+
+/**
+ * Send speaking status (safe, no throws)
+ */
+export const sendSpeakingStatus = (speaking) => {
+  if (!locks.conference.joined || !locks.conference.currentConferenceId) {
+    return false;
+  }
+
+  const socket = getSafeSocket();
+  if (!socket) return false;
+
+  socket.emit("conference:speaking", { 
+    conferenceId: locks.conference.currentConferenceId, 
+    speaking 
+  });
+  return true;
+};
+
+/* ----------------------------------------------------
+   CONFERENCE STATE GETTERS
+---------------------------------------------------- */
+
+/**
+ * Get current conference state (safe, read-only)
+ */
+export const getConferenceState = () => ({
+  joined: locks.conference.joined,
+  joinInProgress: locks.conference.joinInProgress,
+  conferenceId: locks.conference.currentConferenceId,
+  mediaInitialized: locks.media.initialized,
+  mediaInitAttempted: locks.media.initAttempted
+});
+
+/**
+ * Check if in a conference (simple helper)
+ */
+export const isInConference = () => {
+  return locks.conference.joined && locks.conference.currentConferenceId !== null;
+};
+
+/* ----------------------------------------------------
+   EVENT LISTENER MANAGEMENT (UNCHANGED, WORKS WELL)
 ---------------------------------------------------- */
 
 /**
  * Sets up conference event listeners
- * @param {Object} handlers - Event handlers
- * @returns {Function} Cleanup function
  */
 export const setupConferenceListeners = (handlers) => {
-  const socket = getSocket();
+  const socket = getSafeSocket();
   
   if (!socket) {
     console.warn("Socket not connected, cannot setup listeners");
@@ -588,72 +434,63 @@ export const setupConferenceListeners = (handlers) => {
 };
 
 /* ----------------------------------------------------
-   CLEANUP
+   CLEANUP - RESETS ALL LOCKS
 ---------------------------------------------------- */
 
 /**
- * Cleans up all conference resources
- * @param {string} conferenceId - The conference ID
+ * Complete cleanup of all conference resources
  */
-export const cleanupConference = (conferenceId) => {
-  console.log("Cleaning up conference resources for:", conferenceId);
+export const cleanupConference = () => {
+  console.log("Performing complete conference cleanup");
   
-  // Leave conference if connected
-  try {
-    leaveConference(conferenceId);
-  } catch (error) {
-    console.warn("Error leaving conference:", error);
+  // Leave conference if joined
+  if (locks.conference.joined) {
+    leaveConference();
   }
   
-  // Cleanup WebRTC resources
+  // Cleanup WebRTC
   try {
     cleanupWebRTC();
   } catch (error) {
     console.warn("Error cleaning up WebRTC:", error);
   }
+  
+  // Reset media locks (keep attempted flag for session)
+  locks.media.initInProgress = false;
+  locks.media.initialized = false;
+  
+  console.log("Cleanup complete. Locks reset.");
 };
 
 /* ----------------------------------------------------
-   STATUS & DEBUGGING
+   DEBUGGING UTILITIES
 ---------------------------------------------------- */
 
 /**
- * Gets conference connection status
- * @returns {Object} Connection status
+ * Log current lock states (for debugging only)
  */
-export const getConferenceStatus = () => {
-  const socket = getSocket();
-  
-  return {
-    socketConnected: socket ? socket.connected : false,
-    socketId: socket ? socket.id : null,
-    mediaInitialized: isMediaInitialized(),
-    localStream: getLocalStream(),
-  };
+export const logLockStatus = () => {
+  console.group("Conference Socket Locks");
+  console.log("MEDIA:");
+  console.log("  initAttempted:", locks.media.initAttempted);
+  console.log("  initInProgress:", locks.media.initInProgress);
+  console.log("  initialized:", locks.media.initialized);
+  console.log("CONFERENCE:");
+  console.log("  joinInProgress:", locks.conference.joinInProgress);
+  console.log("  joined:", locks.conference.joined);
+  console.log("  conferenceId:", locks.conference.currentConferenceId);
+  console.groupEnd();
 };
 
 /**
- * Logs detailed conference status
+ * Force reset all locks (emergency use only)
  */
-export const logConferenceStatus = () => {
-  const status = getConferenceStatus();
-  
-  console.group("Conference Status");
-  console.log("Socket Connected:", status.socketConnected);
-  console.log("Socket ID:", status.socketId);
-  console.log("Media Initialized:", status.mediaInitialized);
-  
-  if (status.localStream) {
-    const stream = status.localStream;
-    console.log("Local Stream:", {
-      active: stream.active,
-      audioTracks: stream.getAudioTracks().length,
-      videoTracks: stream.getVideoTracks().length,
-      id: stream.id
-    });
-  } else {
-    console.log("Local Stream: Not available");
-  }
-  
-  console.groupEnd();
+export const forceResetLocks = () => {
+  console.warn("FORCING RESET OF ALL LOCKS");
+  locks.media.initAttempted = false;
+  locks.media.initInProgress = false;
+  locks.media.initialized = false;
+  locks.conference.joinInProgress = false;
+  locks.conference.joined = false;
+  locks.conference.currentConferenceId = null;
 };
