@@ -653,13 +653,16 @@ const handleAdminAction = useCallback((action, targetSocketId) => {
 }, [conferenceId]);
 
 
-  const handleClearAllHands = useCallback(() => {
-    adminAction({
-      action: "clear-hands",
-      conferenceId,
-      userId: currentUser._id,
-    });
-  }, [conferenceId, currentUser]);
+const handleClearAllHands = useCallback(() => {
+  const socket = getSocket();
+  if (!socket || !socket.connected) return;
+
+  socket.emit("conference:admin-action", {
+    action: "clear-hands",
+    conferenceId,
+  });
+}, [conferenceId]);
+
 
   const handleOpenAdminMenu = useCallback((event, participantId) => {
     setAdminMenuAnchor(event.currentTarget);
