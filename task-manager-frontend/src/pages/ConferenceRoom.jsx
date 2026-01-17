@@ -407,7 +407,7 @@ export default function ConferenceRoom() {
         return;
       }
       
-      const pc = createPeer(userId, socket, localStream);
+      const pc = createPeer(userId, socket);
 
       pc.ontrack = (e) => {
         if (!mounted()) return;
@@ -429,7 +429,7 @@ export default function ConferenceRoom() {
     const handleOffer = async ({ from, offer }) => {
       if (!mounted()) return;
       
-      const pc = createPeer(from, socket, localStream);
+      const pc = createPeer(from, socket);
 
       pc.ontrack = (e) => {
         if (!mounted()) return;
@@ -452,7 +452,7 @@ export default function ConferenceRoom() {
     const handleAnswer = async ({ from, answer }) => {
       if (!mounted()) return;
       
-      const pc = createPeer(from, socket, localStream);
+      const pc = createPeer(from, socket);
       try {
         await pc.setRemoteDescription(answer);
       } catch (error) {
@@ -463,7 +463,7 @@ export default function ConferenceRoom() {
     const handleIceCandidate = ({ from, candidate }) => {
       if (!mounted()) return;
       
-      const pc = createPeer(from, socket, localStream);
+      const pc = createPeer(from, socket);
       try {
         pc.addIceCandidate(candidate);
       } catch (error) {

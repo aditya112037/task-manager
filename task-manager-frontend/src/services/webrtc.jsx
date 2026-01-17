@@ -20,42 +20,7 @@ let isSpeaking = false;
 let onSpeakingChangeCallback = null;
 let audioDetectionEnabled = false;
 
-/* ----------------------------------------------------
-   CORE STREAM MANAGEMENT
----------------------------------------------------- */
 
-/**
- * Initialize local media stream
- * @param {MediaStreamConstraints} constraints - Media constraints
- * @returns {Promise<MediaStream>} Local media stream
- */
-export const initializeMedia = async (constraints = { 
-  video: true, 
-  audio: true 
-}) => {
-  try {
-    // Clean up existing stream if any
-    if (localStream) {
-      cleanupStreamOnly();
-    }
-    
-    console.log("Initializing media with constraints:", constraints);
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
-    
-    setLocalStream(stream);
-    return stream;
-    
-  } catch (error) {
-    console.error("Failed to initialize media:", error);
-    throw error;
-  }
-};
-
-/**
- * Set the local stream (should only be called once)
- * @param {MediaStream} stream - Media stream from getUserMedia
- * @returns {boolean} Success status
- */
 export const setLocalStream = (stream) => {
   if (!stream || !stream.active) {
     console.error("Cannot set invalid or inactive stream");
@@ -137,10 +102,11 @@ export const createPeer = (userId, socket) => {
     // ICE candidate handling
     pc.onicecandidate = (event) => {
       if (event.candidate) {
-        socket.emit("webrtc:ice-candidate", {
-          target: userId,
-          candidate: event.candidate
-        });
+        socket.emit("conference:ice-candidate", {
+        to: userId,
+        candidate: event.candidate
+      });
+
       }
     };
     
@@ -972,7 +938,6 @@ export const updateAudioConstraints = async (constraints) => {
    EXPORT EVERYTHING
 ---------------------------------------------------- */
 const WebRTCService = {
-  initializeMedia,
   setLocalStream,
   getLocalStream,
   isMediaInitialized,
