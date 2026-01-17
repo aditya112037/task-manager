@@ -44,7 +44,7 @@ import TeamTaskForm from "../components/Teams/TeamTaskForm";
 import { useAuth } from "../context/AuthContext";
 import TeamAnalytics from "../components/Teams/Overview/Analytics";
 import { joinTeamRoom, leaveTeamRoom, getSocket } from "../services/socket";
-import { startConference } from "../services/conferenceSocket";
+import { requestConferenceCreation } from "../services/conferenceSocket";
 
 /* ---------------------------------------------------
    SAFE MEMBER RESOLVER (prevents all crashes)
@@ -438,7 +438,8 @@ export default function TeamDetails() {
     console.log("Starting conference for team:", teamId);
     
     try {
-      startConference(teamId);
+      requestConferenceCreation(teamId);
+
       
       // Set a timeout to reset loading state if no response
       setTimeout(() => {
