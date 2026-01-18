@@ -89,27 +89,35 @@ export const initializeMedia = async (
 
 export const setLocalStream = (stream) => {
   if (!stream || !stream.active) {
-    console.error("Cannot set invalid or inactive stream");
+    console.error("Cannot set invalid stream");
     return false;
   }
-  
-  // Don't replace an active stream
-  if (localStream && localStream.active) {
-    console.warn("Local stream already active, keeping existing");
-    return false;
+
+  // ✅ Allow replacing audio-only stream with video-capable stream
+  if (localStream) {
+    const hasVideo = localStream.getVideoTracks().length > 0;
+    const newHasVideo = stream.getVideoTracks().length > 0;
+
+    if (hasVideo && !newHasVideo) {
+      console.warn("Keeping existing video stream");
+      return false;
+    }
+
+    // Stop old tracks
+    localStream.getTracks().forEach(t => t.stop());
   }
-  
+
   localStream = stream;
   mediaInitialized = true;
-  
+
   console.log("Local stream set:", {
     audioTracks: stream.getAudioTracks().length,
     videoTracks: stream.getVideoTracks().length,
-    streamId: stream.id
   });
-  
+
   return true;
 };
+
 
 /**
  * Get the current local stream
@@ -377,99 +385,34 @@ export const getVideoTrack = () => {
  * @param {React.RefObject} videoRef - Reference to video element
  * @returns {Promise<MediaStreamTrack>} Screen share track
  */
-export const startScreenShare = async (videoRef = null) => {
-  // Prevent multiple screen shares
-  if (isScreenSharing) {
-    throw new Error("Screen sharing already active");
+export async function startScreenShare(videoRef) {
+  console.log("🎥 Starting screen share...");
+
+  const displayStream = await navigator.mediaDevices.getDisplayMedia({
+    video: true,
+    audio: false,
+  });
+
+  const screenTrack = displayStream.getVideoTracks()[0];
+
+  if (!screenTrack) {
+    throw new Error("No screen track available");
   }
-  
-  // Validate local stream
-  if (!localStream || !localStream.active) {
-    throw new Error("Local stream not ready");
+
+  // 🔥 DO NOT depend on camera track
+  replaceVideoTrack(screenTrack);
+
+  if (videoRef?.current) {
+    videoRef.current.srcObject = displayStream;
   }
-  
-  console.log("Starting screen share...");
-  
-  try {
-    // Get screen share stream
-    screenStream = await navigator.mediaDevices.getDisplayMedia({
-      video: {
-        cursor: "always",
-        displaySurface: "monitor",
-        frameRate: 30
-      },
-      audio: false
-    });
-    
-    const screenTrack = screenStream.getVideoTracks()[0];
-    if (!screenTrack) {
-      throw new Error("No screen track available");
-    }
-    
-    // Verify camera track is still alive
-    const cameraTrack = localStream.getVideoTracks()[0];
-    if (!cameraTrack || cameraTrack.readyState !== 'live') {
-      throw new Error("Camera track is not live");
-    }
-    
-    isScreenSharing = true;
-    console.log(`Screen share started. Replacing track in ${Object.keys(peers).length} peers`);
-    
-    // ✅ Replace video track in all peer connections
-    Object.values(peers).forEach((pc, index) => {
-      const videoSender = pc.getSenders().find(s => 
-        s.track && s.track.kind === "video"
-      );
-      
-      if (videoSender) {
-        videoSender.replaceTrack(screenTrack);
-      }
-    });
-    
-    // ✅ Update local video element if provided
-    if (videoRef && videoRef.current) {
-      // Create new stream with screen video + existing audio
-      const displayStream = new MediaStream([screenTrack]);
-      const audioTrack = localStream.getAudioTracks()[0];
-      if (audioTrack) {
-        displayStream.addTrack(audioTrack);
-      }
-      videoRef.current.srcObject = displayStream;
-    }
-    
-    // Handle user stopping via browser UI
-    screenTrack.onended = () => {
-      console.log("Screen share ended via browser UI");
-      // Use microtask to avoid promise issues
-      Promise.resolve().then(() => {
-        stopScreenShare(videoRef).catch(err => {
-          console.error("Auto-stop failed:", err);
-          // Still clean up
-          isScreenSharing = false;
-          if (screenStream) {
-            screenStream.getTracks().forEach(t => t.stop());
-            screenStream = null;
-          }
-        });
-      });
-    };
-    
-    console.log("Screen sharing active");
-    return screenTrack;
-    
-  } catch (error) {
-    console.error("Failed to start screen share:", error);
-    
-    // Clean up on error
-    if (screenStream) {
-      screenStream.getTracks().forEach(t => t.stop());
-      screenStream = null;
-    }
-    isScreenSharing = false;
-    
-    throw error;
-  }
-};
+
+  screenTrack.onended = () => {
+    stopScreenShare(videoRef);
+  };
+
+  return displayStream;
+}
+
 
 /**
  * Stop screen sharing and restore camera

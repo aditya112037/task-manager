@@ -137,24 +137,55 @@ export default function ConferenceRoom() {
     
   }, [speakerModeEnabled, activeSpeaker, socket, isAdminOrManager, localStream, micOn, camOn, conferenceId, showNotification]);
 
-  const handleToggleCam = useCallback(() => {
-    if (!localStream) {
-      showNotification("No camera available", "error");
+const handleToggleCam = useCallback(async () => {
+  if (!localStream) return;
+
+  let videoTracks = localStream.getVideoTracks();
+
+  // 🔥 If no camera track, try to re-acquire camera
+  if (videoTracks.length === 0) {
+    try {
+      const newStream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const newTrack = newStream.getVideoTracks()[0];
+
+      if (!newTrack) throw new Error("No camera track");
+
+      localStream.addTrack(newTrack);
+
+      Object.values(getAllPeers()).forEach(pc => {
+        const sender = pc.getSenders().find(s => s.track?.kind === "video");
+        if (sender) sender.replaceTrack(newTrack);
+      });
+
+      setCamOn(true);
+
+      socket.emit("conference:media-update", {
+        conferenceId,
+        camOn: true,
+        micOn,
+      });
+
+      return;
+    } catch (err) {
+      showNotification("Camera unavailable", "error");
+      setCamOn(false);
       return;
     }
-    
-    const newCamState = !camOn;
-    toggleVideo(newCamState);
-    setCamOn(newCamState);
-    
-    // ✅ Broadcast media state to other participants
-    socket.emit("conference:media-update", {
-      conferenceId,
-      micOn,
-      camOn: newCamState,
-    });
-    
-  }, [localStream, micOn, camOn, conferenceId, socket, showNotification]);
+  }
+
+  // Normal toggle
+  const next = !videoTracks[0].enabled;
+  videoTracks.forEach(t => (t.enabled = next));
+  setCamOn(next);
+
+  socket.emit("conference:media-update", {
+    conferenceId,
+    camOn: next,
+    micOn,
+  });
+}, [localStream, micOn, conferenceId, socket, showNotification]);
+
+
 
   const handleRaiseHand = useCallback(() => {
     if (!handRaised) {
