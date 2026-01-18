@@ -84,10 +84,12 @@ export const createPeer = (userId, socket) => {
   });
 
   // Add camera tracks
-  cameraStream.getTracks().forEach(track => {
-    pc.addTrack(track, cameraStream);
-  });
-
+cameraStream.getTracks().forEach(track => {
+  const sender = pc.addTrack(track, cameraStream);
+  if (track.kind === "video") {
+    pc.__cameraSender = sender;
+  }
+});
   pc.onicecandidate = e => {
     if (e.candidate) {
       socket.emit("conference:ice-candidate", {
@@ -132,24 +134,6 @@ export const closeAllPeers = () => {
   });
 };
 
-/* ----------------------------------------------------
-   TRACK REPLACEMENT (CORE LOGIC)
----------------------------------------------------- */
-
-const replaceVideoTrackInPeers = (newTrack) => {
-  Object.values(peers).forEach(pc => {
-    const sender = pc.getSenders().find(s => s.track?.kind === "video");
-    if (sender) {
-      sender.replaceTrack(newTrack);
-    } else {
-      pc.addTrack(newTrack, screenStream || cameraStream);
-    }
-  });
-};
-
-/* ----------------------------------------------------
-   AUDIO / VIDEO TOGGLES
----------------------------------------------------- */
 
 export const toggleAudio = (enabled) => {
   cameraStream?.getAudioTracks().forEach(t => (t.enabled = enabled));
@@ -174,7 +158,6 @@ export const getVideoTrack = () =>
 /* ----------------------------------------------------
    SCREEN SHARING
 ---------------------------------------------------- */
-
 export const startScreenShare = async (videoRef) => {
   screenStream = await navigator.mediaDevices.getDisplayMedia({
     video: true,
@@ -182,7 +165,10 @@ export const startScreenShare = async (videoRef) => {
   });
 
   const screenTrack = screenStream.getVideoTracks()[0];
-  replaceVideoTrackInPeers(screenTrack);
+
+  Object.values(peers).forEach(pc => {
+    pc.__cameraSender?.replaceTrack(screenTrack);
+  });
 
   if (videoRef?.current) {
     videoRef.current.srcObject = screenStream;
@@ -191,29 +177,27 @@ export const startScreenShare = async (videoRef) => {
   screenTrack.onended = () => stopScreenShare(videoRef);
 
   isScreenSharing = true;
-  return screenTrack;
 };
 
+
 export const stopScreenShare = async (videoRef) => {
-  if (!isScreenSharing) return null;
+  if (!isScreenSharing) return;
 
-  const cameraTrack = cameraStream?.getVideoTracks()[0];
-  if (!cameraTrack || cameraTrack.readyState !== "live") {
-    throw new Error("Camera track lost");
-  }
+  const cameraTrack = cameraStream.getVideoTracks()[0];
 
-  replaceVideoTrackInPeers(cameraTrack);
+  Object.values(peers).forEach(pc => {
+    pc.__cameraSender?.replaceTrack(cameraTrack);
+  });
 
   if (videoRef?.current) {
     videoRef.current.srcObject = cameraStream;
   }
 
-  screenStream?.getTracks().forEach(t => t.stop());
+  screenStream.getTracks().forEach(t => t.stop());
   screenStream = null;
   isScreenSharing = false;
-
-  return cameraTrack;
 };
+
 
 export const isScreenSharingActive = () => isScreenSharing;
 export const getScreenStream = () => screenStream;
