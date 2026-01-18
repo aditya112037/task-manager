@@ -16,7 +16,6 @@ let analyser = null;
 let microphoneSource = null;
 let speakingInterval = null;
 let isSpeaking = false;
-let onSpeakingChangeCallback = null;
 let audioDetectionEnabled = false;
 
 /* ----------------------------------------------------
