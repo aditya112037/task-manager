@@ -44,7 +44,6 @@ import {
   stopScreenShare,
   startSpeakerDetection,
   getAllPeers,
-  emergencyCameraRestart,
   stopSpeakerDetection,
 } from "../services/webrtc";
 import { joinConference } from "../services/conferenceSocket";
@@ -1171,26 +1170,6 @@ const handleClearAllHands = useCallback(() => {
               {camOn ? <VideocamIcon /> : <VideocamOffIcon />}
             </IconButton>
           </Tooltip>
-          <Tooltip title="Reconnect Camera">
-  <IconButton
-    onClick={async () => {
-      try {
-        await emergencyCameraRestart({ video: true });
-        setCamOn(true);
-        showNotification("Camera reconnected", "success");
-      } catch (e) {
-        showNotification("Camera still unavailable", "error");
-      }
-    }}
-    sx={{
-      background: "#ff9800",
-      color: "black",
-      "&:hover": { background: "#f57c00" },
-    }}
-  >
-    <VideocamIcon />
-  </IconButton>
-</Tooltip>
 
 
           <Tooltip title={sharingScreen ? "Stop Screen Share" : "Start Screen Share"}>
