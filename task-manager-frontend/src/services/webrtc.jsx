@@ -1,10 +1,11 @@
 // services/webrtc.js
 
 /* ----------------------------------------------------
-   GLOBAL STATE
+   GLOBAL STATE - CORRECT ARCHITECTURE
 ---------------------------------------------------- */
-let localStream = null;
-let screenStream = null;
+// ✅ SEPARATE STREAMS: Camera always stays alive
+let cameraStream = null;  // Always holds camera video + audio
+let screenStream = null;  // Only holds screen share when active
 let isScreenSharing = false;
 let mediaInitialized = false;
 
@@ -29,15 +30,15 @@ export const initializeMedia = async (
   constraints = { audio: true, video: true }
 ) => {
   // ✅ Prevent duplicate initialization
-  if (mediaInitialized && localStream && localStream.active) {
+  if (mediaInitialized && cameraStream && cameraStream.active) {
     console.warn("Media already initialized, reusing stream");
-    return localStream;
+    return cameraStream;
   }
 
   try {
     console.log("🎥 Initializing media...", constraints);
 
-    // ✅ Add optimized video constraints to prevent "Could not start video source"
+    // ✅ Add optimized video constraints
     const optimizedConstraints = {
       audio: constraints.audio,
       video: constraints.video === true ? {
@@ -48,34 +49,32 @@ export const initializeMedia = async (
       } : constraints.video
     };
 
-    const stream = await navigator.mediaDevices.getUserMedia(optimizedConstraints);
-
-    const success = setLocalStream(stream);
-    if (!success) {
-      throw new Error("Failed to set local stream");
-    }
+    cameraStream = await navigator.mediaDevices.getUserMedia(optimizedConstraints);
 
     mediaInitialized = true;
-    return stream;
+    
+    console.log("✅ Camera stream initialized:", {
+      audioTracks: cameraStream.getAudioTracks().length,
+      videoTracks: cameraStream.getVideoTracks().length,
+    });
+
+    return cameraStream;
 
   } catch (error) {
     console.error("❌ initializeMedia failed:", error);
     
-    // ✅ Fallback to audio-only if video fails
+    // Fallback to audio-only if video fails
     if (error.name === 'NotReadableError' || error.name === 'NotFoundError') {
       console.warn("⚠️ Camera error, falling back to audio-only");
       try {
-        const audioStream = await navigator.mediaDevices.getUserMedia({
+        cameraStream = await navigator.mediaDevices.getUserMedia({
           audio: constraints.audio,
           video: false
         });
         
-        const success = setLocalStream(audioStream);
-        if (success) {
-          mediaInitialized = true;
-          console.log("✅ Fallback to audio-only succeeded");
-          return audioStream;
-        }
+        mediaInitialized = true;
+        console.log("✅ Fallback to audio-only succeeded");
+        return cameraStream;
       } catch (fallbackError) {
         console.error("❌ Audio-only fallback also failed:", fallbackError);
       }
@@ -85,51 +84,17 @@ export const initializeMedia = async (
   }
 };
 
-
-
-export const setLocalStream = (stream) => {
-  if (!stream || !stream.active) {
-    console.error("Cannot set invalid stream");
-    return false;
-  }
-
-  // ✅ Allow replacing audio-only stream with video-capable stream
-  if (localStream) {
-    const hasVideo = localStream.getVideoTracks().length > 0;
-    const newHasVideo = stream.getVideoTracks().length > 0;
-
-    if (hasVideo && !newHasVideo) {
-      console.warn("Keeping existing video stream");
-      return false;
-    }
-
-    // Stop old tracks
-    localStream.getTracks().forEach(t => t.stop());
-  }
-
-  localStream = stream;
-  mediaInitialized = true;
-
-  console.log("Local stream set:", {
-    audioTracks: stream.getAudioTracks().length,
-    videoTracks: stream.getVideoTracks().length,
-  });
-
-  return true;
-};
-
-
 /**
- * Get the current local stream
- * @returns {MediaStream|null} Local stream
+ * Get the current camera stream (ALWAYS returns camera)
+ * @returns {MediaStream|null} Camera stream
  */
-export const getLocalStream = () => localStream;
+export const getLocalStream = () => cameraStream;
 
 /**
  * Check if media is initialized
  * @returns {boolean} True if media is ready
  */
-export const isMediaInitialized = () => mediaInitialized && localStream && localStream.active;
+export const isMediaInitialized = () => mediaInitialized && cameraStream && cameraStream.active;
 
 /* ----------------------------------------------------
    PEER CONNECTION MANAGEMENT
@@ -143,8 +108,8 @@ export const isMediaInitialized = () => mediaInitialized && localStream && local
  */
 export const createPeer = (userId, socket) => {
   // Validate state
-  if (!localStream || !localStream.active) {
-    throw new Error("Local stream not ready. Call initializeMedia() first.");
+  if (!cameraStream || !cameraStream.active) {
+    throw new Error("Camera stream not ready. Call initializeMedia() first.");
   }
   
   if (peers[userId]) {
@@ -165,11 +130,11 @@ export const createPeer = (userId, socket) => {
       iceCandidatePoolSize: 10
     });
     
-    // Add local tracks
-    localStream.getTracks().forEach(track => {
+    // ✅ Always add camera tracks initially
+    cameraStream.getTracks().forEach(track => {
       if (track.kind === 'audio' || track.kind === 'video') {
         console.log(`Adding ${track.kind} track to peer ${userId}`);
-        pc.addTrack(track, localStream);
+        pc.addTrack(track, cameraStream);
       }
     });
     
@@ -177,36 +142,34 @@ export const createPeer = (userId, socket) => {
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         socket.emit("conference:ice-candidate", {
-        to: userId,
-        candidate: event.candidate
-      });
-
+          to: userId,
+          candidate: event.candidate
+        });
       }
     };
     
     // Connection state handling
-pc.onconnectionstatechange = () => {
-  console.log(`Connection state for ${userId}: ${pc.connectionState}`);
+    pc.onconnectionstatechange = () => {
+      console.log(`Connection state for ${userId}: ${pc.connectionState}`);
 
-  switch (pc.connectionState) {
-    case "failed":
-      console.error(`Connection with ${userId} failed`);
-      removePeer(userId);
-      break;
+      switch (pc.connectionState) {
+        case "failed":
+          console.error(`Connection with ${userId} failed`);
+          removePeer(userId);
+          break;
 
-    case "disconnected":
-      console.warn(`Connection with ${userId} disconnected`);
-      break;
+        case "disconnected":
+          console.warn(`Connection with ${userId} disconnected`);
+          break;
 
-    case "connected":
-      console.log(`Connected to ${userId}`);
-      break;
+        case "connected":
+          console.log(`Connected to ${userId}`);
+          break;
 
-    default:
-      break;
-  }
-};
-
+        default:
+          break;
+      }
+    };
     
     // ICE connection state
     pc.oniceconnectionstatechange = () => {
@@ -283,37 +246,32 @@ export const closeAllPeers = () => {
 };
 
 /**
- * Replace video track in ALL peers + local stream
+ * Replace video track in ALL peers
  * @param {MediaStreamTrack} newTrack
  */
-export const replaceVideoTrack = (newTrack) => {
-  if (!localStream || !newTrack) {
-    console.warn("replaceVideoTrack: missing stream or track");
-    return;
-  }
-
-  console.log("🔁 Replacing video track across peers");
-
-  // Remove old video tracks
-  localStream.getVideoTracks().forEach(track => {
-    localStream.removeTrack(track);
-    track.stop();
+const replaceVideoTrackInPeers = (newTrack) => {
+  console.log("🔁 Replacing video track across peers", {
+    trackId: newTrack?.id,
+    trackKind: newTrack?.kind,
+    trackReadyState: newTrack?.readyState
   });
 
-  // Add new track
-  localStream.addTrack(newTrack);
-
-  // Replace in all peer connections
-  Object.values(peers).forEach(pc => {
+  Object.values(peers).forEach((pc, index) => {
     const sender = pc.getSenders().find(s => s.track?.kind === "video");
+    if (!sender) {
+  pc.addTrack(newTrack, screenStream || cameraStream);
+} else {
+  sender.replaceTrack(newTrack);
+}
+
     if (sender) {
+      console.log(`  Peer ${index}: replacing video track`);
       sender.replaceTrack(newTrack);
+    } else {
+      console.warn(`  Peer ${index}: no video sender found`);
     }
   });
-
-  isScreenSharing = true;
 };
-
 
 /* ----------------------------------------------------
    AUDIO/VIDEO CONTROLS
@@ -325,12 +283,12 @@ export const replaceVideoTrack = (newTrack) => {
  * @returns {boolean} Success status
  */
 export const toggleAudio = (enabled) => {
-  if (!localStream) {
-    console.error("No local stream to toggle audio");
+  if (!cameraStream) {
+    console.error("No camera stream to toggle audio");
     return false;
   }
   
-  const audioTracks = localStream.getAudioTracks();
+  const audioTracks = cameraStream.getAudioTracks();
   if (audioTracks.length === 0) {
     console.warn("No audio tracks found");
     return false;
@@ -352,12 +310,12 @@ export const toggleAudio = (enabled) => {
  * @returns {boolean} Success status
  */
 export const toggleVideo = (enabled) => {
-  if (!localStream) {
-    console.error("No local stream to toggle video");
+  if (!cameraStream) {
+    console.error("No camera stream to toggle video");
     return false;
   }
   
-  const videoTracks = localStream.getVideoTracks();
+  const videoTracks = cameraStream.getVideoTracks();
   if (videoTracks.length === 0) {
     console.warn("No video tracks found");
     return false;
@@ -378,8 +336,8 @@ export const toggleVideo = (enabled) => {
  * @returns {boolean} True if audio enabled
  */
 export const isAudioEnabled = () => {
-  if (!localStream) return false;
-  const audioTrack = localStream.getAudioTracks()[0];
+  if (!cameraStream) return false;
+  const audioTrack = cameraStream.getAudioTracks()[0];
   return audioTrack ? audioTrack.enabled : false;
 };
 
@@ -388,8 +346,8 @@ export const isAudioEnabled = () => {
  * @returns {boolean} True if video enabled
  */
 export const isVideoEnabled = () => {
-  if (!localStream) return false;
-  const videoTrack = localStream.getVideoTracks()[0];
+  if (!cameraStream) return false;
+  const videoTrack = cameraStream.getVideoTracks()[0];
   return videoTrack ? videoTrack.enabled : false;
 };
 
@@ -398,7 +356,7 @@ export const isVideoEnabled = () => {
  * @returns {MediaStreamTrack|null} Audio track or null
  */
 export const getAudioTrack = () => {
-  return localStream ? localStream.getAudioTracks()[0] : null;
+  return cameraStream ? cameraStream.getAudioTracks()[0] : null;
 };
 
 /**
@@ -406,11 +364,11 @@ export const getAudioTrack = () => {
  * @returns {MediaStreamTrack|null} Video track or null
  */
 export const getVideoTrack = () => {
-  return localStream ? localStream.getVideoTracks()[0] : null;
+  return cameraStream ? cameraStream.getVideoTracks()[0] : null;
 };
 
 /* ----------------------------------------------------
-   SCREEN SHARING - CORRECT ARCHITECTURE
+   SCREEN SHARING - FIXED ARCHITECTURE
 ---------------------------------------------------- */
 
 /**
@@ -421,31 +379,37 @@ export const getVideoTrack = () => {
 export async function startScreenShare(videoRef) {
   console.log("🎥 Starting screen share...");
 
-  const displayStream = await navigator.mediaDevices.getDisplayMedia({
+  // ✅ Get screen stream (separate from camera)
+  screenStream = await navigator.mediaDevices.getDisplayMedia({
     video: true,
     audio: false,
   });
 
-  const screenTrack = displayStream.getVideoTracks()[0];
+  const screenTrack = screenStream.getVideoTracks()[0];
 
   if (!screenTrack) {
     throw new Error("No screen track available");
   }
 
-  // 🔥 DO NOT depend on camera track
-  replaceVideoTrack(screenTrack);
+  // ✅ Replace video track in all peers with screen track
+  replaceVideoTrackInPeers(screenTrack);
 
+  // ✅ Update local preview to show screen
   if (videoRef?.current) {
-    videoRef.current.srcObject = displayStream;
+    videoRef.current.srcObject = screenStream;
   }
 
+  // ✅ Set up ended handler
   screenTrack.onended = () => {
+    console.log("Screen track ended by user");
     stopScreenShare(videoRef);
   };
 
-  return displayStream;
-}
+  isScreenSharing = true;
+  console.log("✅ Screen sharing started");
 
+  return screenTrack;
+}
 
 /**
  * Stop screen sharing and restore camera
@@ -458,53 +422,66 @@ export const stopScreenShare = async (videoRef = null) => {
     return null;
   }
   
-  console.log("Stopping screen share...");
+  console.log("🛑 Stopping screen share...");
   
   try {
-    // ✅ Camera track MUST exist and be live
-    const cameraTrack = localStream.getVideoTracks()[0];
+    // ✅ Get camera track (should still be alive)
+    const cameraTrack = cameraStream?.getVideoTracks()[0];
     
-  if (!cameraTrack || cameraTrack.readyState !== "live") {
-  console.warn("Camera unavailable, reverting to audio-only");
-
-  if (videoRef?.current) {
-    videoRef.current.srcObject = null;
-  }
-
-  if (screenStream) {
-    screenStream.getTracks().forEach(t => t.stop());
-    screenStream = null;
-  }
-
-  isScreenSharing = false;
-  return null;
-}
-
-    
-    // ✅ Restore camera track in all peers
-    Object.values(peers).forEach((pc, index) => {
-      const videoSender = pc.getSenders().find(s => 
-        s.track && s.track.kind === "video"
-      );
+    if (!cameraTrack || cameraTrack.readyState !== "live") {
+      console.error("❌ Camera track is not live - this should never happen!");
       
-      if (videoSender) {
-        videoSender.replaceTrack(cameraTrack);
+      // Emergency: try to get new camera
+      try {
+        console.warn("🚨 Attempting emergency camera recovery...");
+        const newCameraStream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: false
+        });
+        const newTrack = newCameraStream.getVideoTracks()[0];
+        
+        // Stop audio from new stream (we already have audio)
+        newCameraStream.getAudioTracks().forEach(t => t.stop());
+        
+        // Add new track to camera stream
+        if (cameraStream) {
+          const oldTracks = cameraStream.getVideoTracks();
+          oldTracks.forEach(t => {
+            cameraStream.removeTrack(t);
+            t.stop();
+          });
+          replaceVideoTrackInPeers.addTrack(newTrack);
+        }
+        
+        // Replace in peers
+        replaceVideoTrackInPeers(newTrack);
+      } catch (recoveryError) {
+        console.error("❌ Camera recovery failed:", recoveryError);
+        // Keep screen track alive as fallback
+        return null;
       }
-    });
+    } else {
+      // ✅ Normal path: restore camera track
+      console.log("✅ Restoring camera track");
+      replaceVideoTrackInPeers(cameraTrack);
+    }
     
     // ✅ Restore camera in local video element
     if (videoRef && videoRef.current) {
-      videoRef.current.srcObject = localStream;
+      videoRef.current.srcObject = cameraStream;
     }
     
     // ✅ Clean up screen stream
     if (screenStream) {
-      screenStream.getTracks().forEach(t => t.stop());
+      screenStream.getTracks().forEach(t => {
+        console.log(`Stopping screen track: ${t.id}`);
+        t.stop();
+      });
       screenStream = null;
     }
     
     isScreenSharing = false;
-    console.log("Screen sharing stopped, camera restored");
+    console.log("✅ Screen sharing stopped, camera restored");
     
     return cameraTrack;
     
@@ -544,12 +521,12 @@ export const getScreenStream = () => screenStream;
  * @returns {Function} Cleanup function
  */
 export const startSpeakerDetection = (onSpeakingChange) => {
-  if (!localStream) {
-    console.error("No local stream for speaker detection");
+  if (!cameraStream) {
+    console.error("No camera stream for speaker detection");
     return () => {};
   }
   
-  const audioTrack = localStream.getAudioTracks()[0];
+  const audioTrack = cameraStream.getAudioTracks()[0];
   if (!audioTrack) {
     console.warn("No audio track for speaker detection");
     return () => {};
@@ -573,7 +550,7 @@ export const startSpeakerDetection = (onSpeakingChange) => {
     analyser.maxDecibels = -10;
     
     // Connect audio source
-    microphoneSource = audioContext.createMediaStreamSource(localStream);
+    microphoneSource = audioContext.createMediaStreamSource(cameraStream);
     microphoneSource.connect(analyser);
     
     // Initialize detection
@@ -719,10 +696,10 @@ export const getCurrentVolume = () => {
 ---------------------------------------------------- */
 
 /**
- * Clean up local stream only (keep peers)
+ * Clean up streams only (keep peers)
  */
 const cleanupStreamOnly = () => {
-  console.log("Cleaning up local stream");
+  console.log("Cleaning up streams");
   
   // Stop screen sharing first
   if (isScreenSharing) {
@@ -731,15 +708,6 @@ const cleanupStreamOnly = () => {
       screenStream = null;
     }
     isScreenSharing = false;
-  }
-  
-  // Stop local stream
-  if (localStream) {
-    localStream.getTracks().forEach(track => {
-      console.log(`Stopping ${track.kind} track`);
-      track.stop();
-    });
-    localStream = null;
   }
   
   // Stop speaker detection
@@ -765,10 +733,10 @@ export const restartMedia = async (constraints = { video: true, audio: true }) =
     
     // Get new stream
     const newStream = await navigator.mediaDevices.getUserMedia(constraints);
-    setLocalStream(newStream);
+    cameraStream = newStream;
+    mediaInitialized = true;
     
     // If we were screen sharing, we need to reapply it
-    // (Screen sharing can't be restored automatically)
     if (wasScreenSharing) {
       console.warn("Screen sharing was active before restart. User must restart manually.");
     }
@@ -806,16 +774,16 @@ export const emergencyCameraRestart = async (constraints = { video: true }) => {
     // Stop audio from new stream
     newStream.getAudioTracks().forEach(t => t.stop());
     
-    // Replace in local stream
-    if (localStream) {
-      const oldVideoTracks = localStream.getVideoTracks();
+    // Replace in camera stream
+    if (cameraStream) {
+      const oldVideoTracks = cameraStream.getVideoTracks();
       oldVideoTracks.forEach(track => {
-        localStream.removeTrack(track);
+        cameraStream.removeTrack(track);
         track.stop();
       });
-      localStream.addTrack(newTrack);
+      cameraStream.addTrack(newTrack);
     } else {
-      localStream = new MediaStream([newTrack]);
+      cameraStream = new MediaStream([newTrack]);
     }
     
     // Replace in all peers
@@ -848,13 +816,20 @@ export const cleanup = () => {
     isScreenSharing = false;
   }
   
+    if (cameraStream) {
+    cameraStream.getTracks().forEach(track => {
+      console.log(`Stopping camera track: ${track.kind} ${track.id}`);
+      track.stop();
+    });
+    cameraStream = null;
+  }
   // Close all peer connections
   closeAllPeers();
   
-  // Stop local stream
-  if (localStream) {
-    localStream.getTracks().forEach(track => track.stop());
-    localStream = null;
+  // Stop camera stream
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(track => track.stop());
+    cameraStream = null;
   }
   
   // Stop speaker detection
@@ -875,11 +850,11 @@ export const cleanup = () => {
  */
 export const getWebRTCState = () => {
   return {
-    localStream: {
-      exists: !!localStream,
-      active: localStream?.active || false,
-      audioTracks: localStream?.getAudioTracks().length || 0,
-      videoTracks: localStream?.getVideoTracks().length || 0,
+    cameraStream: {
+      exists: !!cameraStream,
+      active: cameraStream?.active || false,
+      audioTracks: cameraStream?.getAudioTracks().length || 0,
+      videoTracks: cameraStream?.getVideoTracks().length || 0,
     },
     screenSharing: {
       active: isScreenSharing,
@@ -897,14 +872,14 @@ export const getWebRTCState = () => {
 export const debugTracks = () => {
   console.group("📊 WebRTC Track Debug");
   
-  if (localStream) {
-    const tracks = localStream.getTracks();
-    console.log(`Local Stream (${tracks.length} tracks):`);
+  if (cameraStream) {
+    const tracks = cameraStream.getTracks();
+    console.log(`Camera Stream (${tracks.length} tracks):`);
     tracks.forEach((track, i) => {
       console.log(`  [${i}] ${track.kind}: ${track.label || 'no-label'} | state: ${track.readyState} | enabled: ${track.enabled}`);
     });
   } else {
-    console.log("No local stream");
+    console.log("No camera stream");
   }
   
   if (screenStream) {
@@ -919,6 +894,17 @@ export const debugTracks = () => {
   
   console.log(`Screen Sharing Active: ${isScreenSharing}`);
   console.log(`Active Peers: ${Object.keys(peers).length}`);
+  
+  // Debug peer connections
+  Object.entries(peers).forEach(([userId, pc]) => {
+    console.log(`Peer ${userId}:`);
+    pc.getSenders().forEach((sender, i) => {
+      if (sender.track) {
+        console.log(`  Sender ${i}: ${sender.track.kind} - ${sender.track.id} (${sender.track.readyState})`);
+      }
+    });
+  });
+  
   console.groupEnd();
 };
 
@@ -927,9 +913,9 @@ export const debugTracks = () => {
  * @returns {boolean} True if all tracks are live
  */
 export const areTracksHealthy = () => {
-  if (!localStream) return false;
+  if (!cameraStream) return false;
   
-  const tracks = localStream.getTracks();
+  const tracks = cameraStream.getTracks();
   if (tracks.length === 0) return false;
   
   return tracks.every(track => track.readyState === 'live');
@@ -983,37 +969,44 @@ export const updateAudioConstraints = async (constraints) => {
    EXPORT EVERYTHING
 ---------------------------------------------------- */
 const WebRTCService = {
-  setLocalStream,
+  // Stream management
   getLocalStream,
   isMediaInitialized,
   initializeMedia,
+  
+  // Peer connections
   createPeer,
   removePeer,
   getPeer,
   getAllPeers,
   closeAllPeers,
 
+  // Media controls
   toggleAudio,
   toggleVideo,
   isAudioEnabled,
   isVideoEnabled,
   getAudioTrack,
   getVideoTrack,
-  replaceVideoTrack,
+  
+  // Screen sharing
   startScreenShare,
   stopScreenShare,
   isScreenSharingActive,
   getScreenStream,
 
+  // Speaker detection
   startSpeakerDetection,
   stopSpeakerDetection,
   getSpeakingState,
   getCurrentVolume,
 
+  // Maintenance
   restartMedia,
   emergencyCameraRestart,
   cleanup,
 
+  // Debugging
   getWebRTCState,
   debugTracks,
   areTracksHealthy,
