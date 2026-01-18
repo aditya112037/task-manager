@@ -37,7 +37,18 @@ export const initializeMedia = async (
   try {
     console.log("🎥 Initializing media...", constraints);
 
-    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    // ✅ Add optimized video constraints to prevent "Could not start video source"
+    const optimizedConstraints = {
+      audio: constraints.audio,
+      video: constraints.video === true ? {
+        width: { ideal: 1280, max: 1920 },
+        height: { ideal: 720, max: 1080 },
+        frameRate: { ideal: 30, max: 60 },
+        facingMode: { ideal: 'user' }
+      } : constraints.video
+    };
+
+    const stream = await navigator.mediaDevices.getUserMedia(optimizedConstraints);
 
     const success = setLocalStream(stream);
     if (!success) {
@@ -49,6 +60,27 @@ export const initializeMedia = async (
 
   } catch (error) {
     console.error("❌ initializeMedia failed:", error);
+    
+    // ✅ Fallback to audio-only if video fails
+    if (error.name === 'NotReadableError' || error.name === 'NotFoundError') {
+      console.warn("⚠️ Camera error, falling back to audio-only");
+      try {
+        const audioStream = await navigator.mediaDevices.getUserMedia({
+          audio: constraints.audio,
+          video: false
+        });
+        
+        const success = setLocalStream(audioStream);
+        if (success) {
+          mediaInitialized = true;
+          console.log("✅ Fallback to audio-only succeeded");
+          return audioStream;
+        }
+      } catch (fallbackError) {
+        console.error("❌ Audio-only fallback also failed:", fallbackError);
+      }
+    }
+    
     throw error;
   }
 };
