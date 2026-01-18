@@ -235,7 +235,6 @@ export const startSpeakerDetection = (cb) => {
 
   const data = new Uint8Array(analyser.frequencyBinCount);
   audioDetectionEnabled = true;
-  onSpeakingChangeCallback = cb;
 
   speakingInterval = setInterval(() => {
     if (!audioDetectionEnabled) return;
