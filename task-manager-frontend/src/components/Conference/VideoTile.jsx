@@ -2,69 +2,50 @@ import React, { useEffect, useRef } from "react";
 import { Box, Typography, Chip } from "@mui/material";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 
-export default function VideoTile({ 
-  stream, 
-  videoRef, 
+export default function VideoTile({
+  stream,
+  videoRef,
   label,
   isLocal = false,
   isScreen = false,
   small = false,
   large = false,
   isActiveSpeaker = false,
-  children
+  children,
 }) {
-  const internalRef = useRef();
-  const videoElementRef = videoRef || internalRef;
+  const internalRef = useRef(null);
+  const ref = videoRef || internalRef;
 
   useEffect(() => {
-    if (stream && videoElementRef.current) {
-      videoElementRef.current.srcObject = stream;
-    }
-  }, [stream, videoElementRef]);
+    if (!ref.current) return;
+    if (!stream) return;
 
-  // Determine video size and styling
-  const getSizeStyles = () => {
-    if (large) {
-      return {
-        height: "100%",
-        minHeight: "400px",
-      };
+    if (ref.current.srcObject !== stream) {
+      ref.current.srcObject = stream;
     }
-    if (small) {
-      return {
-        height: "180px",
-        width: "240px",
-      };
-    }
-    return {
-      height: "100%",
-      minHeight: "240px",
-    };
-  };
 
-  // Get border styling based on state
-  const getBorderStyles = () => {
-    if (isScreen) {
-      return {
-        border: "3px solid #9c27b0",
-        boxShadow: "0 0 20px rgba(156, 39, 176, 0.4)",
-      };
-    }
-    if (isActiveSpeaker) {
-      return {
-        border: "3px solid #00e676",
-        boxShadow: "0 0 25px rgba(0, 230, 118, 0.4)",
-      };
-    }
-    if (isLocal) {
-      return {
-        border: "2px solid #2196f3",
-      };
-    }
-    return {
-      border: "1px solid #333",
+    const playSafe = async () => {
+      try {
+        await ref.current.play();
+      } catch (_) {}
     };
-  };
+
+    playSafe();
+  }, [stream, ref]);
+
+  const sizeStyles = large
+    ? { height: "100%", minHeight: 400 }
+    : small
+    ? { height: 180, width: 240 }
+    : { height: "100%", minHeight: 240 };
+
+  const borderStyles = isScreen
+    ? { border: "3px solid #9c27b0" }
+    : isActiveSpeaker
+    ? { border: "3px solid #00e676" }
+    : isLocal
+    ? { border: "2px solid #2196f3" }
+    : { border: "1px solid #333" };
 
   return (
     <Box
@@ -73,31 +54,18 @@ export default function VideoTile({
         background: "#111",
         borderRadius: 2,
         overflow: "hidden",
-        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-        transform: isActiveSpeaker ? "scale(1.02)" : "scale(1)",
-        ...getBorderStyles(),
-        ...getSizeStyles(),
-        "&:hover": {
-          boxShadow: isActiveSpeaker 
-            ? "0 0 30px rgba(0, 230, 118, 0.6)"
-            : "0 0 15px rgba(33, 150, 243, 0.3)",
-        },
+        ...sizeStyles,
+        ...borderStyles,
       }}
     >
       <video
-        ref={videoElementRef}
+        ref={ref}
         autoPlay
         playsInline
         muted={isLocal}
-        style={{
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          display: "block",
-        }}
+        style={{ width: "100%", height: "100%", objectFit: "cover" }}
       />
 
-      {/* SPEAKER INDICATOR */}
       {isActiveSpeaker && (
         <Box
           sx={{
@@ -105,111 +73,55 @@ export default function VideoTile({
             top: 8,
             right: 8,
             background: "#00e676",
-            color: "#000",
-            padding: "4px 8px",
-            borderRadius: 4,
+            px: 1,
+            py: 0.5,
+            borderRadius: 2,
             display: "flex",
             alignItems: "center",
             gap: 0.5,
-            animation: "pulse 2s infinite",
-            "@keyframes pulse": {
-              "0%": { opacity: 1 },
-              "50%": { opacity: 0.7 },
-              "100%": { opacity: 1 },
-            },
           }}
         >
-          <VolumeUpIcon sx={{ fontSize: 16 }} />
-          <Typography
-            sx={{
-              fontSize: "0.7rem",
-              fontWeight: "bold",
-              lineHeight: 1,
-            }}
-          >
+          <VolumeUpIcon sx={{ fontSize: 14 }} />
+          <Typography fontSize="0.7rem" fontWeight="bold">
             SPEAKING
           </Typography>
         </Box>
       )}
 
-      {/* LABEL */}
       <Box
         sx={{
           position: "absolute",
           bottom: 0,
           left: 0,
           right: 0,
+          p: 1,
           background: "linear-gradient(transparent, rgba(0,0,0,0.8))",
-          padding: 1,
-          paddingTop: 3,
         }}
       >
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <Typography
-            sx={{
-              color: "white",
-              fontSize: small ? "0.75rem" : "0.875rem",
-              fontWeight: isActiveSpeaker ? "bold" : "normal",
-              textShadow: "1px 1px 2px rgba(0,0,0,0.8)",
-            }}
-          >
-            {label}
-            {isLocal && " (You)"}
-          </Typography>
-          
-          {/* ADDITIONAL STATUS CHIPS */}
-          {isScreen && (
-            <Chip
-              label="Screen"
-              size="small"
-              sx={{
-                background: "#9c27b0",
-                color: "white",
-                fontSize: "0.6rem",
-                height: "20px",
-              }}
-            />
-          )}
-          
-          {isLocal && !isActiveSpeaker && (
-            <Chip
-              label="You"
-              size="small"
-              sx={{
-                background: "#2196f3",
-                color: "white",
-                fontSize: "0.6rem",
-                height: "20px",
-              }}
-            />
-          )}
-        </Box>
+        <Typography
+          sx={{
+            color: "#fff",
+            fontSize: small ? "0.75rem" : "0.85rem",
+            fontWeight: isActiveSpeaker ? "bold" : "normal",
+          }}
+        >
+          {label}
+          {isLocal && " (You)"}
+        </Typography>
+
+        {isScreen && (
+          <Chip
+            label="Screen"
+            size="small"
+            sx={{ ml: 1, background: "#9c27b0", color: "#fff" }}
+          />
+        )}
       </Box>
 
-      {/* ADDITIONAL CHILDREN (like raise hand indicator) */}
       {children && (
         <Box sx={{ position: "absolute", top: 8, left: 8 }}>
           {children}
         </Box>
-      )}
-
-      {/* AUDIO VISUALIZER (Optional for active speaker) */}
-      {isActiveSpeaker && (
-        <Box
-          sx={{
-            position: "absolute",
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: "4px",
-            background: "linear-gradient(90deg, #00e676, #00c853, #00e676)",
-            animation: "wave 2s infinite linear",
-            "@keyframes wave": {
-              "0%": { backgroundPosition: "0% 50%" },
-              "100%": { backgroundPosition: "200% 50%" },
-            },
-          }}
-        />
       )}
     </Box>
   );
