@@ -282,6 +282,39 @@ export const closeAllPeers = () => {
   });
 };
 
+/**
+ * Replace video track in ALL peers + local stream
+ * @param {MediaStreamTrack} newTrack
+ */
+export const replaceVideoTrack = (newTrack) => {
+  if (!localStream || !newTrack) {
+    console.warn("replaceVideoTrack: missing stream or track");
+    return;
+  }
+
+  console.log("🔁 Replacing video track across peers");
+
+  // Remove old video tracks
+  localStream.getVideoTracks().forEach(track => {
+    localStream.removeTrack(track);
+    track.stop();
+  });
+
+  // Add new track
+  localStream.addTrack(newTrack);
+
+  // Replace in all peer connections
+  Object.values(peers).forEach(pc => {
+    const sender = pc.getSenders().find(s => s.track?.kind === "video");
+    if (sender) {
+      sender.replaceTrack(newTrack);
+    }
+  });
+
+  isScreenSharing = true;
+};
+
+
 /* ----------------------------------------------------
    AUDIO/VIDEO CONTROLS
 ---------------------------------------------------- */
@@ -431,19 +464,22 @@ export const stopScreenShare = async (videoRef = null) => {
     // ✅ Camera track MUST exist and be live
     const cameraTrack = localStream.getVideoTracks()[0];
     
-    if (!cameraTrack || cameraTrack.readyState !== 'live') {
-      // This is a fatal error - camera track was lost
-      console.error("FATAL: Camera track unavailable");
-      
-      // Clean up screen stream
-      if (screenStream) {
-        screenStream.getTracks().forEach(t => t.stop());
-        screenStream = null;
-      }
-      isScreenSharing = false;
-      
-      throw new Error("Camera track permanently unavailable");
-    }
+  if (!cameraTrack || cameraTrack.readyState !== "live") {
+  console.warn("Camera unavailable, reverting to audio-only");
+
+  if (videoRef?.current) {
+    videoRef.current.srcObject = null;
+  }
+
+  if (screenStream) {
+    screenStream.getTracks().forEach(t => t.stop());
+    screenStream = null;
+  }
+
+  isScreenSharing = false;
+  return null;
+}
+
     
     // ✅ Restore camera track in all peers
     Object.values(peers).forEach((pc, index) => {
@@ -963,7 +999,7 @@ const WebRTCService = {
   isVideoEnabled,
   getAudioTrack,
   getVideoTrack,
-
+  replaceVideoTrack,
   startScreenShare,
   stopScreenShare,
   isScreenSharingActive,

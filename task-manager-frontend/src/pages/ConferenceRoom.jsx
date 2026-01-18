@@ -43,6 +43,7 @@ import {
   startScreenShare,
   stopScreenShare,
   startSpeakerDetection,
+  getAllPeers,
   stopSpeakerDetection,
 } from "../services/webrtc";
 import { joinConference } from "../services/conferenceSocket";
