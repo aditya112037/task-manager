@@ -299,7 +299,7 @@ export const getWebRTCState = () => ({
    EXPORT SERVICE
 ---------------------------------------------------- */
 
-export default {
+const WebRTCService = {
   initializeMedia,
   getLocalStream,
   isMediaInitialized,
@@ -329,3 +329,6 @@ export default {
   cleanup,
   getWebRTCState,
 };
+
+export default WebRTCService;
+
