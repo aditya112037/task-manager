@@ -449,7 +449,7 @@ export default function TeamDetails() {
     
     fetchTeamTasks();
     fetchPendingExtensions();
-  }, [myRole, team, fetchTeamTasks, fetchPendingExtensions]);
+  }, [myRole, team, fetchTeamTasks, fetchPendingExtensions, conference]);
 
   /* ---------------------------------------------------
      INITIAL LOAD
