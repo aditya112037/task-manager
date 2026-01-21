@@ -33,17 +33,19 @@ import StopScreenShareIcon from "@mui/icons-material/StopScreenShare";
 import ClearAllIcon from "@mui/icons-material/ClearAll";
 import PersonIcon from "@mui/icons-material/Person";
 import PresentToAllIcon from "@mui/icons-material/PresentToAll";
-import { getSocket} from "../services/socket";
+import { getSocket } from "../services/socket";
 import {
   initializeMedia,
   createPeer,
   removePeer,
+  closeAllPeers,
   toggleAudio,
   toggleVideo,
   startScreenShare,
   stopScreenShare,
   startSpeakerDetection,
   stopSpeakerDetection,
+  cleanup as webrtcCleanup,
 } from "../services/webrtc";
 import { joinConference } from "../services/conferenceSocket";
 
@@ -82,33 +84,57 @@ export default function ConferenceRoom() {
   const [activeSpeaker, setActiveSpeaker] = useState(null);
   const [speakerModeEnabled, setSpeakerModeEnabled] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: "", severity: "info" });
-
+  
+  // 🔹 Conference refresh lock
+  const refreshLockRef = useRef(false);
+  
   // 🔹 Mic level state
   const [micLevel, setMicLevel] = useState(0);
-
+  
   // 🟢 Conference join lock
   const conferenceStartedRef = useRef(false);
-
   const mountedRef = useRef(true);
+  
+  // 🔹 Media update debounce ref
+  const mediaUpdateTimeoutRef = useRef(null);
 
   const showNotification = useCallback((message, severity = "info") => {
     setNotification({ open: true, message, severity });
   }, []);
 
+  const handleRefreshConference = useCallback(() => {
+    if (refreshLockRef.current) return;
+    
+    refreshLockRef.current = true;
+    
+    const socket = getSocket();
+    socket.emit("conference:check", { teamId });
+    
+    setTimeout(() => {
+      refreshLockRef.current = false;
+    }, 1000);
+  }, [teamId]);
+
   const handleLeave = useCallback(() => {
     conferenceStartedRef.current = false;
-
+    
     if (socket) {
       socket.emit("conference:leave", { conferenceId });
     }
-    leaveConference(conferenceId);
+    
+    // 🧹 FIX 5 — Cleanup on leave
+    closeAllPeers();
+    webrtcCleanup();
     stopSpeakerDetection();
     
     if (localStream) {
       localStream.getTracks().forEach(track => track.stop());
+      setLocalStreamState(null);
     }
     
     setRemoteStreams({});
+    setParticipants([]);
+    setRaisedHands([]);
     
     navigate(-1);
   }, [socket, conferenceId, localStream, navigate]);
@@ -129,41 +155,43 @@ export default function ConferenceRoom() {
     setMicOn(newMicState);
     
     // ✅ Broadcast media state to other participants
-    socket.emit("conference:media-update", {
-      conferenceId,
-      micOn: newMicState,
-      camOn,
-    });
-    
+    clearTimeout(mediaUpdateTimeoutRef.current);
+    mediaUpdateTimeoutRef.current = setTimeout(() => {
+      socket.emit("conference:media-update", {
+        conferenceId,
+        micOn: newMicState,
+        camOn,
+      });
+    }, 300);
   }, [speakerModeEnabled, activeSpeaker, socket, isAdminOrManager, localStream, micOn, camOn, conferenceId, showNotification]);
 
-const handleToggleCam = useCallback(() => {
-  if (!localStream) {
-    showNotification("Camera unavailable", "warning");
-    return;
-  }
-
-  const videoTrack = localStream.getVideoTracks()[0];
-
-  if (!videoTrack || videoTrack.readyState !== "live") {
-    showNotification("Camera not available. Please refresh.", "error");
-    setCamOn(false);
-    return;
-  }
-
-  const next = !videoTrack.enabled;
-  videoTrack.enabled = next;
-  setCamOn(next);
-
-  socket.emit("conference:media-update", {
-    conferenceId,
-    camOn: next,
-    micOn,
-  });
-}, [localStream, micOn, conferenceId, socket, showNotification]);
-
-
-
+  const handleToggleCam = useCallback(() => {
+    if (!localStream) {
+      showNotification("Camera unavailable", "warning");
+      return;
+    }
+    
+    const videoTrack = localStream.getVideoTracks()[0];
+    
+    if (!videoTrack || videoTrack.readyState !== "live") {
+      showNotification("Camera not available. Please refresh.", "error");
+      setCamOn(false);
+      return;
+    }
+    
+    const next = !videoTrack.enabled;
+    videoTrack.enabled = next;
+    setCamOn(next);
+    
+    clearTimeout(mediaUpdateTimeoutRef.current);
+    mediaUpdateTimeoutRef.current = setTimeout(() => {
+      socket.emit("conference:media-update", {
+        conferenceId,
+        camOn: next,
+        micOn,
+      });
+    }, 300);
+  }, [localStream, micOn, conferenceId, socket, showNotification]);
 
   const handleRaiseHand = useCallback(() => {
     if (!handRaised) {
@@ -180,24 +208,443 @@ const handleToggleCam = useCallback(() => {
         await startScreenShare(localVideoRef);
         setLayout(LAYOUT.PRESENTATION);
         setScreenSharer("me");
+        setSharingScreen(true);
       } else {
         await stopScreenShare(localVideoRef);
-
-        // DO NOT touch tracks here
         setSharingScreen(false);
         setLayout(LAYOUT.GRID);
         setScreenSharer(null);
-        
-        setLayout(LAYOUT.GRID);
-        setScreenSharer(null);
       }
-      setSharingScreen((v) => !v);
     } catch (error) {
       console.error("Screen share error:", error);
       showNotification("Screen share failed", "error");
     }
   }, [sharingScreen, showNotification]);
 
+  // 🔹 Audio analyser for mic level
+  useEffect(() => {
+    if (!localStream || !micOn) {
+      setMicLevel(0);
+      return;
+    }
+    
+    const audioCtx = new AudioContext();
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    
+    const source = audioCtx.createMediaStreamSource(localStream);
+    source.connect(analyser);
+    
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+    
+    let rafId;
+    
+    const update = () => {
+      analyser.getByteFrequencyData(dataArray);
+      const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+      setMicLevel(prev => prev * 0.75 + avg * 0.25);
+      rafId = requestAnimationFrame(update);
+    };
+    
+    update();
+    
+    return () => {
+      cancelAnimationFrame(rafId);
+      analyser.disconnect();
+      source.disconnect();
+      audioCtx.close();
+    };
+  }, [localStream, micOn]);
+
+  // 🟢 FIX 2 — Handle user joined with socketId
+  const handleUserJoined = useCallback(async ({ socketId, userId, userName }) => {
+    if (!mountedRef.current || !localStream) return;
+    
+    console.log("User joined:", socketId, userId);
+    
+    // 🔧 FIX 2 — Use socketId for peer creation
+    const pc = createPeer(socketId, socket);
+    
+    pc.ontrack = (e) => {
+      if (!mountedRef.current) return;
+      setRemoteStreams(prev => ({
+        ...prev,
+        [socketId]: e.streams[0],
+      }));
+    };
+    
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit("conference:offer", { to: socketId, offer });
+    } catch (error) {
+      console.error("Error creating offer:", error);
+    }
+  }, [localStream, socket]);
+
+  // 🟢 FIX 2 — Handle offer with socketId
+  const handleOffer = useCallback(async ({ from, offer }) => {
+    if (!mountedRef.current) return;
+    
+    console.log("Received offer from:", from);
+    
+    // 🔧 FIX 2 — Use socketId for peer creation
+    const pc = createPeer(from, socket);
+    
+    pc.ontrack = (e) => {
+      if (!mountedRef.current) return;
+      setRemoteStreams(prev => ({
+        ...prev,
+        [from]: e.streams[0],
+      }));
+    };
+    
+    try {
+      await pc.setRemoteDescription(offer);
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit("conference:answer", { to: from, answer });
+    } catch (error) {
+      console.error("Error handling offer:", error);
+    }
+  }, [socket]);
+
+  // 🟢 FIX 2 — Handle answer with socketId
+  const handleAnswer = useCallback(async ({ from, answer }) => {
+    if (!mountedRef.current) return;
+    
+    console.log("Received answer from:", from);
+    
+    // 🔧 FIX 2 — Use socketId for peer creation
+    const pc = createPeer(from, socket);
+    try {
+      await pc.setRemoteDescription(answer);
+    } catch (error) {
+      console.error("Error handling answer:", error);
+    }
+  }, [socket]);
+
+  // 🟢 FIX 2 — Handle ICE candidate with socketId
+  const handleIceCandidate = useCallback(({ from, candidate }) => {
+    if (!mountedRef.current) return;
+    
+    // 🔧 FIX 2 — Use socketId for peer creation
+    const pc = createPeer(from, socket);
+    try {
+      pc.addIceCandidate(candidate);
+    } catch (error) {
+      console.error("Error adding ICE candidate:", error);
+    }
+  }, [socket]);
+
+  // 🟢 FIX 2 — Handle user left with socketId
+  const handleUserLeft = useCallback(({ socketId, userId }) => {
+    if (!mountedRef.current) return;
+    
+    console.log("User left:", socketId);
+    
+    // 🔧 FIX 2 — Remove peer using socketId
+    removePeer(socketId);
+    setRemoteStreams(prev => {
+      const copy = { ...prev };
+      delete copy[socketId];
+      return copy;
+    });
+    
+    if (activeSpeaker === socketId) {
+      console.log("Active speaker left, clearing speaker");
+      setActiveSpeaker(null);
+    }
+  }, [activeSpeaker]);
+
+  const fetchConferenceData = useCallback(async (teamId) => {
+    try {
+      const apiBase = process.env.REACT_APP_API_URL || "http://localhost:5000";
+      
+      const response = await fetch(
+        `${apiBase}/api/teams/${teamId}/conference`,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token")}`,
+          },
+          credentials: "include",
+        }
+      );
+      
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Failed to fetch conference state");
+      }
+      
+      return await response.json();
+    } catch (error) {
+      console.error("Error fetching conference data:", error);
+      return null;
+    }
+  }, []);
+
+  // 🟢 Main conference initialization useEffect
+  useEffect(() => {
+    if (conferenceStartedRef.current) return;
+    conferenceStartedRef.current = true;
+    
+    mountedRef.current = true;
+    const mounted = () => mountedRef.current;
+    
+    const start = async () => {
+      try {
+        if (!socket || !socket.connected) {
+          console.warn("Socket not connected, waiting...");
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          if (!socket || !socket.connected) {
+            showNotification("Connection issue. Please refresh.", "error");
+            return;
+          }
+        }
+        
+        let stream = null;
+        try {
+          stream = await initializeMedia({ audio: true, video: true });
+          setLocalStreamState(stream);
+          
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = stream;
+          }
+        } catch (mediaError) {
+          console.warn("Media initialization failed, joining without camera:", mediaError);
+          showNotification("Joining without camera/microphone", "warning");
+        }
+        
+        const confData = await fetchConferenceData(teamId);
+        if (!mounted()) return;
+        
+        if (confData && currentUser) {
+          const isCreator = confData.createdBy === currentUser._id;
+          setIsAdminOrManager(isCreator);
+        }
+        
+        // 🟢 FIX 3 — Always request join
+        joinConference(conferenceId);
+        
+        if (stream) {
+          showNotification("Media initialized successfully", "success");
+        } else {
+          showNotification("Joined conference without camera/microphone", "info");
+        }
+        
+      } catch (error) {
+        console.error("Failed to initialize conference:", error);
+        showNotification(`Conference initialization failed: ${error.message}`, "error");
+        
+        try {
+          const confData = await fetchConferenceData(teamId);
+          if (mounted()) {
+            if (confData && currentUser) {
+              const isCreator = confData.createdBy === currentUser._id;
+              setIsAdminOrManager(isCreator);
+            }
+            showNotification("Joined conference with limited functionality", "warning");
+          }
+        } catch (confError) {
+          console.error("Failed to join conference:", confError);
+          showNotification("Could not join conference. Please try again.", "error");
+        }
+      }
+    };
+    
+    start();
+    
+    const handleParticipantsUpdate = ({ users }) => {
+      if (!mounted()) return;
+      setParticipants(users);
+    };
+    
+    const handleHandsUpdated = ({ raisedHands }) => {
+      if (!mounted()) return;
+      setRaisedHands(raisedHands);
+    };
+    
+    const handleConferenceEnded = () => {
+      if (!mounted()) return;
+      handleLeave();
+    };
+    
+    const handleActiveSpeakerUpdate = ({ socketId }) => {
+      if (!mounted()) return;
+      console.log("Active speaker updated:", socketId);
+      setActiveSpeaker(socketId);
+      
+      if (socketId === socket.id) {
+        showNotification("You are now the active speaker", "success");
+      }
+    };
+    
+    const handleSpeakerModeToggled = ({ enabled }) => {
+      if (!mounted()) return;
+      console.log("Speaker mode toggled:", enabled);
+      setSpeakerModeEnabled(enabled);
+      
+      if (!enabled) {
+        setActiveSpeaker(null);
+      }
+      
+      showNotification(`Speaker mode ${enabled ? "enabled" : "disabled"}`, "info");
+    };
+    
+    const handleSpeakerAssigned = ({ socketId }) => {
+      if (!mounted()) return;
+      console.log("Speaker assigned by admin:", socketId);
+      setActiveSpeaker(socketId);
+      
+      if (socketId === socket.id) {
+        showNotification("You have been assigned as speaker by admin", "success");
+      }
+    };
+    
+    const handleForceMute = () => {
+      if (!mounted()) return;
+      console.log("Admin forced mute");
+      if (localStream) {
+        toggleAudio(false);
+        setMicOn(false);
+        showNotification("Admin has muted your microphone", "warning");
+      }
+    };
+    
+    const handleForceCameraOff = () => {
+      if (!mounted()) return;
+      console.log("Admin turned off camera");
+      if (localStream) {
+        toggleVideo(false);
+        setCamOn(false);
+        showNotification("Admin has turned off your camera", "warning");
+      }
+    };
+    
+    const handleRemovedByAdmin = () => {
+      if (!mounted()) return;
+      console.log("Removed by admin");
+      handleLeave();
+      showNotification("You have been removed from the conference by the admin", "error");
+    };
+    
+    // ✅ Handle media state updates from other participants
+    const handleMediaUpdate = ({ socketId, micOn, camOn }) => {
+      if (!mounted()) return;
+      
+      // 🔒 Ignore self updates — local state is source of truth
+      if (socketId === socket.id) return;
+      
+      setParticipants(prev =>
+        prev.map(p =>
+          p.socketId === socketId
+            ? { ...p, micOn, camOn }
+            : p
+        )
+      );
+    };
+    
+    // 🟢 FIX 4 — Handle conference invite
+    const handleConferenceInvited = ({ conferenceId: invitedConfId }) => {
+      if (!mounted()) return;
+      showNotification(`You are invited to conference ${invitedConfId}`, "info");
+    };
+    
+    // 🔐 FIX 1 — Handle conference state from server
+    const handleConferenceState = ({ active, conference }) => {
+      if (!mounted()) return;
+      
+      if (!active) {
+        showNotification("Conference is not active", "warning");
+        handleLeave();
+        return;
+      }
+      
+      // Update conference data
+      if (conference && currentUser) {
+        const isCreator = conference.createdBy === currentUser._id;
+        setIsAdminOrManager(isCreator);
+      }
+    };
+    
+    socket.on("conference:user-joined", handleUserJoined);
+    socket.on("conference:offer", handleOffer);
+    socket.on("conference:answer", handleAnswer);
+    socket.on("conference:ice-candidate", handleIceCandidate);
+    socket.on("conference:user-left", handleUserLeft);
+    socket.on("conference:participants", handleParticipantsUpdate);
+    socket.on("conference:hands-updated", handleHandsUpdated);
+    socket.on("conference:ended", handleConferenceEnded);
+    
+    socket.on("conference:active-speaker", handleActiveSpeakerUpdate);
+    socket.on("conference:speaker-mode-toggled", handleSpeakerModeToggled);
+    socket.on("conference:speaker-assigned", handleSpeakerAssigned);
+    
+    socket.on("conference:force-mute", handleForceMute);
+    socket.on("conference:force-camera-off", handleForceCameraOff);
+    socket.on("conference:removed-by-admin", handleRemovedByAdmin);
+    
+    // ✅ Listen for media updates
+    socket.on("conference:media-update", handleMediaUpdate);
+    
+    // 🟢 FIX 4 — Listen for conference invites
+    socket.on("conference:invited", handleConferenceInvited);
+    
+    // 🔐 FIX 1 — Listen for conference state
+    socket.on("conference:state", handleConferenceState);
+    
+    return () => {
+      mountedRef.current = false;
+      
+      // 🧹 FIX 5 — Cleanup on unmount
+      stopSpeakerDetection();
+      
+      socket.off("conference:user-joined", handleUserJoined);
+      socket.off("conference:offer", handleOffer);
+      socket.off("conference:answer", handleAnswer);
+      socket.off("conference:ice-candidate", handleIceCandidate);
+      socket.off("conference:user-left", handleUserLeft);
+      socket.off("conference:participants", handleParticipantsUpdate);
+      socket.off("conference:hands-updated", handleHandsUpdated);
+      socket.off("conference:ended", handleConferenceEnded);
+      
+      socket.off("conference:active-speaker", handleActiveSpeakerUpdate);
+      socket.off("conference:speaker-mode-toggled", handleSpeakerModeToggled);
+      socket.off("conference:speaker-assigned", handleSpeakerAssigned);
+      
+      socket.off("conference:force-mute", handleForceMute);
+      socket.off("conference:force-camera-off", handleForceCameraOff);
+      socket.off("conference:removed-by-admin", handleRemovedByAdmin);
+      
+      socket.off("conference:media-update", handleMediaUpdate);
+      socket.off("conference:invited", handleConferenceInvited);
+      socket.off("conference:state", handleConferenceState);
+      
+      clearTimeout(mediaUpdateTimeoutRef.current);
+    };
+  }, [conferenceId, teamId, currentUser, socket, showNotification, handleLeave, 
+      handleUserJoined, handleOffer, handleAnswer, handleIceCandidate, handleUserLeft,
+      fetchConferenceData]);
+  
+  // Speaker detection effect
+  useEffect(() => {
+    if (!localStream || !speakerModeEnabled) return;
+    
+    const cleanup = startSpeakerDetection((speaking) => {
+      if (!speakerModeEnabled) return;
+      
+      socket.emit("conference:speaking", {
+        conferenceId,
+        speaking,
+      });
+    });
+    
+    return cleanup;
+  }, [localStream, speakerModeEnabled, conferenceId, socket]);
+  
+  // Admin override effect for speaker mode
   useEffect(() => {
     if (!localStream || !speakerModeEnabled || !activeSpeaker) return;
     
@@ -219,440 +666,45 @@ const handleToggleCam = useCallback(() => {
     });
   }, [activeSpeaker, speakerModeEnabled, localStream, socket.id, isAdminOrManager]);
 
-useEffect(() => {
-  if (!localStream || !speakerModeEnabled) return;
-
-  const cleanup = startSpeakerDetection((speaking) => {
-    if (!speakerModeEnabled) return;
-
-    socket.emit("conference:speaking", {
-      conferenceId,
-      speaking,
-    });
-  });
-
-  return cleanup;
-}, [localStream, speakerModeEnabled, conferenceId, socket]);
-
-
-  // 🔹 Audio analyser for mic level
-  useEffect(() => {
-    if (!localStream) return;
-
-    const audioCtx = new AudioContext();
-    const analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 256;
-
-    const source = audioCtx.createMediaStreamSource(localStream);
-    source.connect(analyser);
-
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-    let rafId;
-
-    const update = () => {
-      analyser.getByteFrequencyData(dataArray);
-      const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-      setMicLevel(prev => prev * 0.75 + avg * 0.25);
-      rafId = requestAnimationFrame(update);
-    };
-
-    update();
-
-    return () => {
-      cancelAnimationFrame(rafId);
-      analyser.disconnect();
-      source.disconnect();
-      audioCtx.close();
-    };
-  }, [localStream]);
-
-  const fetchConferenceData = useCallback(async (teamId) => {
-    try {
-      const apiBase =
-        process.env.REACT_APP_API_URL || "http://localhost:5000";
-
-      const response = await fetch(
-        `${apiBase}/api/teams/${teamId}/conference`,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-          credentials: "include",
-        }
-      );
-
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error || "Failed to fetch conference state");
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error("Error fetching conference data:", error);
-      return null;
+  const handleAdminAction = useCallback((action, targetSocketId) => {
+    const socket = getSocket();
+    
+    if (!socket || !socket.connected) {
+      console.warn("Socket not connected, admin action blocked");
+      return;
     }
-  }, []);
-
-  // 🟢 Main conference initialization useEffect
-  useEffect(() => {
-    if (conferenceStartedRef.current) return;
-    conferenceStartedRef.current = true;
     
-    mountedRef.current = true;
-    const mounted = () => mountedRef.current;
-
-    const start = async () => {
-      try {
-        if (!socket || !socket.connected) {
-          console.warn("Socket not connected, waiting...");
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          if (!socket || !socket.connected) {
-            showNotification("Connection issue. Please refresh.", "error");
-            return;
-          }
-        }
-
-        let stream = null;
-        try {
-          stream = await initializeMedia({ audio: true, video: true });
-          setLocalStreamState(stream);
-
-          if (localVideoRef.current) {
-            localVideoRef.current.srcObject = stream;
-          }
-          
-          if (localVideoRef.current) {
-            localVideoRef.current.srcObject = stream;
-            console.log("Video element updated with stream");
-          }
-        } catch (mediaError) {
-          console.warn("Media initialization failed, joining without camera:", mediaError);
-          showNotification("Joining without camera/microphone", "warning");
-        }
-
-        const confData = await fetchConferenceData(teamId);
-        if (!mounted()) return;
-        
-        if (confData && currentUser) {
-          const isCreator = confData.createdBy === currentUser._id;
-          setIsAdminOrManager(isCreator);
-        }
-
-        
-
-        joinConference(conferenceId);
-        
-        if (stream) {
-          showNotification("Media initialized successfully", "success");
-        } else {
-          showNotification("Joined conference without camera/microphone", "info");
-        }
-        
-      } catch (error) {
-        console.error("Failed to initialize conference:", error);
-        showNotification(`Conference initialization failed: ${error.message}`, "error");
-        
-        try {
-          const confData = await fetchConferenceData(teamId);
-          if (mounted()) {
-            if (confData && currentUser) {
-              const isCreator = confData.createdBy === currentUser._id;
-              setIsAdminOrManager(isCreator);
-            }
-            
-            
-            showNotification("Joined conference with limited functionality", "warning");
-          }
-        } catch (confError) {
-          console.error("Failed to join conference:", confError);
-          showNotification("Could not join conference. Please try again.", "error");
-        }
-      }
-    };
-
-    start();
-
-    const handleUserJoined = async ({ userId, userName, socketId }) => {
-      if (!mounted()) return;
-      
-      if (!localStream) {
-        console.log("No local stream, skipping peer creation for", socketId);
-        return;
-      }
-      
-      const pc = createPeer(userId, socket);
-
-      pc.ontrack = (e) => {
-        if (!mounted()) return;
-        setRemoteStreams((prev) => ({
-          ...prev,
-          [socketId]: e.streams[0],
-        }));
-      };
-
-      try {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        socket.emit("conference:offer", { to: socketId, offer });
-      } catch (error) {
-        console.error("Error creating offer:", error);
-      }
-    };
-
-    const handleOffer = async ({ from, offer }) => {
-      if (!mounted()) return;
-      
-      const pc = createPeer(from, socket);
-
-      pc.ontrack = (e) => {
-        if (!mounted()) return;
-        setRemoteStreams((prev) => ({
-          ...prev,
-          [from]: e.streams[0],
-        }));
-      };
-
-      try {
-        await pc.setRemoteDescription(offer);
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        socket.emit("conference:answer", { to: from, answer });
-      } catch (error) {
-        console.error("Error handling offer:", error);
-      }
-    };
-
-    const handleAnswer = async ({ from, answer }) => {
-      if (!mounted()) return;
-      
-      const pc = createPeer(from, socket);
-      try {
-        await pc.setRemoteDescription(answer);
-      } catch (error) {
-        console.error("Error handling answer:", error);
-      }
-    };
-
-    const handleIceCandidate = ({ from, candidate }) => {
-      if (!mounted()) return;
-      
-      const pc = createPeer(from, socket);
-      try {
-        pc.addIceCandidate(candidate);
-      } catch (error) {
-        console.error("Error adding ICE candidate:", error);
-      }
-    };
-
-    const handleUserLeft = ({ userId, socketId }) => {
-      if (!mounted()) return;
-      removePeer(userId);
-      setRemoteStreams((prev) => {
-        const copy = { ...prev };
-        delete copy[socketId];
-        return copy;
-      });
-      
-      if (activeSpeaker === socketId) {
-        console.log("Active speaker left, clearing speaker");
-        setActiveSpeaker(null);
-      }
-    };
-
-    const handleParticipantsUpdate = ({ users }) => {
-      if (!mounted()) return;
-      setParticipants(users);
-    };
-
-    const handleHandsUpdated = ({ raisedHands }) => {
-      if (!mounted()) return;
-      setRaisedHands(raisedHands);
-    };
-
-    const handleConferenceEnded = () => {
-      if (!mounted()) return;
-      handleLeave();
-    };
-
-    const handleActiveSpeakerUpdate = ({ socketId }) => {
-      if (!mounted()) return;
-      console.log("Active speaker updated:", socketId);
-      setActiveSpeaker(socketId);
-      
-      if (socketId === socket.id) {
-        showNotification("You are now the active speaker", "success");
-      }
-    };
-
-    const handleSpeakerModeToggled = ({ enabled }) => {
-      if (!mounted()) return;
-      console.log("Speaker mode toggled:", enabled);
-      setSpeakerModeEnabled(enabled);
-      
-      if (!enabled) {
-        setActiveSpeaker(null);
-      }
-      
-      showNotification(`Speaker mode ${enabled ? "enabled" : "disabled"}`, "info");
-    };
-
-    const handleSpeakerAssigned = ({ socketId }) => {
-      if (!mounted()) return;
-      console.log("Speaker assigned by admin:", socketId);
-      setActiveSpeaker(socketId);
-      
-      if (socketId === socket.id) {
-        showNotification("You have been assigned as speaker by admin", "success");
-      }
-    };
-
-    const handleUserLeftEvent = ({ socketId }) => {
-      if (!mounted()) return;
-      
-      if (activeSpeaker === socketId) {
-        console.log("Active speaker left via user-left event");
-        setActiveSpeaker(null);
-      }
-    };
-
-    const handleForceMute = () => {
-      if (!mounted()) return;
-      console.log("Admin forced mute");
-      if (localStream) {
-        toggleAudio(false);
-        setMicOn(false);
-        showNotification("Admin has muted your microphone", "warning");
-      }
-    };
-
-    const handleForceCameraOff = () => {
-      if (!mounted()) return;
-      console.log("Admin turned off camera");
-      if (localStream) {
-        toggleVideo(false);
-        setCamOn(false);
-        showNotification("Admin has turned off your camera", "warning");
-      }
-    };
-
-    const handleRemovedByAdmin = () => {
-      if (!mounted()) return;
-      console.log("Removed by admin");
-      handleLeave();
-      showNotification("You have been removed from the conference by the admin", "error");
-    };
-
-    // ✅ NEW: Handle media state updates from other participants
-    const handleMediaUpdate = ({ socketId, micOn, camOn }) => {
-      if (!mounted()) return;
-
-      // 🔒 Ignore self updates — local state is source of truth
-      if (socketId === socket.id) return;
-
-      setParticipants(prev =>
-        prev.map(p =>
-          p.socketId === socketId
-            ? { ...p, micOn, camOn }
-            : p
-        )
-      );
-    };
-
-    socket.on("conference:user-joined", handleUserJoined);
-    socket.on("conference:offer", handleOffer);
-    socket.on("conference:answer", handleAnswer);
-    socket.on("conference:ice-candidate", handleIceCandidate);
-    socket.on("conference:user-left", handleUserLeft);
-    socket.on("conference:participants", handleParticipantsUpdate);
-    socket.on("conference:hands-updated", handleHandsUpdated);
-    socket.on("conference:ended", handleConferenceEnded);
-    
-    socket.on("conference:active-speaker", handleActiveSpeakerUpdate);
-    socket.on("conference:speaker-mode-toggled", handleSpeakerModeToggled);
-    socket.on("conference:speaker-assigned", handleSpeakerAssigned);
-    
-    socket.on("conference:user-left", handleUserLeftEvent);
-    
-    socket.on("conference:force-mute", handleForceMute);
-    socket.on("conference:force-camera-off", handleForceCameraOff);
-    socket.on("conference:removed-by-admin", handleRemovedByAdmin);
-    
-    // ✅ Listen for media updates
-    socket.on("conference:media-update", handleMediaUpdate);
-
-    return () => {
-      mountedRef.current = false;      
-      stopSpeakerDetection();
-      
-      socket.off("conference:user-joined", handleUserJoined);
-      socket.off("conference:offer", handleOffer);
-      socket.off("conference:answer", handleAnswer);
-      socket.off("conference:ice-candidate", handleIceCandidate);
-      socket.off("conference:user-left", handleUserLeft);
-      socket.off("conference:participants", handleParticipantsUpdate);
-      socket.off("conference:hands-updated", handleHandsUpdated);
-      socket.off("conference:ended", handleConferenceEnded);
-      
-      socket.off("conference:active-speaker", handleActiveSpeakerUpdate);
-      socket.off("conference:speaker-mode-toggled", handleSpeakerModeToggled);
-      socket.off("conference:speaker-assigned", handleSpeakerAssigned);
-      
-      socket.off("conference:user-left", handleUserLeftEvent);
-      
-      socket.off("conference:force-mute", handleForceMute);
-      socket.off("conference:force-camera-off", handleForceCameraOff);
-      socket.off("conference:removed-by-admin", handleRemovedByAdmin);
-      
-      // ✅ Clean up media update listener
-      socket.off("conference:media-update", handleMediaUpdate);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    socket.emit("conference:admin-action", {
+      action,
+      targetSocketId,
+      conferenceId,
+    });
   }, [conferenceId]);
   
-const handleAdminAction = useCallback((action, targetSocketId) => {
-  const socket = getSocket();
-
-  if (!socket || !socket.connected) {
-    console.warn("Socket not connected, admin action blocked");
-    return;
-  }
-
-  socket.emit("conference:admin-action", {
-    action,
-    targetSocketId,
-    conferenceId,
-  });
-}, [conferenceId]);
-
-
-const handleClearAllHands = useCallback(() => {
-  const socket = getSocket();
-  if (!socket || !socket.connected) return;
-
-  socket.emit("conference:admin-action", {
-    action: "clear-hands",
-    conferenceId,
-  });
-}, [conferenceId]);
-
-
+  const handleClearAllHands = useCallback(() => {
+    const socket = getSocket();
+    if (!socket || !socket.connected) return;
+    
+    socket.emit("conference:admin-action", {
+      action: "clear-hands",
+      conferenceId,
+    });
+  }, [conferenceId]);
+  
   const handleOpenAdminMenu = useCallback((event, participantId) => {
     setAdminMenuAnchor(event.currentTarget);
     setSelectedParticipantId(participantId);
   }, []);
-
+  
   const handleCloseAdminMenu = useCallback(() => {
     setAdminMenuAnchor(null);
     setSelectedParticipantId(null);
   }, []);
-
+  
   const toggleParticipantsPanel = useCallback(() => {
     setParticipantsPanelOpen(!participantsPanelOpen);
   }, [participantsPanelOpen]);
-
+  
   const toggleSpeakerMode = useCallback(() => {
     const newMode = !speakerModeEnabled;
     setSpeakerModeEnabled(newMode);
@@ -676,7 +728,7 @@ const handleClearAllHands = useCallback(() => {
     
     showNotification(`Speaker mode ${newMode ? "enabled" : "disabled"}`, "info");
   }, [speakerModeEnabled, localStream, conferenceId, socket, showNotification]);
-
+  
   const setAsSpeaker = useCallback((socketId) => {
     socket.emit("conference:set-speaker", {
       conferenceId,
@@ -685,25 +737,25 @@ const handleClearAllHands = useCallback(() => {
     setActiveSpeaker(socketId);
     showNotification(`Set as active speaker`, "success");
   }, [conferenceId, socket, showNotification]);
-
+  
   const clearSpeaker = useCallback(() => {
     setActiveSpeaker(null);
     socket.emit("conference:clear-speaker", { conferenceId });
     showNotification("Speaker cleared", "info");
   }, [conferenceId, socket, showNotification]);
-
+  
   const toggleLayout = useCallback((newLayout) => {
     setLayout(newLayout);
   }, []);
-
+  
   const allCameraStreams = useMemo(() => {
     return Object.entries(remoteStreams).filter(([socketId, stream]) => stream);
   }, [remoteStreams]);
-
+  
   const activeSpeakerParticipant = participants.find(p => p.socketId === activeSpeaker);
   const activeSpeakerName = activeSpeakerParticipant?.userName || 
     (activeSpeaker === socket.id ? "You" : `User ${activeSpeaker?.slice(0, 4)}`);
-
+  
   return (
     <Box sx={{ display: "flex", height: "100vh", background: "#000" }}>
       <Box sx={{ 
@@ -791,9 +843,24 @@ const handleClearAllHands = useCallback(() => {
                 <PersonIcon />
               </IconButton>
             </Tooltip>
+            
+            {/* 🔐 Refresh button with lock */}
+            <Tooltip title="Refresh Conference">
+              <IconButton
+                onClick={handleRefreshConference}
+                disabled={refreshLockRef.current}
+                sx={{
+                  background: refreshLockRef.current ? "#424242" : "#ff9800",
+                  color: "white",
+                  "&:hover": { background: refreshLockRef.current ? "#303030" : "#f57c00" },
+                }}
+              >
+                <ClearAllIcon />
+              </IconButton>
+            </Tooltip>
           </Box>
         </Box>
-
+        
         {speakerModeEnabled && (
           <Box sx={{ 
             mb: 2, 
@@ -845,7 +912,7 @@ const handleClearAllHands = useCallback(() => {
             )}
           </Box>
         )}
-
+        
         {layout === LAYOUT.PRESENTATION ? (
           <>
             <Box sx={{ flex: 1, mb: 2 }}>
@@ -856,7 +923,7 @@ const handleClearAllHands = useCallback(() => {
                 isActiveSpeaker={speakerModeEnabled && activeSpeaker === socket.id}
               />
             </Box>
-
+            
             <Box sx={{ display: "flex", gap: 2, overflowX: "auto", height: "200px" }}>
               {allCameraStreams.map(([socketId, stream]) => {
                 const participant = participants.find(p => p.socketId === socketId);
@@ -996,7 +1063,7 @@ const handleClearAllHands = useCallback(() => {
                 {handRaised && <RaiseHandIndicator label="Your Hand is Raised" />}
               </VideoTile>
             </Box>
-
+            
             {allCameraStreams.map(([socketId, stream]) => {
               const participant = participants.find(p => p.socketId === socketId);
               const userName = participant?.userName || `User ${socketId.slice(0, 4)}`;
@@ -1071,7 +1138,7 @@ const handleClearAllHands = useCallback(() => {
             })}
           </Box>
         )}
-
+        
         <Box sx={{
           display: "flex",
           justifyContent: "center",
@@ -1109,7 +1176,7 @@ const handleClearAllHands = useCallback(() => {
                 }}
               >
                 <MicIcon />
-
+                
                 {!micOn && (
                   <Box
                     sx={{
@@ -1124,7 +1191,7 @@ const handleClearAllHands = useCallback(() => {
               </IconButton>
             </span>
           </Tooltip>
-
+          
           <Tooltip title={camOn ? "Turn Camera Off" : "Turn Camera On"}>
             <IconButton
               onClick={handleToggleCam}
@@ -1144,8 +1211,7 @@ const handleClearAllHands = useCallback(() => {
               {camOn ? <VideocamIcon /> : <VideocamOffIcon />}
             </IconButton>
           </Tooltip>
-
-
+          
           <Tooltip title={sharingScreen ? "Stop Screen Share" : "Start Screen Share"}>
             <IconButton
               onClick={handleScreenShare}
@@ -1165,7 +1231,7 @@ const handleClearAllHands = useCallback(() => {
               {sharingScreen ? <StopScreenShareIcon /> : <ScreenShareIcon />}
             </IconButton>
           </Tooltip>
-
+          
           <Tooltip title={handRaised ? "Lower Hand" : "Raise Hand"}>
             <IconButton
               onClick={handleRaiseHand}
@@ -1180,7 +1246,7 @@ const handleClearAllHands = useCallback(() => {
               <PanToolIcon />
             </IconButton>
           </Tooltip>
-
+          
           {isAdminOrManager && speakerModeEnabled && (
             <>
               <Tooltip title="Clear Speaker">
@@ -1215,7 +1281,7 @@ const handleClearAllHands = useCallback(() => {
               </Tooltip>
             </>
           )}
-
+          
           <Tooltip title="Leave Conference">
             <IconButton
               onClick={handleLeave}
@@ -1229,7 +1295,7 @@ const handleClearAllHands = useCallback(() => {
             </IconButton>
           </Tooltip>
         </Box>
-
+        
         <Box sx={{ mt: 1, display: "flex", justifyContent: "center", alignItems: "center", gap: 1 }}>
           <Typography color="#aaa" variant="caption">
             Participants: {participants.length || allCameraStreams.length + 1}
@@ -1254,7 +1320,7 @@ const handleClearAllHands = useCallback(() => {
           )}
         </Box>
       </Box>
-
+      
       {participantsPanelOpen && (
         <ParticipantsPanel
           participants={participants}
@@ -1269,7 +1335,7 @@ const handleClearAllHands = useCallback(() => {
           onToggleSpeakerMode={toggleSpeakerMode}
         />
       )}
-
+      
       <Menu
         anchorEl={adminMenuAnchor}
         open={Boolean(adminMenuAnchor)}
@@ -1331,7 +1397,7 @@ const handleClearAllHands = useCallback(() => {
           <Typography color="error">Remove from Conference</Typography>
         </MenuItem>
       </Menu>
-
+      
       <Snackbar
         open={notification.open}
         autoHideDuration={4000}

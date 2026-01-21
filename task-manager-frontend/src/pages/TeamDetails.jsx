@@ -386,7 +386,7 @@ export default function TeamDetails() {
       socket.off("conference:state", handleConferenceState);
       socket.off("reconnect", handleReconnect);
     };
-  }, [teamId, navigate, showSnack, conference]);
+  }, [teamId, navigate, showSnack]);
 
   /* ---------------------------------------------------
      🚨 CRITICAL FIX 3: Refetch when role changes
