@@ -43,7 +43,6 @@ import {
   startScreenShare,
   stopScreenShare,
   startSpeakerDetection,
-  getAllPeers,
   stopSpeakerDetection,
 } from "../services/webrtc";
 import { joinConference } from "../services/conferenceSocket";
@@ -197,7 +196,7 @@ const handleToggleCam = useCallback(() => {
       console.error("Screen share error:", error);
       showNotification("Screen share failed", "error");
     }
-  }, [sharingScreen, localStream, showNotification]);
+  }, [sharingScreen, showNotification]);
 
   useEffect(() => {
     if (!localStream || !speakerModeEnabled || !activeSpeaker) return;
