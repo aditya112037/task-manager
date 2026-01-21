@@ -138,45 +138,22 @@ export default function ConferenceRoom() {
     
   }, [speakerModeEnabled, activeSpeaker, socket, isAdminOrManager, localStream, micOn, camOn, conferenceId, showNotification]);
 
-const handleToggleCam = useCallback(async () => {
-  if (!localStream) return;
-
-  let videoTracks = localStream.getVideoTracks();
-
-  // 🔥 If no camera track, try to re-acquire camera
-  if (videoTracks.length === 0) {
-    try {
-      const newStream = await navigator.mediaDevices.getUserMedia({ video: true });
-      const newTrack = newStream.getVideoTracks()[0];
-
-      if (!newTrack) throw new Error("No camera track");
-
-      localStream.addTrack(newTrack);
-
-      Object.values(getAllPeers()).forEach(pc => {
-        const sender = pc.getSenders().find(s => s.track?.kind === "video");
-        if (sender) sender.replaceTrack(newTrack);
-      });
-
-      setCamOn(true);
-
-      socket.emit("conference:media-update", {
-        conferenceId,
-        camOn: true,
-        micOn,
-      });
-
-      return;
-    } catch (err) {
-      showNotification("Camera unavailable", "error");
-      setCamOn(false);
-      return;
-    }
+const handleToggleCam = useCallback(() => {
+  if (!localStream) {
+    showNotification("Camera unavailable", "warning");
+    return;
   }
 
-  // Normal toggle
-  const next = !videoTracks[0].enabled;
-  videoTracks.forEach(t => (t.enabled = next));
+  const videoTrack = localStream.getVideoTracks()[0];
+
+  if (!videoTrack || videoTrack.readyState !== "live") {
+    showNotification("Camera not available. Please refresh.", "error");
+    setCamOn(false);
+    return;
+  }
+
+  const next = !videoTrack.enabled;
+  videoTrack.enabled = next;
   setCamOn(next);
 
   socket.emit("conference:media-update", {
@@ -185,6 +162,7 @@ const handleToggleCam = useCallback(async () => {
     micOn,
   });
 }, [localStream, micOn, conferenceId, socket, showNotification]);
+
 
 
 
@@ -205,14 +183,11 @@ const handleToggleCam = useCallback(async () => {
         setScreenSharer("me");
       } else {
         await stopScreenShare(localVideoRef);
-        
-        setMicOn(true);
-        setCamOn(true);
-        
-        if (localStream) {
-          localStream.getAudioTracks().forEach(t => (t.enabled = true));
-          localStream.getVideoTracks().forEach(t => (t.enabled = true));
-        }
+
+        // DO NOT touch tracks here
+        setSharingScreen(false);
+        setLayout(LAYOUT.GRID);
+        setScreenSharer(null);
         
         setLayout(LAYOUT.GRID);
         setScreenSharer(null);
@@ -636,7 +611,7 @@ useEffect(() => {
       socket.off("conference:media-update", handleMediaUpdate);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conferenceId, socket, currentUser, teamId]);
+  }, [conferenceId]);
   
 const handleAdminAction = useCallback((action, targetSocketId) => {
   const socket = getSocket();
