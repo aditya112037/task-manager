@@ -1,5 +1,5 @@
 // TeamDetails.jsx - Fixed with Complete Socket-Only Conference System
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Box,
   Typography,
@@ -37,6 +37,7 @@ import VideocamIcon from "@mui/icons-material/Videocam";
 import GroupsIcon from "@mui/icons-material/Groups";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 import PersonIcon from "@mui/icons-material/Person";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { teamsAPI, teamTasksAPI } from "../services/api";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
@@ -91,6 +92,9 @@ export default function TeamDetails() {
   const [conference, setConference] = useState(null);
   const [loadingConference, setLoadingConference] = useState(false);
   const [socketConnected, setSocketConnected] = useState(true);
+
+  // 🟢 FIX 1: Refresh lock for conference refresh
+  const refreshLockRef = useRef(false);
 
   // Snackbar state
   const [snackbar, setSnackbar] = useState({
@@ -227,8 +231,8 @@ export default function TeamDetails() {
     const onCommentsInvalidate = ({ detail }) => {
       if (!detail?.taskId) return;
       // Check if this task belongs to current team
-        const affectedTask = teamTasks.find(t => t._id === detail.taskId);
-       if (affectedTask) {
+      const affectedTask = teamTasks.find(t => t._id === detail.taskId);
+      if (affectedTask) {
         console.log("🔄 TeamDetails: invalidate:comments for task", detail.taskId);
         fetchTeamTasks();
       }
@@ -270,6 +274,26 @@ export default function TeamDetails() {
     
     console.log("Setting up conference listeners for team:", teamId);
 
+    // 🔐 FIX 1: Handle conference state from server
+    const handleConferenceState = ({ active, conference: conf }) => {
+      console.log("🎥 Conference state received:", { active, conf });
+      
+      if (active && conf) {
+        setConference({
+          conferenceId: conf.conferenceId,
+          teamId: conf.teamId,
+          createdBy: conf.createdBy,
+          participants: conf.participants || [],
+          participantCount: conf.participants?.length || 0,
+          speakerMode: conf.speakerMode,
+          startedAt: conf.startedAt,
+        });
+      } else {
+        setConference(null);
+      }
+      setLoadingConference(false);
+    };
+
     // Listen for conference started in this team
     const handleConferenceStarted = ({ conferenceId, teamId: startedTeamId, createdBy }) => {
       console.log("🎥 Conference started event:", { conferenceId, startedTeamId, createdBy });
@@ -280,7 +304,9 @@ export default function TeamDetails() {
         conferenceId,
         teamId: startedTeamId,
         createdBy,
-        participantsCount: 1, // The creator just joined
+        participants: [],
+        participantsCount: 1,
+        participantCount: 1,
       });
       
       showSnack("Conference started successfully!", "success");
@@ -317,74 +343,100 @@ export default function TeamDetails() {
     // Listen for user joined conference
     const handleUserJoined = ({ socketId, userId, userName }) => {
       console.log("🎥 User joined conference:", { socketId, userId, userName });
-      // Update participant count if we have conference data
+      // Update participant list if we have conference data
       if (conference) {
-        setConference(prev => ({
-          ...prev,
-          participantsCount: (prev.participantsCount || 0) + 1
-        }));
+        setConference(prev => {
+          const existingParticipants = prev.participants || [];
+          const alreadyExists = existingParticipants.some(p => p.userId === userId || p.socketId === socketId);
+          
+          if (!alreadyExists) {
+            return {
+              ...prev,
+              participants: [...existingParticipants, { userId, socketId, userName }],
+              participantCount: existingParticipants.length + 1,
+            };
+          }
+          return prev;
+        });
       }
     };
 
     // Listen for user left conference
-    const handleUserLeft = ({ socketId }) => {
-      console.log("🎥 User left conference:", socketId);
-      // Update participant count if we have conference data
+    const handleUserLeft = ({ socketId, userId }) => {
+      console.log("🎥 User left conference:", socketId, userId);
+      // Update participant list if we have conference data
       if (conference) {
-        setConference(prev => ({
-          ...prev,
-          participantsCount: Math.max(0, (prev.participantsCount || 1) - 1)
-        }));
+        setConference(prev => {
+          const existingParticipants = prev.participants || [];
+          const newParticipants = existingParticipants.filter(p => 
+            p.userId !== userId && p.socketId !== socketId
+          );
+          
+          return {
+            ...prev,
+            participants: newParticipants,
+            participantCount: Math.max(0, newParticipants.length),
+          };
+        });
       }
     };
 
-    // 🚨 CRITICAL FIX: Request conference state via socket only
+    // 🟢 FIX 4: Handle conference invites
+    const handleConferenceInvited = ({ conferenceId }) => {
+      console.log("🎥 Conference invited:", conferenceId);
+      showSnack(`You are invited to a conference`, "info");
+      // Optionally auto-join or show join button
+    };
+
+    // 🔐 Request conference state via socket only
     const requestConferenceState = () => {
       console.log("Requesting conference state via socket for team:", teamId);
       socket.emit('conference:check', { teamId });
     };
 
-    // Listen for conference state response
-    const handleConferenceState = ({ conference: existingConference, active }) => {
-      console.log("🎥 Conference state received:", { existingConference, active });
-      if (active && existingConference) {
-        setConference(existingConference);
-      } else {
-        setConference(null);
-      }
-      setLoadingConference(false);
-    };
-
     // Set up socket listeners
+    socket.on("conference:state", handleConferenceState);
     socket.on("conference:started", handleConferenceStarted);
     socket.on("conference:ended", handleConferenceEnded);
     socket.on("conference:created", handleConferenceCreated);
     socket.on("conference:error", handleConferenceError);
     socket.on("conference:user-joined", handleUserJoined);
     socket.on("conference:user-left", handleUserLeft);
-    socket.on("conference:state", handleConferenceState);
+    socket.on("conference:invited", handleConferenceInvited);
     
     // Request conference state
+    setLoadingConference(true);
     requestConferenceState();
     
     // Also listen for socket reconnection
     const handleReconnect = () => {
       console.log("Socket reconnected, requesting conference state");
+      setSocketConnected(true);
       requestConferenceState();
     };
     
     socket.on("reconnect", handleReconnect);
+    
+    // Listen for socket disconnection
+    const handleDisconnect = () => {
+      console.log("Socket disconnected");
+      setSocketConnected(false);
+    };
+    
+    socket.on("disconnect", handleDisconnect);
 
     return () => {
       console.log("Cleaning up conference listeners");
+      socket.off("conference:state", handleConferenceState);
       socket.off("conference:started", handleConferenceStarted);
       socket.off("conference:ended", handleConferenceEnded);
       socket.off("conference:created", handleConferenceCreated);
       socket.off("conference:error", handleConferenceError);
       socket.off("conference:user-joined", handleUserJoined);
       socket.off("conference:user-left", handleUserLeft);
-      socket.off("conference:state", handleConferenceState);
+      socket.off("conference:invited", handleConferenceInvited);
       socket.off("reconnect", handleReconnect);
+      socket.off("disconnect", handleDisconnect);
     };
   }, [teamId, navigate, showSnack]);
 
@@ -439,7 +491,6 @@ export default function TeamDetails() {
     
     try {
       requestConferenceCreation(teamId);
-
       
       // Set a timeout to reset loading state if no response
       setTimeout(() => {
@@ -470,6 +521,33 @@ export default function TeamDetails() {
     console.log("Joining conference:", conference.conferenceId);
     navigate(`/conference/${conference.conferenceId}`);
   };
+
+  /* ---------------------------------------------------
+     CONFERENCE STATUS REFRESH (SOCKET-ONLY) WITH LOCK
+  --------------------------------------------------- */
+  const handleRefreshConference = useCallback(() => {
+    if (refreshLockRef.current) {
+      showSnack("Please wait before refreshing again", "warning");
+      return;
+    }
+    
+    const socket = getSocket();
+    if (!socket || !socket.connected) {
+      showSnack("Socket not available", "error");
+      return;
+    }
+    
+    refreshLockRef.current = true;
+    setLoadingConference(true);
+    
+    console.log("Refreshing conference status");
+    socket.emit('conference:check', { teamId });
+    
+    // Release lock after 1 second
+    setTimeout(() => {
+      refreshLockRef.current = false;
+    }, 1000);
+  }, [teamId, showSnack]);
 
   /* ---------------------------------------------------
      APPROVE - FIXED with optimistic update
@@ -725,20 +803,6 @@ export default function TeamDetails() {
   };
 
   /* ---------------------------------------------------
-     CONFERENCE STATUS REFRESH (SOCKET-ONLY)
-  --------------------------------------------------- */
-  const handleRefreshConference = () => {
-    const socket = getSocket();
-    if (!socket) {
-      showSnack("Socket not available", "error");
-      return;
-    }
-    
-    setLoadingConference(true);
-    socket.emit('conference:check', { teamId });
-  };
-
-  /* ---------------------------------------------------
      RENDER CONFERENCE CARD COMPONENT
   --------------------------------------------------- */
   const renderConferenceCard = () => (
@@ -747,7 +811,8 @@ export default function TeamDetails() {
       mb: 4, 
       borderRadius: 2,
       border: conference ? "2px solid #00e676" : "1px solid #e0e0e0",
-      boxShadow: conference ? "0 4px 20px rgba(0, 230, 118, 0.15)" : "0 2px 8px rgba(0,0,0,0.1)"
+      boxShadow: conference ? "0 4px 20px rgba(0, 230, 118, 0.15)" : "0 2px 8px rgba(0,0,0,0.1)",
+      position: "relative",
     }}>
       <CardContent>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
@@ -760,7 +825,11 @@ export default function TeamDetails() {
               label="Live"
               color="error"
               size="small"
-              sx={{ ml: "auto", animation: "pulse 2s infinite" }}
+              sx={{ 
+                ml: "auto", 
+                animation: "pulse 2s infinite",
+                fontWeight: "bold" 
+              }}
             />
           )}
         </Box>
@@ -775,22 +844,22 @@ export default function TeamDetails() {
         ) : conference ? (
           <>
             <Typography variant="body2" color="text.secondary" gutterBottom>
-              Conference ID: {conference.conferenceId?.slice(0, 12)}...
+              Conference ID: <strong>{conference.conferenceId}</strong>
             </Typography>
             
             <Box sx={{ display: "flex", alignItems: "center", gap: 2, mt: 2, mb: 2 }}>
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                 <GroupsIcon fontSize="small" />
                 <Typography variant="body2">
-                  {conference.participantCount || conference.participantsCount || 1} participant(s)
+                  <strong>{conference.participantCount || conference.participantsCount || 1}</strong> participant(s)
                 </Typography>
               </Box>
 
               {conference.speakerMode?.enabled && (
                 <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                   <VolumeUpIcon fontSize="small" color="success" />
-                  <Typography variant="body2" color="success.main">
-                    Speaker Mode
+                  <Typography variant="body2" color="success.main" fontWeight={600}>
+                    Speaker Mode Active
                   </Typography>
                 </Box>
               )}
@@ -802,24 +871,34 @@ export default function TeamDetails() {
                   Active Participants:
                 </Typography>
                 <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-                  {conference.participants.slice(0, 3).map((participant, index) => (
+                  {conference.participants.slice(0, 5).map((participant, index) => (
                     <Chip
-                      key={index}
+                      key={participant.socketId || index}
                       icon={<PersonIcon fontSize="small" />}
-                      label={participant.name}
+                      label={participant.userName || participant.name || "User"}
                       size="small"
                       variant="outlined"
+                      sx={{ 
+                        borderColor: "#00e676",
+                        color: conference.createdBy === participant.userId ? "#1976d2" : "inherit"
+                      }}
                     />
                   ))}
-                  {conference.participants.length > 3 && (
+                  {conference.participants.length > 5 && (
                     <Chip
-                      label={`+${conference.participants.length - 3} more`}
+                      label={`+${conference.participants.length - 5} more`}
                       size="small"
                       variant="outlined"
                     />
                   )}
                 </Box>
               </Box>
+            )}
+            
+            {conference.startedAt && (
+              <Typography variant="caption" color="text.secondary" display="block" mt={1}>
+                Started: {new Date(conference.startedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+              </Typography>
             )}
           </>
         ) : (
@@ -833,7 +912,7 @@ export default function TeamDetails() {
 
       <CardActions sx={{ justifyContent: "center", p: 2, pt: 0 }}>
         {loadingConference ? (
-          <Button disabled>
+          <Button disabled fullWidth size="large">
             <CircularProgress size={24} />
           </Button>
         ) : conference ? (
@@ -844,8 +923,9 @@ export default function TeamDetails() {
             onClick={handleJoinConference}
             fullWidth
             size="large"
+            disabled={!socketConnected}
           >
-            Join Conference
+            {socketConnected ? "Join Conference" : "Connecting..."}
           </Button>
         ) : ["admin", "manager"].includes(myRole) ? (
           <Button
@@ -855,7 +935,7 @@ export default function TeamDetails() {
             onClick={handleStartConference}
             fullWidth
             size="large"
-            disabled={!socketConnected}
+            disabled={!socketConnected || loadingConference}
           >
             {socketConnected ? "Start Conference" : "Connecting..."}
           </Button>
@@ -871,17 +951,16 @@ export default function TeamDetails() {
         )}
       </CardActions>
       
-      {!loadingConference && (
-        <Box sx={{ p: 2, pt: 0, textAlign: "center" }}>
-          <Button 
-            size="small" 
-            onClick={handleRefreshConference}
-            disabled={loadingConference}
-          >
-            Refresh Status
-          </Button>
-        </Box>
-      )}
+      <Box sx={{ p: 2, pt: 0, textAlign: "center" }}>
+        <Button 
+          size="small" 
+          startIcon={<RefreshIcon />}
+          onClick={handleRefreshConference}
+          disabled={loadingConference || refreshLockRef.current}
+        >
+          {refreshLockRef.current ? "Refreshing..." : "Refresh Status"}
+        </Button>
+      </Box>
     </Card>
   );
 
@@ -981,9 +1060,16 @@ export default function TeamDetails() {
         <>
           {/* CONFERENCE SECTION - SOCKET-ONLY */}
           <Paper sx={{ p: 3, borderRadius: 3, mb: 3 }}>
-            <Typography variant="h6" fontWeight={700} gutterBottom>
-              Team Conference
-            </Typography>
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+              <Typography variant="h6" fontWeight={700}>
+                Team Conference
+              </Typography>
+              <Chip 
+                label={socketConnected ? "Connected" : "Disconnected"} 
+                color={socketConnected ? "success" : "error"} 
+                size="small" 
+              />
+            </Box>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
               Real-time audio/video collaboration for this team
             </Typography>
@@ -1065,16 +1151,20 @@ export default function TeamDetails() {
               <Button 
                 variant="outlined" 
                 size="small"
+                startIcon={<RefreshIcon />}
                 onClick={handleRefreshTasks}
                 disabled={loadingTasks}
               >
                 Refresh
               </Button>
               {canEditTasks && (
-                <Button variant="contained" onClick={() => {
-                  setEditingTask(null);
-                  setShowTaskForm(true);
-                }}>
+                <Button 
+                  variant="contained" 
+                  onClick={() => {
+                    setEditingTask(null);
+                    setShowTaskForm(true);
+                  }}
+                >
                   Create Task
                 </Button>
               )}
@@ -1132,6 +1222,7 @@ export default function TeamDetails() {
             <Box sx={{ display: "flex", gap: 1 }}>
               <Button 
                 variant="outlined" 
+                startIcon={<RefreshIcon />}
                 onClick={handleRefreshExtensions}
                 disabled={loadingExtensions}
               >
