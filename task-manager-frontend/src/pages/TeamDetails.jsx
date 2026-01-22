@@ -95,6 +95,8 @@ export default function TeamDetails() {
 
   // 🟢 FIX 1: Refresh lock for conference refresh
   const refreshLockRef = useRef(false);
+  // 🟢 FIX 2: Store conference state in ref to avoid dependency issues
+  const conferenceRef = useRef(null);
 
   // Snackbar state
   const [snackbar, setSnackbar] = useState({
@@ -259,7 +261,7 @@ export default function TeamDetails() {
 
   /* ---------------------------------------------------
      SOCKET CONFERENCE LISTENERS (PURE SOCKET-ONLY APPROACH)
-     🚨 CRITICAL FIX: No REST calls, only socket events
+     🚨 CRITICAL FIX: Remove conference from dependencies
   --------------------------------------------------- */
   useEffect(() => {
     const socket = getSocket();
@@ -279,7 +281,7 @@ export default function TeamDetails() {
       console.log("🎥 Conference state received:", { active, conf });
       
       if (active && conf) {
-        setConference({
+        const newConference = {
           conferenceId: conf.conferenceId,
           teamId: conf.teamId,
           createdBy: conf.createdBy,
@@ -287,9 +289,12 @@ export default function TeamDetails() {
           participantCount: conf.participants?.length || 0,
           speakerMode: conf.speakerMode,
           startedAt: conf.startedAt,
-        });
+        };
+        setConference(newConference);
+        conferenceRef.current = newConference;
       } else {
         setConference(null);
+        conferenceRef.current = null;
       }
       setLoadingConference(false);
     };
@@ -300,14 +305,16 @@ export default function TeamDetails() {
       if (String(startedTeamId) !== String(teamId)) return;
       
       // Set basic conference info
-      setConference({
+      const newConference = {
         conferenceId,
         teamId: startedTeamId,
         createdBy,
         participants: [],
         participantsCount: 1,
         participantCount: 1,
-      });
+      };
+      setConference(newConference);
+      conferenceRef.current = newConference;
       
       showSnack("Conference started successfully!", "success");
       setLoadingConference(false);
@@ -319,6 +326,7 @@ export default function TeamDetails() {
       if (String(endedTeamId) !== String(teamId)) return;
       
       setConference(null);
+      conferenceRef.current = null;
       showSnack("Conference ended", "info");
     };
 
@@ -344,17 +352,21 @@ export default function TeamDetails() {
     const handleUserJoined = ({ socketId, userId, userName }) => {
       console.log("🎥 User joined conference:", { socketId, userId, userName });
       // Update participant list if we have conference data
-      if (conference) {
+      if (conferenceRef.current) {
         setConference(prev => {
+          if (!prev) return prev;
+          
           const existingParticipants = prev.participants || [];
           const alreadyExists = existingParticipants.some(p => p.userId === userId || p.socketId === socketId);
           
           if (!alreadyExists) {
-            return {
+            const updatedConference = {
               ...prev,
               participants: [...existingParticipants, { userId, socketId, userName }],
               participantCount: existingParticipants.length + 1,
             };
+            conferenceRef.current = updatedConference;
+            return updatedConference;
           }
           return prev;
         });
@@ -365,18 +377,22 @@ export default function TeamDetails() {
     const handleUserLeft = ({ socketId, userId }) => {
       console.log("🎥 User left conference:", socketId, userId);
       // Update participant list if we have conference data
-      if (conference) {
+      if (conferenceRef.current) {
         setConference(prev => {
+          if (!prev) return prev;
+          
           const existingParticipants = prev.participants || [];
           const newParticipants = existingParticipants.filter(p => 
             p.userId !== userId && p.socketId !== socketId
           );
           
-          return {
+          const updatedConference = {
             ...prev,
             participants: newParticipants,
             participantCount: Math.max(0, newParticipants.length),
           };
+          conferenceRef.current = updatedConference;
+          return updatedConference;
         });
       }
     };
@@ -404,7 +420,7 @@ export default function TeamDetails() {
     socket.on("conference:user-left", handleUserLeft);
     socket.on("conference:invited", handleConferenceInvited);
     
-    // Request conference state
+    // Request conference state ONCE
     setLoadingConference(true);
     requestConferenceState();
     
@@ -438,7 +454,7 @@ export default function TeamDetails() {
       socket.off("reconnect", handleReconnect);
       socket.off("disconnect", handleDisconnect);
     };
-  }, [teamId, navigate, showSnack, conference]);
+  }, [teamId, navigate, showSnack]); // 🚨 CRITICAL FIX: Removed conference from dependencies
 
   /* ---------------------------------------------------
      🚨 CRITICAL FIX 3: Refetch when role changes
@@ -449,7 +465,7 @@ export default function TeamDetails() {
     
     fetchTeamTasks();
     fetchPendingExtensions();
-  }, [myRole, team, fetchTeamTasks, fetchPendingExtensions, conference]);
+  }, [myRole, team, fetchTeamTasks, fetchPendingExtensions]);
 
   /* ---------------------------------------------------
      INITIAL LOAD
