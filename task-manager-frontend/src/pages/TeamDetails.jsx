@@ -202,7 +202,7 @@ export default function TeamDetails() {
     } finally {
       setLoadingExtensions(false);
     }
-  }, [teamId, myRole, showSnack]);
+  }, [teamId, myRole, showSnack, conference]);
 
   /* ---------------------------------------------------
      🚨 CRITICAL FIX 1: COMPLETE invalidation listeners

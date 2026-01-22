@@ -638,20 +638,28 @@ const handleToggleCam = useCallback(() => {
   ]);
   
   // Speaker detection effect
-  useEffect(() => {
-    if (!localStream || !speakerModeEnabled) return;
-    
-    const cleanup = startSpeakerDetection((speaking) => {
-      if (!speakerModeEnabled) return;
-      
-      socket.emit("conference:speaking", {
-        conferenceId,
-        speaking,
-      });
+useEffect(() => {
+  if (!localStream || !speakerModeEnabled) return;
+
+  const cleanup = startSpeakerDetection((speaking) => {
+    if (!speakerModeEnabled) return;
+
+    socket.emit("conference:speaking", {
+      conferenceId,
+      speaking,
+      activeSpeaker,
     });
-    
-    return cleanup;
-  }, [localStream, speakerModeEnabled, conferenceId, socket]);
+  });
+
+  return cleanup;
+}, [
+  localStream,
+  speakerModeEnabled,
+  conferenceId,
+  socket,
+  activeSpeaker, // ✅ added
+]);
+
   
   // Admin override effect for speaker mode
   useEffect(() => {
