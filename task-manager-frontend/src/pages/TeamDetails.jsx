@@ -202,7 +202,7 @@ export default function TeamDetails() {
     } finally {
       setLoadingExtensions(false);
     }
-  }, [teamId, myRole, showSnack, conference]);
+  }, [teamId, myRole, showSnack]);
 
   /* ---------------------------------------------------
      🚨 CRITICAL FIX 1: COMPLETE invalidation listeners
@@ -438,7 +438,7 @@ export default function TeamDetails() {
       socket.off("reconnect", handleReconnect);
       socket.off("disconnect", handleDisconnect);
     };
-  }, [teamId, navigate, showSnack]);
+  }, [teamId, navigate, showSnack, conference]);
 
   /* ---------------------------------------------------
      🚨 CRITICAL FIX 3: Refetch when role changes
