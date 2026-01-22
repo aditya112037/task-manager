@@ -625,6 +625,7 @@ const handleToggleCam = useCallback(() => {
     conferenceId, 
     teamId, 
     currentUser, 
+    activeSpeaker,
     socket, 
     showNotification, 
     handleLeave, 
