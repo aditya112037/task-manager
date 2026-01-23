@@ -57,6 +57,14 @@ const resolveUserId = (u) => {
   return null;
 };
 
+const { teamId: routeTeamId } = useParams();
+const teamIdRef = useRef(routeTeamId);
+
+useEffect(() => {
+  teamIdRef.current = routeTeamId;
+}, [routeTeamId]);
+
+
 export default function TeamDetails() {
   const { teamId } = useParams();
   const { user } = useAuth();
@@ -428,10 +436,18 @@ const handleConferenceState = ({ active, conference: conf }) => {
     };
 
     // 🔐 Request conference state via socket only
-    const requestConferenceState = () => {
-      console.log("Requesting conference state via socket for team:", teamId);
-      socket.emit('conference:check', { teamId });
-    };
+   const requestConferenceState = useCallback(() => {
+  const id = teamIdRef.current;
+
+  if (!id) {
+    console.warn("No teamId available for conference check");
+    return;
+  }
+
+  console.log("Requesting conference state via socket for team:", id);
+  socket.emit("conference:check", { teamId: id });
+}, [socket]);
+
 
     // Set up socket listeners
     socket.on("conference:state", handleConferenceState);
@@ -448,11 +464,13 @@ const handleConferenceState = ({ active, conference: conf }) => {
     requestConferenceState();
     
     // Also listen for socket reconnection
-    const handleReconnect = () => {
-      console.log("Socket reconnected, requesting conference state");
-      setSocketConnected(true);
-      requestConferenceState();
-    };
+const handleReconnect = () => {
+  const id = teamIdRef.current;
+  console.log("Socket reconnected, requesting conference state for:", id);
+  setSocketConnected(true);
+  socket.emit("conference:check", { teamId: id });
+};
+
     
     socket.on("reconnect", handleReconnect);
     
@@ -580,7 +598,8 @@ const handleConferenceState = ({ active, conference: conf }) => {
     setLoadingConference(true);
     
     console.log("Refreshing conference status");
-    socket.emit('conference:check', { teamId });
+    socket.emit("conference:check", { teamId: teamIdRef.current });
+
     
     // Release lock after 1 second
     setTimeout(() => {
