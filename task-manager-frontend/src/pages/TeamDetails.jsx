@@ -277,29 +277,42 @@ export default function TeamDetails() {
     console.log("Setting up conference listeners for team:", teamId);
 
     // 🔐 FIX 1: Handle conference state from server
-    const handleConferenceState = ({ active, conference: conf }) => {
-      console.log("🎥 Conference state received:", { active, conf });
-      
-      if (active && conf) {
-        const newConference = {
-          conferenceId: conf.conferenceId,
-          teamId: conf.teamId,
-          createdBy: conf.createdBy,
-          participants: conf.participants || [],
-          participantCount: conf.participants?.length || 0,
-          speakerMode: conf.speakerMode,
-          startedAt: conf.startedAt,
-        };
-        setConference(newConference);
-        conferenceRef.current = newConference;
-      } else {
-        setConference(null);
-        conferenceRef.current = null;
-      }
-      setLoadingConference(false);
+// Replace the handleConferenceState function (around line 229)
+const handleConferenceState = useCallback(({ active, conference: conf }) => {
+  console.log("🎥 Conference state received:", { active, conf });
+  
+  if (active && conf) {
+    const newConference = {
+      conferenceId: conf.conferenceId,
+      teamId: conf.teamId,
+      createdBy: conf.createdBy,
+      participants: conf.participants || [],
+      participantCount: conf.participants?.length || 0,
+      speakerMode: conf.speakerMode,
+      startedAt: conf.startedAt,
     };
-
-    // Listen for conference started in this team
+    
+    // 🚨 CRITICAL FIX: Compare before updating
+    const currentConf = conferenceRef.current;
+    const isSameConference = currentConf && 
+      currentConf.conferenceId === newConference.conferenceId &&
+      currentConf.participantCount === newConference.participantCount &&
+      JSON.stringify(currentConf.participants) === JSON.stringify(newConference.participants);
+    
+    if (!isSameConference) {
+      setConference(newConference);
+      conferenceRef.current = newConference;
+    }
+  } else {
+    // Only set to null if we currently have a conference
+    if (conferenceRef.current !== null) {
+      setConference(null);
+      conferenceRef.current = null;
+    }
+  }
+  
+  setLoadingConference(false);
+}, []);
     const handleConferenceStarted = ({ conferenceId, teamId: startedTeamId, createdBy }) => {
       console.log("🎥 Conference started event:", { conferenceId, startedTeamId, createdBy });
       if (String(startedTeamId) !== String(teamId)) return;
