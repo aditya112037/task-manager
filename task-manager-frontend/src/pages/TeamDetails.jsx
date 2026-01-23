@@ -278,7 +278,9 @@ export default function TeamDetails() {
 
     // 🔐 FIX 1: Handle conference state from server
 // Replace the handleConferenceState function (around line 229)
-const handleConferenceState = useCallback(({ active, conference: conf }) => {
+// Replace the entire handleConferenceState function with this:
+
+const handleConferenceState = ({ active, conference: conf }) => {
   console.log("🎥 Conference state received:", { active, conf });
   
   if (active && conf) {
@@ -300,19 +302,27 @@ const handleConferenceState = useCallback(({ active, conference: conf }) => {
       JSON.stringify(currentConf.participants) === JSON.stringify(newConference.participants);
     
     if (!isSameConference) {
+      console.log("🔄 Updating conference state (changed)");
       setConference(newConference);
       conferenceRef.current = newConference;
+    } else {
+      console.log("⏸️ Conference state unchanged, skipping update");
     }
   } else {
     // Only set to null if we currently have a conference
     if (conferenceRef.current !== null) {
+      console.log("📭 Clearing conference (no active conference)");
       setConference(null);
       conferenceRef.current = null;
+    } else {
+      console.log("⏸️ Already no conference, skipping update");
     }
   }
   
+  // Always clear loading state
+  console.log("✅ Clearing loading conference state");
   setLoadingConference(false);
-}, []);
+};
     const handleConferenceStarted = ({ conferenceId, teamId: startedTeamId, createdBy }) => {
       console.log("🎥 Conference started event:", { conferenceId, startedTeamId, createdBy });
       if (String(startedTeamId) !== String(teamId)) return;
