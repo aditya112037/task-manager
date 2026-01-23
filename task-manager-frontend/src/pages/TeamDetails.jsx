@@ -57,16 +57,8 @@ const resolveUserId = (u) => {
   return null;
 };
 
-const { teamId: routeTeamId } = useParams();
-const teamIdRef = useRef(routeTeamId);
-
-useEffect(() => {
-  teamIdRef.current = routeTeamId;
-}, [routeTeamId]);
-
-
 export default function TeamDetails() {
-  const { teamId } = useParams();
+  const { teamId: routeTeamId } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
@@ -105,6 +97,13 @@ export default function TeamDetails() {
   const refreshLockRef = useRef(false);
   // 🟢 FIX 2: Store conference state in ref to avoid dependency issues
   const conferenceRef = useRef(null);
+  // 🟢 FIX 3: Team ID ref to prevent stale closures
+  const teamIdRef = useRef(routeTeamId);
+
+  // Update teamId ref when routeTeamId changes
+  useEffect(() => {
+    teamIdRef.current = routeTeamId;
+  }, [routeTeamId]);
 
   // Snackbar state
   const [snackbar, setSnackbar] = useState({
@@ -145,7 +144,7 @@ export default function TeamDetails() {
   const fetchTeam = useCallback(async () => {
     setLoadingTeam(true);
     try {
-      const res = await teamsAPI.getTeam(teamId);
+      const res = await teamsAPI.getTeam(routeTeamId);
       setTeam(res.data);
 
       setTeamFormData({
@@ -161,7 +160,7 @@ export default function TeamDetails() {
     } finally {
       setLoadingTeam(false);
     }
-  }, [teamId, showSnack]);
+  }, [routeTeamId, showSnack]);
 
   /* ---------------------------------------------------
      LOAD TASKS
@@ -170,7 +169,7 @@ export default function TeamDetails() {
   const fetchTeamTasks = useCallback(async () => {
     setLoadingTasks(true);
     try {
-      const res = await teamTasksAPI.getTeamTasks(teamId);
+      const res = await teamTasksAPI.getTeamTasks(routeTeamId);
       let tasks = res.data || [];
 
       // 🚨 CRITICAL: Use current myRole value, not from closure
@@ -189,7 +188,7 @@ export default function TeamDetails() {
     } finally {
       setLoadingTasks(false);
     }
-  }, [teamId, myRole, user]);
+  }, [routeTeamId, myRole, user]);
 
   /* ---------------------------------------------------
      LOAD PENDING EXTENSIONS
@@ -204,7 +203,7 @@ export default function TeamDetails() {
     
     setLoadingExtensions(true);
     try {
-      const res = await teamTasksAPI.getPendingExtensions(teamId);
+      const res = await teamTasksAPI.getPendingExtensions(routeTeamId);
       setPendingExtensions(res.data || []);
     } catch (err) {
       console.error("Pending extensions error:", err);
@@ -212,7 +211,7 @@ export default function TeamDetails() {
     } finally {
       setLoadingExtensions(false);
     }
-  }, [teamId, myRole, showSnack]);
+  }, [routeTeamId, myRole, showSnack]);
 
   /* ---------------------------------------------------
      🚨 CRITICAL FIX 1: COMPLETE invalidation listeners
@@ -220,19 +219,19 @@ export default function TeamDetails() {
   --------------------------------------------------- */
   useEffect(() => {
     const onTasksInvalidate = ({ detail }) => {
-      if (detail?.teamId && String(detail.teamId) !== String(teamId)) return;
+      if (detail?.teamId && String(detail.teamId) !== String(routeTeamId)) return;
       console.log("🔄 TeamDetails: invalidate:tasks received");
       fetchTeamTasks();
     };
 
     const onTeamsInvalidate = ({ detail }) => {
-      if (detail?.teamId && String(detail.teamId) !== String(teamId)) return;
+      if (detail?.teamId && String(detail.teamId) !== String(routeTeamId)) return;
       console.log("🔄 TeamDetails: invalidate:teams received");
       fetchTeam();
     };
 
     const onExtensionsInvalidate = ({ detail }) => {
-      if (detail?.teamId && String(detail.teamId) !== String(teamId)) return;
+      if (detail?.teamId && String(detail.teamId) !== String(routeTeamId)) return;
       console.log("🔄 TeamDetails: invalidate:extensions received");
       fetchPendingExtensions();
     };
@@ -260,7 +259,7 @@ export default function TeamDetails() {
       window.removeEventListener("invalidate:comments", onCommentsInvalidate);
     };
   }, [
-    teamId, 
+    routeTeamId, 
     fetchTeamTasks, 
     fetchPendingExtensions, 
     fetchTeam,
@@ -282,58 +281,57 @@ export default function TeamDetails() {
 
     setSocketConnected(true);
     
-    console.log("Setting up conference listeners for team:", teamId);
+    console.log("Setting up conference listeners for team:", routeTeamId);
 
     // 🔐 FIX 1: Handle conference state from server
-// Replace the handleConferenceState function (around line 229)
-// Replace the entire handleConferenceState function with this:
-
-const handleConferenceState = ({ active, conference: conf }) => {
-  console.log("🎥 Conference state received:", { active, conf });
-  
-  if (active && conf) {
-    const newConference = {
-      conferenceId: conf.conferenceId,
-      teamId: conf.teamId,
-      createdBy: conf.createdBy,
-      participants: conf.participants || [],
-      participantCount: conf.participants?.length || 0,
-      speakerMode: conf.speakerMode,
-      startedAt: conf.startedAt,
+    const handleConferenceState = ({ active, conference: conf }) => {
+      console.log("🎥 Conference state received:", { active, conf });
+      
+      if (active && conf) {
+        const newConference = {
+          conferenceId: conf.conferenceId,
+          teamId: conf.teamId,
+          createdBy: conf.createdBy,
+          participants: conf.participants || [],
+          participantCount: conf.participants?.length || 0,
+          speakerMode: conf.speakerMode,
+          startedAt: conf.startedAt,
+        };
+        
+        // 🚨 CRITICAL FIX: Compare before updating
+        const currentConf = conferenceRef.current;
+        const isSameConference = currentConf && 
+          currentConf.conferenceId === newConference.conferenceId &&
+          currentConf.participantCount === newConference.participantCount &&
+          JSON.stringify(currentConf.participants) === JSON.stringify(newConference.participants);
+        
+        if (!isSameConference) {
+          console.log("🔄 Updating conference state (changed)");
+          setConference(newConference);
+          conferenceRef.current = newConference;
+        } else {
+          console.log("⏸️ Conference state unchanged, skipping update");
+        }
+      } else {
+        // Only set to null if we currently have a conference
+        if (conferenceRef.current !== null) {
+          console.log("📭 Clearing conference (no active conference)");
+          setConference(null);
+          conferenceRef.current = null;
+        } else {
+          console.log("⏸️ Already no conference, skipping update");
+        }
+      }
+      
+      // Always clear loading state
+      console.log("✅ Clearing loading conference state");
+      setLoadingConference(false);
     };
-    
-    // 🚨 CRITICAL FIX: Compare before updating
-    const currentConf = conferenceRef.current;
-    const isSameConference = currentConf && 
-      currentConf.conferenceId === newConference.conferenceId &&
-      currentConf.participantCount === newConference.participantCount &&
-      JSON.stringify(currentConf.participants) === JSON.stringify(newConference.participants);
-    
-    if (!isSameConference) {
-      console.log("🔄 Updating conference state (changed)");
-      setConference(newConference);
-      conferenceRef.current = newConference;
-    } else {
-      console.log("⏸️ Conference state unchanged, skipping update");
-    }
-  } else {
-    // Only set to null if we currently have a conference
-    if (conferenceRef.current !== null) {
-      console.log("📭 Clearing conference (no active conference)");
-      setConference(null);
-      conferenceRef.current = null;
-    } else {
-      console.log("⏸️ Already no conference, skipping update");
-    }
-  }
-  
-  // Always clear loading state
-  console.log("✅ Clearing loading conference state");
-  setLoadingConference(false);
-};
+
+    // Listen for conference started in this team
     const handleConferenceStarted = ({ conferenceId, teamId: startedTeamId, createdBy }) => {
       console.log("🎥 Conference started event:", { conferenceId, startedTeamId, createdBy });
-      if (String(startedTeamId) !== String(teamId)) return;
+      if (String(startedTeamId) !== String(routeTeamId)) return;
       
       // Set basic conference info
       const newConference = {
@@ -354,7 +352,7 @@ const handleConferenceState = ({ active, conference: conf }) => {
     // Listen for conference ended in this team
     const handleConferenceEnded = ({ conferenceId, teamId: endedTeamId }) => {
       console.log("🎥 Conference ended event:", { conferenceId, endedTeamId });
-      if (String(endedTeamId) !== String(teamId)) return;
+      if (String(endedTeamId) !== String(routeTeamId)) return;
       
       setConference(null);
       conferenceRef.current = null;
@@ -364,7 +362,7 @@ const handleConferenceState = ({ active, conference: conf }) => {
     // Listen for conference creation success
     const handleConferenceCreated = ({ conferenceId, teamId: createdTeamId }) => {
       console.log("🎥 Conference created:", { conferenceId, createdTeamId });
-      if (String(createdTeamId) !== String(teamId)) return;
+      if (String(createdTeamId) !== String(routeTeamId)) return;
       
       // Navigate to conference room
       setTimeout(() => {
@@ -436,18 +434,15 @@ const handleConferenceState = ({ active, conference: conf }) => {
     };
 
     // 🔐 Request conference state via socket only
-   const requestConferenceState = useCallback(() => {
-  const id = teamIdRef.current;
-
-  if (!id) {
-    console.warn("No teamId available for conference check");
-    return;
-  }
-
-  console.log("Requesting conference state via socket for team:", id);
-  socket.emit("conference:check", { teamId: id });
-}, [socket]);
-
+    const requestConferenceState = () => {
+      const id = teamIdRef.current;
+      if (!id) {
+        console.warn("No teamId available for conference check");
+        return;
+      }
+      console.log("Requesting conference state via socket for team:", id);
+      socket.emit("conference:check", { teamId: id });
+    };
 
     // Set up socket listeners
     socket.on("conference:state", handleConferenceState);
@@ -464,13 +459,12 @@ const handleConferenceState = ({ active, conference: conf }) => {
     requestConferenceState();
     
     // Also listen for socket reconnection
-const handleReconnect = () => {
-  const id = teamIdRef.current;
-  console.log("Socket reconnected, requesting conference state for:", id);
-  setSocketConnected(true);
-  socket.emit("conference:check", { teamId: id });
-};
-
+    const handleReconnect = () => {
+      const id = teamIdRef.current;
+      console.log("Socket reconnected, requesting conference state for:", id);
+      setSocketConnected(true);
+      requestConferenceState();
+    };
     
     socket.on("reconnect", handleReconnect);
     
@@ -495,7 +489,7 @@ const handleReconnect = () => {
       socket.off("reconnect", handleReconnect);
       socket.off("disconnect", handleDisconnect);
     };
-  }, [teamId, navigate, showSnack]); // 🚨 CRITICAL FIX: Removed conference from dependencies
+  }, [routeTeamId, navigate, showSnack]); // 🚨 CRITICAL FIX: Removed conference from dependencies
 
   /* ---------------------------------------------------
      🚨 CRITICAL FIX 3: Refetch when role changes
@@ -516,12 +510,12 @@ const handleReconnect = () => {
   }, [fetchTeam]);
 
   useEffect(() => {
-    if (!teamId) return;
-    joinTeamRoom(teamId);
+    if (!routeTeamId) return;
+    joinTeamRoom(routeTeamId);
     return () => {
-      leaveTeamRoom(teamId);
+      leaveTeamRoom(routeTeamId);
     };
-  }, [teamId]);
+  }, [routeTeamId]);
 
   /* ---------------------------------------------------
      CONFERENCE HANDLERS (PURE SOCKET-ONLY)
@@ -544,10 +538,10 @@ const handleReconnect = () => {
     }
 
     setLoadingConference(true);
-    console.log("Starting conference for team:", teamId);
+    console.log("Starting conference for team:", routeTeamId);
     
     try {
-      requestConferenceCreation(teamId);
+      requestConferenceCreation(routeTeamId);
       
       // Set a timeout to reset loading state if no response
       setTimeout(() => {
@@ -599,13 +593,12 @@ const handleReconnect = () => {
     
     console.log("Refreshing conference status");
     socket.emit("conference:check", { teamId: teamIdRef.current });
-
     
     // Release lock after 1 second
     setTimeout(() => {
       refreshLockRef.current = false;
     }, 1000);
-  }, [teamId, showSnack]);
+  }, [showSnack]);
 
   /* ---------------------------------------------------
      APPROVE - FIXED with optimistic update
@@ -654,7 +647,7 @@ const handleReconnect = () => {
     if (!window.confirm("Leave team?")) return;
 
     try {
-      await teamsAPI.leaveTeam(teamId);
+      await teamsAPI.leaveTeam(routeTeamId);
       showSnack("Left team", "success");
       navigate("/teams");
     } catch (err) {
@@ -668,7 +661,7 @@ const handleReconnect = () => {
   --------------------------------------------------- */
   const handleUpdateRole = async (userId, newRole) => {
     try {
-      await teamsAPI.updateMemberRole(teamId, userId, newRole);
+      await teamsAPI.updateMemberRole(routeTeamId, userId, newRole);
 
       // ✅ FIX: update local state immediately
       setTeam(prev => ({
@@ -693,7 +686,7 @@ const handleReconnect = () => {
     if (!window.confirm("Remove member?")) return;
 
     try {
-      await teamsAPI.removeMember(teamId, userId);
+      await teamsAPI.removeMember(routeTeamId, userId);
       // Socket event will trigger invalidate:teams
       showSnack("Member removed", "success");
     } catch (err) {
@@ -706,6 +699,7 @@ const handleReconnect = () => {
      COPY INVITE
   --------------------------------------------------- */
   const handleCopyInviteLink = () => {
+    if (!team) return;
     navigator.clipboard.writeText(`${window.location.origin}/join/${team._id}`);
     showSnack("Invite link copied!", "success");
   };
@@ -715,7 +709,7 @@ const handleReconnect = () => {
   --------------------------------------------------- */
   const handleUpdateTeam = async () => {
     try {
-      await teamsAPI.updateTeam(teamId, teamFormData);
+      await teamsAPI.updateTeam(routeTeamId, teamFormData);
       // Socket event will trigger invalidate:teams
       setEditTeamDialog(false);
       showSnack("Team updated", "success");
@@ -732,7 +726,7 @@ const handleReconnect = () => {
     if (!window.confirm("Are you sure you want to delete this team? This action cannot be undone.")) return;
 
     try {
-      await teamsAPI.deleteTeam(teamId);
+      await teamsAPI.deleteTeam(routeTeamId);
       showSnack("Team deleted successfully", "success");
       navigate("/teams");
     } catch (err) {
@@ -813,13 +807,13 @@ const handleReconnect = () => {
         const tempTask = {
           ...data,
           _id: `temp-${Date.now()}`,
-          team: { _id: teamId, name: team.name },
+          team: { _id: routeTeamId, name: team.name },
           status: "todo",
           extensionRequest: null
         };
         setTeamTasks(prev => [...prev, tempTask]);
         
-        const res = await teamTasksAPI.createTask(teamId, data);
+        const res = await teamTasksAPI.createTask(routeTeamId, data);
         // Replace temp task with real one
         setTeamTasks(prev =>
           prev.map(t => t._id === tempTask._id ? res.data : t)
@@ -1244,7 +1238,7 @@ const handleReconnect = () => {
                   canEdit={canEditTasks || resolveUserId(t.assignedTo) === resolveUserId(user?._id)}
                   isAdminOrManager={canEditTasks}
                   currentUserId={resolveUserId(user?._id)}
-                  teamId={teamId}
+                  teamId={routeTeamId}
                   onEdit={() => {
                     setEditingTask(t);
                     setShowTaskForm(true);
