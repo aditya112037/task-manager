@@ -1,15 +1,13 @@
-// socket/conference.js
-
 const Team = require("../models/team");
 const verifyConferenceAdmin = require("./verifyConferenceAdmin");
-const { conferences, getConferenceByTeamId, deleteConference } = require("../utils/conferenceStore"); // ✅ Import shared store
+const { conferences, getConferenceByTeamId, deleteConference } = require("../utils/conferenceStore");
 
 module.exports = function registerConferenceSocket(io, socket) {
   /* ---------------------------------------------------
      HELPERS
   --------------------------------------------------- */
 
-  const getUserFromSocket = () => socket.user; // injected via server.js
+  const getUserFromSocket = () => socket.user;
 
   const isAdminOrManager = (member) =>
     member && ["admin", "manager"].includes(member.role);
@@ -17,22 +15,19 @@ module.exports = function registerConferenceSocket(io, socket) {
   const getConferenceRoom = (conferenceId) =>
     `conference_${conferenceId}`;
 
-  // Get participant from conference
   const getParticipant = (conferenceId, socketId) => {
-    const conference = conferences.get(conferenceId); // ✅ Using shared store
+    const conference = conferences.get(conferenceId);
     if (!conference) return null;
     return conference.participants.get(socketId);
   };
 
-  // Check if user is admin in conference
   const isConferenceAdmin = (conferenceId, socketId) => {
     const participant = getParticipant(conferenceId, socketId);
     return participant && ["admin", "manager"].includes(participant.role);
   };
 
-  // Clear speaker timeout for a user
   const clearSpeakerTimeout = (conference, socketId) => {
-    if (!conference.speakerMode) return;
+    if (!conference.speakerMode || !conference.speakerMode.speakerTimeouts) return;
     
     if (conference.speakerMode.speakerTimeouts.has(socketId)) {
       clearTimeout(conference.speakerMode.speakerTimeouts.get(socketId));
@@ -40,8 +35,9 @@ module.exports = function registerConferenceSocket(io, socket) {
     }
   };
 
-  // Set new speaker timeout (auto-clear after silence)
   const setSpeakerTimeout = (conference, socketId) => {
+    if (!conference.speakerMode) return;
+    
     clearSpeakerTimeout(conference, socketId);
     
     const timeout = setTimeout(() => {
@@ -52,41 +48,77 @@ module.exports = function registerConferenceSocket(io, socket) {
           { socketId: null }
         );
       }
-      conference.speakerMode.speakerTimeouts.delete(socketId);
-    }, 2000); // 2 seconds of silence
+      if (conference.speakerMode.speakerTimeouts) {
+        conference.speakerMode.speakerTimeouts.delete(socketId);
+      }
+    }, 2000);
     
+    if (!conference.speakerMode.speakerTimeouts) {
+      conference.speakerMode.speakerTimeouts = new Map();
+    }
     conference.speakerMode.speakerTimeouts.set(socketId, timeout);
   };
 
   /* ---------------------------------------------------
-     SERVER-SIDE MIC ENFORCEMENT (STEP 2)
+     CONFERENCE CHECK ENDPOINT (FOR TEAMDETAILS.JSX)
+     🚨 CRITICAL FIX: Add this missing handler
   --------------------------------------------------- */
-  // Periodic enforcement to prevent rogue clients
-  const enforceSpeakerMode = () => {
-    conferences.forEach((conference, conferenceId) => {
-      if (!conference.speakerMode.enabled) return;
+  socket.on("conference:check", async ({ teamId }) => {
+    try {
+      const user = getUserFromSocket();
+      if (!user) return;
 
-      conference.participants.forEach((_, socketId) => {
-        if (socketId !== conference.speakerMode.activeSpeaker) {
-          io.to(socketId).emit("conference:force-mute");
-        }
+      console.log("🔍 conference:check requested for team:", teamId);
+      
+      // Find conference for this team
+      const conference = getConferenceByTeamId(teamId);
+      
+      if (conference) {
+        // Conference exists, return its state
+        const participants = Array.from(conference.participants.values());
+        const conferenceState = {
+          active: true,
+          conference: {
+            conferenceId: conference.conferenceId,
+            teamId: conference.teamId,
+            createdBy: conference.createdBy,
+            participants: participants,
+            participantCount: participants.length,
+            speakerMode: conference.speakerMode,
+            startedAt: conference.createdAt,
+          }
+        };
+        
+        console.log("✅ Conference found, sending state:", conferenceState);
+        socket.emit("conference:state", conferenceState);
+      } else {
+        // No conference for this team
+        console.log("❌ No conference found for team:", teamId);
+        socket.emit("conference:state", {
+          active: false,
+          conference: null
+        });
+      }
+    } catch (err) {
+      console.error("conference:check error:", err);
+      socket.emit("conference:state", {
+        active: false,
+        conference: null
       });
-    });
-  };
-
-  // Run enforcement every 3 seconds
-  setInterval(enforceSpeakerMode, 3000);
+    }
+  });
 
   /* ---------------------------------------------------
      CREATE CONFERENCE
-     (ADMIN / MANAGER ONLY)
   --------------------------------------------------- */
   socket.on("conference:create", async ({ teamId }) => {
     try {
       const user = getUserFromSocket();
       if (!user) return;
 
-      // Check if conference already exists for this team
+      console.log("🎥 conference:create requested for team:", teamId);
+
+      // Check if conference already exists
       const existingConference = getConferenceByTeamId(teamId);
       if (existingConference) {
         return socket.emit("conference:error", {
@@ -113,7 +145,7 @@ module.exports = function registerConferenceSocket(io, socket) {
 
       const conferenceId = `${teamId}-${Date.now()}`;
 
-      // ✅ Using shared store
+      // Initialize conference
       conferences.set(conferenceId, {
         conferenceId,
         teamId,
@@ -123,39 +155,55 @@ module.exports = function registerConferenceSocket(io, socket) {
         speakerMode: {
           enabled: false,
           activeSpeaker: null,
-          speakerTimeout: null,
           speakerTimeouts: new Map(),
         },
         raisedHands: new Set(),
         adminActions: new Map(),
       });
 
+      // Join the conference room
       socket.join(getConferenceRoom(conferenceId));
 
-      // ✅ CHANGED: Added micOn and camOn fields with default true
-      conferences
-        .get(conferenceId)
-        .participants.set(socket.id, {
-          userId: user._id,
-          role: member.role,
-          name: user.name,
-          socketId: socket.id,
-          micOn: true,    // ✅ NEW: Track mic state
-          camOn: true,    // ✅ NEW: Track camera state
-        });
+      // Add creator as first participant
+      const conference = conferences.get(conferenceId);
+      conference.participants.set(socket.id, {
+        userId: user._id,
+        role: member.role,
+        name: user.name,
+        socketId: socket.id,
+        micOn: true,
+        camOn: true,
+      });
 
+      // Emit success
       socket.emit("conference:created", {
         conferenceId,
         teamId,
       });
 
+      // Notify team room
       io.to(`team_${teamId}`).emit("conference:started", {
         conferenceId,
         teamId,
         createdBy: user._id,
       });
 
-      console.log(`Conference created: ${conferenceId} for team ${teamId}`);
+      // Send conference state to requester
+      const participants = Array.from(conference.participants.values());
+      socket.emit("conference:state", {
+        active: true,
+        conference: {
+          conferenceId,
+          teamId,
+          createdBy: user._id,
+          participants,
+          participantCount: participants.length,
+          speakerMode: conference.speakerMode,
+          startedAt: conference.createdAt,
+        }
+      });
+
+      console.log(`✅ Conference created: ${conferenceId} for team ${teamId}`);
     } catch (err) {
       console.error("conference:create error:", err);
       socket.emit("conference:error", { message: "Server error" });
@@ -165,10 +213,12 @@ module.exports = function registerConferenceSocket(io, socket) {
   /* ---------------------------------------------------
      JOIN CONFERENCE
   --------------------------------------------------- */
-  socket.on("conference:join", async ({ conferenceId, conferenceData }) => {
+  socket.on("conference:join", async ({ conferenceId }) => {
     try {
       const user = getUserFromSocket();
       if (!user) return;
+
+      console.log("🎥 conference:join requested:", conferenceId);
 
       const conference = conferences.get(conferenceId);
       if (!conference) {
@@ -178,7 +228,11 @@ module.exports = function registerConferenceSocket(io, socket) {
       }
 
       const team = await Team.findById(conference.teamId);
-      if (!team) return;
+      if (!team) {
+        return socket.emit("conference:error", {
+          message: "Team not found",
+        });
+      }
 
       const member = team.members.find(
         (m) => String(m.user) === String(user._id)
@@ -190,24 +244,20 @@ module.exports = function registerConferenceSocket(io, socket) {
         });
       }
 
+      // Join the conference room
       socket.join(getConferenceRoom(conferenceId));
 
-      // ✅ CHANGED: Added micOn and camOn fields with default true
+      // Add participant
       conference.participants.set(socket.id, {
         userId: user._id,
         role: member.role,
         name: user.name,
         socketId: socket.id,
-        micOn: true,    // ✅ NEW: Track mic state
-        camOn: true,    // ✅ NEW: Track camera state
+        micOn: true,
+        camOn: true,
       });
 
-      // Emit participant list to all
-      const participants = Array.from(conference.participants.values());
-      io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
-        users: participants,
-      });
-
+      // Notify existing participants
       socket.to(getConferenceRoom(conferenceId)).emit(
         "conference:user-joined",
         {
@@ -217,10 +267,16 @@ module.exports = function registerConferenceSocket(io, socket) {
         }
       );
 
-      // ✅ STATE SYNC ON RECONNECT
+      // Update participant list for all
+      const participants = Array.from(conference.participants.values());
+      io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
+        users: participants,
+      });
+
+      // Send conference state to new joiner
       const conferenceState = {
         conferenceId,
-        participants: participants,
+        participants,
         raisedHands: Array.from(conference.raisedHands),
         speakerMode: {
           enabled: conference.speakerMode.enabled,
@@ -229,24 +285,35 @@ module.exports = function registerConferenceSocket(io, socket) {
       };
 
       socket.emit("conference:joined", conferenceState);
-      socket.emit("conference:state", conferenceState);
+      socket.emit("conference:state", {
+        active: true,
+        conference: {
+          conferenceId: conference.conferenceId,
+          teamId: conference.teamId,
+          createdBy: conference.createdBy,
+          participants,
+          participantCount: participants.length,
+          speakerMode: conference.speakerMode,
+          startedAt: conference.createdAt,
+        }
+      });
 
-      // Send current active speaker state
+      // Send current active speaker
       if (conference.speakerMode.activeSpeaker) {
         socket.emit("conference:active-speaker", {
           socketId: conference.speakerMode.activeSpeaker,
         });
       }
 
-      console.log(`User ${user._id} joined conference ${conferenceId}`);
+      console.log(`✅ User ${user.name} joined conference ${conferenceId}`);
     } catch (err) {
       console.error("conference:join error:", err);
+      socket.emit("conference:error", { message: "Server error" });
     }
   });
 
   /* ---------------------------------------------------
-     MEDIA STATE UPDATES (MIC / CAMERA)
-     ✅ THIS IS THE CORE FIX YOU WERE MISSING
+     MEDIA STATE UPDATES
   --------------------------------------------------- */
   socket.on("conference:media-update", ({ conferenceId, micOn, camOn }) => {
     const conference = conferences.get(conferenceId);
@@ -255,11 +322,11 @@ module.exports = function registerConferenceSocket(io, socket) {
     const participant = conference.participants.get(socket.id);
     if (!participant) return;
 
-    // Update server-side truth
+    // Update server state
     participant.micOn = micOn;
     participant.camOn = camOn;
 
-    // Broadcast to others (include socketId)
+    // Broadcast to others
     socket.to(getConferenceRoom(conferenceId)).emit(
       "conference:media-update",
       {
@@ -269,7 +336,7 @@ module.exports = function registerConferenceSocket(io, socket) {
       }
     );
 
-    console.log(`User ${participant.userId} updated media: mic=${micOn}, cam=${camOn}`);
+    console.log(`📡 Media update: ${participant.name} mic=${micOn}, cam=${camOn}`);
   });
 
   /* ---------------------------------------------------
@@ -279,13 +346,18 @@ module.exports = function registerConferenceSocket(io, socket) {
     const conference = conferences.get(conferenceId);
     if (!conference) return;
 
+    const participant = conference.participants.get(socket.id);
+    if (!participant) return;
+
+    console.log(`🚪 User ${participant.name} leaving conference ${conferenceId}`);
+
     // Remove from participants
     conference.participants.delete(socket.id);
     
     // Remove from raised hands
     conference.raisedHands.delete(socket.id);
     
-    // Clear speaker if this user was speaking
+    // Handle speaker mode
     if (conference.speakerMode.activeSpeaker === socket.id) {
       conference.speakerMode.activeSpeaker = null;
       clearSpeakerTimeout(conference, socket.id);
@@ -295,6 +367,7 @@ module.exports = function registerConferenceSocket(io, socket) {
       });
     }
 
+    // Leave room
     socket.leave(getConferenceRoom(conferenceId));
 
     // Update participant list
@@ -303,9 +376,10 @@ module.exports = function registerConferenceSocket(io, socket) {
       users: participants,
     });
 
+    // Notify others
     socket.to(getConferenceRoom(conferenceId)).emit(
       "conference:user-left",
-      { socketId: socket.id }
+      { socketId: socket.id, userId: participant.userId }
     );
 
     // Update raised hands
@@ -313,22 +387,22 @@ module.exports = function registerConferenceSocket(io, socket) {
       raisedHands: Array.from(conference.raisedHands),
     });
 
-    console.log(`User left conference ${conferenceId}, ${conference.participants.size} remaining`);
-
     // Auto-end if empty
     if (conference.participants.size === 0) {
-      deleteConference(conferenceId); // ✅ Using shared store function
+      deleteConference(conferenceId);
       io.to(`team_${conference.teamId}`).emit("conference:ended", {
         conferenceId,
+        teamId: conference.teamId,
       });
-      console.log(`Conference ${conferenceId} ended (empty)`);
+      console.log(`🏁 Conference ${conferenceId} ended (empty)`);
     }
+
+    console.log(`✅ User left, ${conference.participants.size} remaining`);
   });
 
   /* ---------------------------------------------------
      WEBRTC SIGNALING
   --------------------------------------------------- */
-
   socket.on("conference:offer", ({ to, offer }) => {
     socket.to(to).emit("conference:offer", {
       from: socket.id,
@@ -365,6 +439,8 @@ module.exports = function registerConferenceSocket(io, socket) {
     io.to(getConferenceRoom(conferenceId)).emit("conference:hands-updated", {
       raisedHands: Array.from(conference.raisedHands),
     });
+
+    console.log(`✋ ${participant.name} raised hand`);
   });
 
   socket.on("conference:lower-hand", ({ conferenceId }) => {
@@ -376,13 +452,13 @@ module.exports = function registerConferenceSocket(io, socket) {
     io.to(getConferenceRoom(conferenceId)).emit("conference:hands-updated", {
       raisedHands: Array.from(conference.raisedHands),
     });
+
+    console.log(`👇 Hand lowered for socket ${socket.id}`);
   });
 
   /* ---------------------------------------------------
      SPEAKER MODE FUNCTIONALITY
   --------------------------------------------------- */
-
-  // Toggle speaker mode (admin only)
   socket.on("conference:toggle-speaker-mode", async ({ conferenceId, enabled }) => {
     try {
       const conference = conferences.get(conferenceId);
@@ -391,7 +467,6 @@ module.exports = function registerConferenceSocket(io, socket) {
       const user = getUserFromSocket();
       if (!user) return;
 
-      // ✅ USE DB VERIFICATION FOR CRITICAL ACTIONS
       const isAdmin = await verifyConferenceAdmin({
         userId: user._id,
         conference
@@ -406,11 +481,11 @@ module.exports = function registerConferenceSocket(io, socket) {
       conference.speakerMode.enabled = enabled;
       
       if (!enabled) {
-        // Clear active speaker when disabling
         conference.speakerMode.activeSpeaker = null;
-        // Clear all timeouts
-        conference.speakerMode.speakerTimeouts.forEach(timeout => clearTimeout(timeout));
-        conference.speakerMode.speakerTimeouts.clear();
+        if (conference.speakerMode.speakerTimeouts) {
+          conference.speakerMode.speakerTimeouts.forEach(timeout => clearTimeout(timeout));
+          conference.speakerMode.speakerTimeouts.clear();
+        }
       }
 
       io.to(getConferenceRoom(conferenceId)).emit("conference:speaker-mode-toggled", {
@@ -418,19 +493,17 @@ module.exports = function registerConferenceSocket(io, socket) {
         bySocketId: socket.id,
       });
 
-      // Also emit active speaker update
       io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
         socketId: conference.speakerMode.activeSpeaker,
       });
 
-      console.log(`Speaker mode ${enabled ? 'enabled' : 'disabled'} for conference ${conferenceId}`);
+      console.log(`🔊 Speaker mode ${enabled ? 'enabled' : 'disabled'}`);
     } catch (err) {
       console.error("conference:toggle-speaker-mode error:", err);
       socket.emit("conference:error", { message: "Server error" });
     }
   });
 
-  // ✅ SPEAKING DETECTION WITH OWNERSHIP LOCK
   socket.on("conference:speaking", ({ conferenceId, speaking }) => {
     const conference = conferences.get(conferenceId);
     if (!conference || !conference.speakerMode.enabled) return;
@@ -438,12 +511,12 @@ module.exports = function registerConferenceSocket(io, socket) {
     const participant = conference.participants.get(socket.id);
     if (!participant) return;
 
-    // 🔐 HARD RULE: Only current speaker can send speaking updates
+    // Only current speaker can send speaking updates
     if (
       conference.speakerMode.activeSpeaker &&
       conference.speakerMode.activeSpeaker !== socket.id
     ) {
-      console.log(`Blocked speaker hijack attempt from ${socket.id}, active speaker is ${conference.speakerMode.activeSpeaker}`);
+      console.log(`🚫 Blocked speaker hijack from ${socket.id}`);
       return;
     }
 
@@ -456,14 +529,12 @@ module.exports = function registerConferenceSocket(io, socket) {
         { socketId: socket.id }
       );
     } else {
-      // Only clear if this user is the current active speaker
       if (conference.speakerMode.activeSpeaker === socket.id) {
         setSpeakerTimeout(conference, socket.id);
       }
     }
   });
 
-  // Admin manually sets speaker
   socket.on("conference:set-speaker", async ({ conferenceId, targetSocketId }) => {
     try {
       const conference = conferences.get(conferenceId);
@@ -472,7 +543,6 @@ module.exports = function registerConferenceSocket(io, socket) {
       const user = getUserFromSocket();
       if (!user) return;
 
-      // ✅ USE DB VERIFICATION FOR CRITICAL ACTIONS
       const isAdmin = await verifyConferenceAdmin({
         userId: user._id,
         conference
@@ -484,7 +554,6 @@ module.exports = function registerConferenceSocket(io, socket) {
         });
       }
 
-      // Check if target exists
       const targetParticipant = conference.participants.get(targetSocketId);
       if (!targetParticipant) {
         return socket.emit("conference:error", {
@@ -492,13 +561,9 @@ module.exports = function registerConferenceSocket(io, socket) {
         });
       }
 
-      // Set active speaker
       conference.speakerMode.activeSpeaker = targetSocketId;
-      
-      // Clear previous timeout and set new one
       setSpeakerTimeout(conference, targetSocketId);
       
-      // Broadcast to all
       io.to(getConferenceRoom(conferenceId)).emit("conference:speaker-assigned", {
         socketId: targetSocketId,
         bySocketId: socket.id,
@@ -508,14 +573,13 @@ module.exports = function registerConferenceSocket(io, socket) {
         socketId: targetSocketId,
       });
 
-      console.log(`Speaker manually assigned to ${targetSocketId} in conference ${conferenceId}`);
+      console.log(`🎤 Speaker assigned to ${targetParticipant.name}`);
     } catch (err) {
       console.error("conference:set-speaker error:", err);
       socket.emit("conference:error", { message: "Server error" });
     }
   });
 
-  // Clear active speaker
   socket.on("conference:clear-speaker", async ({ conferenceId }) => {
     try {
       const conference = conferences.get(conferenceId);
@@ -524,7 +588,6 @@ module.exports = function registerConferenceSocket(io, socket) {
       const user = getUserFromSocket();
       if (!user) return;
 
-      // ✅ USE DB VERIFICATION FOR CRITICAL ACTIONS
       const isAdmin = await verifyConferenceAdmin({
         userId: user._id,
         conference
@@ -536,7 +599,6 @@ module.exports = function registerConferenceSocket(io, socket) {
         });
       }
 
-      // Clear active speaker
       const previousSpeaker = conference.speakerMode.activeSpeaker;
       conference.speakerMode.activeSpeaker = null;
       
@@ -544,12 +606,11 @@ module.exports = function registerConferenceSocket(io, socket) {
         clearSpeakerTimeout(conference, previousSpeaker);
       }
 
-      // Broadcast to all
       io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
         socketId: null,
       });
 
-      console.log(`Speaker cleared in conference ${conferenceId}`);
+      console.log(`🔇 Speaker cleared`);
     } catch (err) {
       console.error("conference:clear-speaker error:", err);
       socket.emit("conference:error", { message: "Server error" });
@@ -567,9 +628,6 @@ module.exports = function registerConferenceSocket(io, socket) {
       const adminUser = getUserFromSocket();
       if (!adminUser) return;
 
-      const adminParticipant = conference.participants.get(socket.id);
-      
-      // ✅ USE DB VERIFICATION FOR CRITICAL ACTIONS
       const isAdmin = await verifyConferenceAdmin({
         userId: adminUser._id,
         conference
@@ -588,13 +646,10 @@ module.exports = function registerConferenceSocket(io, socket) {
         });
       }
 
-      // Perform action
       switch (action) {
         case "mute":
           socket.to(targetSocketId).emit("conference:force-mute");
-          // Update server-side state
           targetParticipant.micOn = false;
-          // Broadcast update to all participants
           io.to(getConferenceRoom(conferenceId)).emit("conference:media-update", {
             socketId: targetSocketId,
             micOn: false,
@@ -604,9 +659,7 @@ module.exports = function registerConferenceSocket(io, socket) {
         
         case "camera-off":
           socket.to(targetSocketId).emit("conference:force-camera-off");
-          // Update server-side state
           targetParticipant.camOn = false;
-          // Broadcast update to all participants
           io.to(getConferenceRoom(conferenceId)).emit("conference:media-update", {
             socketId: targetSocketId,
             micOn: targetParticipant.micOn,
@@ -622,11 +675,9 @@ module.exports = function registerConferenceSocket(io, socket) {
           break;
         
         case "remove-from-conference":
-          // Remove target from conference
           conference.participants.delete(targetSocketId);
           conference.raisedHands.delete(targetSocketId);
           
-          // If target was active speaker, clear it
           if (conference.speakerMode.activeSpeaker === targetSocketId) {
             conference.speakerMode.activeSpeaker = null;
             io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
@@ -634,16 +685,13 @@ module.exports = function registerConferenceSocket(io, socket) {
             });
           }
           
-          // Notify target
           io.to(targetSocketId).emit("conference:removed-by-admin");
           
-          // Update participant list
           const participants = Array.from(conference.participants.values());
           io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
             users: participants,
           });
           
-          // Update raised hands
           io.to(getConferenceRoom(conferenceId)).emit("conference:hands-updated", {
             raisedHands: Array.from(conference.raisedHands),
           });
@@ -660,17 +708,7 @@ module.exports = function registerConferenceSocket(io, socket) {
           console.warn(`Unknown admin action: ${action}`);
       }
 
-      // Log admin action
-      conference.adminActions.set(Date.now(), {
-        action,
-        adminSocketId: socket.id,
-        adminUserId: adminUser._id,
-        targetSocketId,
-        targetUserId: targetParticipant.userId,
-        timestamp: new Date(),
-      });
-
-      console.log(`Admin action ${action} performed on ${targetSocketId} in conference ${conferenceId}`);
+      console.log(`🛠️ Admin action: ${action} on ${targetSocketId}`);
     } catch (err) {
       console.error("conference:admin-action error:", err);
       socket.emit("conference:error", { message: "Server error" });
@@ -678,18 +716,22 @@ module.exports = function registerConferenceSocket(io, socket) {
   });
 
   /* ---------------------------------------------------
-     CLEANUP ON DISCONNECT
+     DISCONNECT HANDLER
   --------------------------------------------------- */
   socket.on("disconnect", () => {
+    console.log(`❌ Socket ${socket.id} disconnected`);
+
     for (const [conferenceId, conference] of conferences.entries()) {
       if (conference.participants.has(socket.id)) {
-        // Remove from participants
-        conference.participants.delete(socket.id);
+        const participant = conference.participants.get(socket.id);
         
-        // Remove from raised hands
+        console.log(`🗑️ Removing ${participant?.name} from conference ${conferenceId}`);
+        
+        // Remove participant
+        conference.participants.delete(socket.id);
         conference.raisedHands.delete(socket.id);
         
-        // Clear speaker if this user was speaking
+        // Handle speaker
         if (conference.speakerMode.activeSpeaker === socket.id) {
           conference.speakerMode.activeSpeaker = null;
           clearSpeakerTimeout(conference, socket.id);
@@ -699,30 +741,32 @@ module.exports = function registerConferenceSocket(io, socket) {
           });
         }
 
-        // Update participant list
+        // Update others
         const participants = Array.from(conference.participants.values());
         io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
           users: participants,
         });
 
-        // Update raised hands
         io.to(getConferenceRoom(conferenceId)).emit("conference:hands-updated", {
           raisedHands: Array.from(conference.raisedHands),
         });
 
-        socket
-          .to(getConferenceRoom(conferenceId))
-          .emit("conference:user-left", {
-            socketId: socket.id,
-          });
+        io.to(getConferenceRoom(conferenceId)).emit(
+          "conference:user-left",
+          { socketId: socket.id }
+        );
 
+        // Auto-end if empty
         if (conference.participants.size === 0) {
-          deleteConference(conferenceId); // ✅ Using shared store function
+          deleteConference(conferenceId);
           io.to(`team_${conference.teamId}`).emit("conference:ended", {
             conferenceId,
+            teamId: conference.teamId,
           });
-          console.log(`Conference ${conferenceId} auto-ended on disconnect`);
+          console.log(`🏁 Conference ${conferenceId} auto-ended on disconnect`);
         }
+        
+        break; // Socket can only be in one conference at a time
       }
     }
   });
