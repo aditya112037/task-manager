@@ -1,1395 +1,1309 @@
-// TeamDetails.jsx - Fixed with Complete Socket-Only Conference System
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import {
-  Box,
-  Typography,
-  Avatar,
-  Tabs,
-  Tab,
-  Paper,
+import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
+import { 
+  Box, 
+  Typography, 
+  IconButton, 
+  Tooltip, 
+  Menu, 
+  MenuItem, 
+  ListItemIcon,
   Divider,
-  Stack,
-  Button,
   Chip,
-  IconButton,
-  MenuItem,
-  Select,
-  FormControl,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
   Snackbar,
-  Alert,
-  CircularProgress,
-  Grid,
-  Card,
-  CardContent,
-  CardActions,
+  Alert
 } from "@mui/material";
-import CheckIcon from "@mui/icons-material/Check";
-import CloseIcon from "@mui/icons-material/Close";
-import EditIcon from "@mui/icons-material/Edit";
-import DeleteIcon from "@mui/icons-material/Delete";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import { useParams, useNavigate } from "react-router-dom";
+import PanToolIcon from "@mui/icons-material/PanTool";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
+import VolumeOffIcon from "@mui/icons-material/VolumeOff";
 import VideocamIcon from "@mui/icons-material/Videocam";
+import VideocamOffIcon from "@mui/icons-material/VideocamOff";
+import HandshakeIcon from "@mui/icons-material/Handshake";
+import PersonRemoveIcon from "@mui/icons-material/PersonRemove";
 import GroupsIcon from "@mui/icons-material/Groups";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
+import MicExternalOnIcon from "@mui/icons-material/MicExternalOn";
+import { raiseHand, lowerHand } from "../services/conferenceSocket";
+import RaiseHandIndicator from "../components/Conference/RaiseHandIndicator";
+import ParticipantsPanel from "../components/Conference/ParticipantsPanel";
+import CallEndIcon from "@mui/icons-material/CallEnd";
+import MicIcon from "@mui/icons-material/Mic";
+import ScreenShareIcon from "@mui/icons-material/ScreenShare";
+import StopScreenShareIcon from "@mui/icons-material/StopScreenShare";
+import ClearAllIcon from "@mui/icons-material/ClearAll";
 import PersonIcon from "@mui/icons-material/Person";
-import RefreshIcon from "@mui/icons-material/Refresh";
-import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { teamsAPI, teamTasksAPI } from "../services/api";
-import TeamTaskItem from "../components/Teams/TeamTaskItem";
-import TeamTaskForm from "../components/Teams/TeamTaskForm";
+import PresentToAllIcon from "@mui/icons-material/PresentToAll";
+import { getSocket } from "../services/socket";
+import {
+  initializeMedia,
+  createPeer,
+  removePeer,
+  toggleAudio,
+  toggleVideo,
+  startScreenShare,
+  stopScreenShare,
+  startSpeakerDetection,
+  stopSpeakerDetection,
+} from "../services/webrtc";
+import { joinConference } from "../services/conferenceSocket";
+import VideoTile from "../components/Conference/VideoTile";
 import { useAuth } from "../context/AuthContext";
-import TeamAnalytics from "../components/Teams/Overview/Analytics";
-import { joinTeamRoom, leaveTeamRoom, getSocket } from "../services/socket";
-import { requestConferenceCreation } from "../services/conferenceSocket";
 
-/* ---------------------------------------------------
-   SAFE MEMBER RESOLVER (prevents all crashes)
---------------------------------------------------- */
-const resolveUserId = (u) => {
-  if (!u) return null;
-  if (typeof u === "string") return u;
-  if (typeof u._id === "string") return u._id;
-  return null;
+const LAYOUT = {
+  GRID: "grid",
+  PRESENTATION: "presentation",
+  SPEAKER: "speaker",
 };
 
-export default function TeamDetails() {
-  const { teamId: routeTeamId } = useParams();
-  const { user } = useAuth();
+export default function ConferenceRoom() {
+  const { conferenceId } = useParams();
   const navigate = useNavigate();
-  const location = useLocation();
+  const socket = getSocket();
+  const { user: currentUser } = useAuth();
 
-  const params = new URLSearchParams(location.search);
-  const forcedTab = params.get("tab");
+  const localVideoRef = useRef(null);
+  const [adminMenuAnchor, setAdminMenuAnchor] = useState(null);
+  const [selectedParticipantId, setSelectedParticipantId] = useState(null);
+  const [participantsPanelOpen, setParticipantsPanelOpen] = useState(true);
 
-  const [tab, setTab] = useState(0);
+  const [remoteStreams, setRemoteStreams] = useState({});
+  const [layout, setLayout] = useState(LAYOUT.GRID);
+  const [screenSharer, setScreenSharer] = useState(null);
+  const [raisedHands, setRaisedHands] = useState([]);
+  const [participants, setParticipants] = useState([]);
+  const [handRaised, setHandRaised] = useState(false);
+  const [micOn, setMicOn] = useState(true);
+  const [camOn, setCamOn] = useState(true);
+  const [sharingScreen, setSharingScreen] = useState(false);
+  const [localStream, setLocalStreamState] = useState(null);
+  const [isAdminOrManager, setIsAdminOrManager] = useState(false);
+  const [activeSpeaker, setActiveSpeaker] = useState(null);
+  const [speakerModeEnabled, setSpeakerModeEnabled] = useState(false);
+  const [notification, setNotification] = useState({ open: false, message: "", severity: "info" });
 
-  // Team state
-  const [team, setTeam] = useState(null);
-  const [loadingTeam, setLoadingTeam] = useState(true);
+  const [micLevel, setMicLevel] = useState(0);
+  const conferenceStartedRef = useRef(false);
+  const mountedRef = useRef(true);
 
-  // Task state
-  const [teamTasks, setTeamTasks] = useState([]);
-  const [loadingTasks, setLoadingTasks] = useState(true);
-
-  // Extension state
-  const [pendingExtensions, setPendingExtensions] = useState([]);
-  const [loadingExtensions, setLoadingExtensions] = useState(false);
-
-  // Task form state
-  const [showTaskForm, setShowTaskForm] = useState(false);
-  const [editingTask, setEditingTask] = useState(null);
-
-  // Team edit state
-  const [editTeamDialog, setEditTeamDialog] = useState(false);
-  const [teamFormData, setTeamFormData] = useState({});
-
-  // Conference state - SOCKET-ONLY
-  const [conference, setConference] = useState(null);
-  const [loadingConference, setLoadingConference] = useState(false);
-  const [socketConnected, setSocketConnected] = useState(true);
-
-  // 🟢 FIX 1: Refresh lock for conference refresh
-  const refreshLockRef = useRef(false);
-  // 🟢 FIX 2: Store conference state in ref to avoid dependency issues
-  const conferenceRef = useRef(null);
-  // 🟢 FIX 3: Team ID ref to prevent stale closures
-  const teamIdRef = useRef(routeTeamId);
-
-  // Update teamId ref when routeTeamId changes
-  useEffect(() => {
-    teamIdRef.current = routeTeamId;
-  }, [routeTeamId]);
-
-  // Snackbar state
-  const [snackbar, setSnackbar] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
-
-  // 🚨 CRITICAL FIX 2: Memoized role that updates immediately when team changes
-  const myRole = useMemo(() => {
-    if (!team || !user) return null;
-    const member = team.members?.find(
-      (m) => resolveUserId(m.user) === resolveUserId(user?._id)
-    );
-    return member?.role || null;
-  }, [team, user]);
-
-  const canEditTasks = myRole === "admin" || myRole === "manager";
-  const isAdmin = myRole === "admin";
-
-  /* ---------------------------------------------------
-     Helper functions
-  --------------------------------------------------- */
-  const showSnack = useCallback((msg, sev = "success") => {
-    setSnackbar({ open: true, message: msg, severity: sev });
+  const showNotification = useCallback((message, severity = "info") => {
+    setNotification({ open: true, message, severity });
   }, []);
 
-  /* ---------------------------------------------------
-     APPLY ?tab=extensions
-  --------------------------------------------------- */
-  useEffect(() => {
-    if (forcedTab === "extensions") setTab(3);
-  }, [forcedTab]);
+  const handleLeave = useCallback(() => {
+    conferenceStartedRef.current = false;
 
-  /* ---------------------------------------------------
-     LOAD TEAM
-  --------------------------------------------------- */
-  const fetchTeam = useCallback(async () => {
-    setLoadingTeam(true);
-    try {
-      const res = await teamsAPI.getTeam(routeTeamId);
-      setTeam(res.data);
-
-      setTeamFormData({
-        name: res.data.name,
-        description: res.data.description || "",
-        icon: res.data.icon || "",
-        color: res.data.color || "#1976d2",
-      });
-    } catch (err) {
-      console.error("Team load error:", err);
-      showSnack("Failed to load team", "error");
-      setTeam(null);
-    } finally {
-      setLoadingTeam(false);
+    if (socket) {
+      socket.emit("conference:leave", { conferenceId });
     }
-  }, [routeTeamId, showSnack]);
-
-  /* ---------------------------------------------------
-     LOAD TASKS
-     🚨 CRITICAL FIX 4: Use current role, not stale closure
-  --------------------------------------------------- */
-  const fetchTeamTasks = useCallback(async () => {
-    setLoadingTasks(true);
-    try {
-      const res = await teamTasksAPI.getTeamTasks(routeTeamId);
-      let tasks = res.data || [];
-
-      // 🚨 CRITICAL: Use current myRole value, not from closure
-      if (myRole === "member") {
-        tasks = tasks.filter((t) => {
-          const assigned = resolveUserId(t.assignedTo);
-          const me = resolveUserId(user?._id);
-          return !assigned || assigned === me;
-        });
-      }
-
-      setTeamTasks(tasks);
-    } catch (err) {
-      console.error("Task load error:", err);
-    } finally {
-      setLoadingTasks(false);
+    
+    stopSpeakerDetection();
+    
+    if (localStream) {
+      localStream.getTracks().forEach(track => track.stop());
     }
-  }, [routeTeamId, myRole, user]);
+    
+    setRemoteStreams({});
+    
+    navigate(-1);
+  }, [socket, conferenceId, localStream, navigate]);
 
-  /* ---------------------------------------------------
-     LOAD PENDING EXTENSIONS
-  --------------------------------------------------- */
-  const fetchPendingExtensions = useCallback(async () => {
-    // 🚨 CRITICAL: Use current role check
-    if (!["admin", "manager"].includes(myRole)) {
-      setPendingExtensions([]);
+  const handleToggleMic = useCallback(() => {
+    if (speakerModeEnabled && activeSpeaker !== socket.id && !isAdminOrManager) {
+      showNotification("Only the active speaker can unmute", "warning");
       return;
     }
     
-    setLoadingExtensions(true);
-    try {
-      const res = await teamTasksAPI.getPendingExtensions(routeTeamId);
-      setPendingExtensions(res.data || []);
-    } catch (err) {
-      console.error("Pending extensions error:", err);
-      showSnack("Failed to load extension requests", "error");
-    } finally {
-      setLoadingExtensions(false);
+    if (!localStream) {
+      showNotification("No microphone available", "error");
+      return;
     }
-  }, [routeTeamId, myRole, showSnack]);
+    
+    const newMicState = !micOn;
+    toggleAudio(newMicState);
+    setMicOn(newMicState);
+    
+    socket.emit("conference:media-update", {
+      conferenceId,
+      micOn: newMicState,
+      camOn,
+    });
+    
+  }, [speakerModeEnabled, activeSpeaker, socket, isAdminOrManager, localStream, micOn, camOn, conferenceId, showNotification]);
 
-  /* ---------------------------------------------------
-     🚨 CRITICAL FIX 1: COMPLETE invalidation listeners
-     Listen to ALL events: tasks, teams, extensions, comments
-  --------------------------------------------------- */
-  useEffect(() => {
-    const onTasksInvalidate = ({ detail }) => {
-      if (detail?.teamId && String(detail.teamId) !== String(routeTeamId)) return;
-      console.log("🔄 TeamDetails: invalidate:tasks received");
-      fetchTeamTasks();
-    };
+  const handleToggleCam = useCallback(() => {
+    if (!localStream) {
+      showNotification("Camera unavailable", "warning");
+      return;
+    }
 
-    const onTeamsInvalidate = ({ detail }) => {
-      if (detail?.teamId && String(detail.teamId) !== String(routeTeamId)) return;
-      console.log("🔄 TeamDetails: invalidate:teams received");
-      fetchTeam();
-    };
+    const videoTrack = localStream.getVideoTracks()[0];
 
-    const onExtensionsInvalidate = ({ detail }) => {
-      if (detail?.teamId && String(detail.teamId) !== String(routeTeamId)) return;
-      console.log("🔄 TeamDetails: invalidate:extensions received");
-      fetchPendingExtensions();
-    };
+    if (!videoTrack || videoTrack.readyState !== "live") {
+      showNotification("Camera not available. Please refresh.", "error");
+      setCamOn(false);
+      return;
+    }
 
-    // ✅ ADDED: Comments invalidation for this team's tasks
-    const onCommentsInvalidate = ({ detail }) => {
-      if (!detail?.taskId) return;
-      // Check if this task belongs to current team
-      const affectedTask = teamTasks.find(t => t._id === detail.taskId);
-      if (affectedTask) {
-        console.log("🔄 TeamDetails: invalidate:comments for task", detail.taskId);
-        fetchTeamTasks();
+    const next = !videoTrack.enabled;
+    videoTrack.enabled = next;
+    setCamOn(next);
+
+    socket.emit("conference:media-update", {
+      conferenceId,
+      camOn: next,
+      micOn,
+    });
+  }, [localStream, micOn, conferenceId, socket, showNotification]);
+
+  const handleRaiseHand = useCallback(() => {
+    if (!handRaised) {
+      raiseHand();
+    } else {
+      lowerHand();
+    }
+    setHandRaised(v => !v);
+  }, [handRaised]);
+
+  const handleScreenShare = useCallback(async () => {
+    try {
+      if (!sharingScreen) {
+        await startScreenShare(localVideoRef);
+        setLayout(LAYOUT.PRESENTATION);
+        setScreenSharer("me");
+      } else {
+        await stopScreenShare(localVideoRef);
+        setSharingScreen(false);
+        setLayout(LAYOUT.GRID);
+        setScreenSharer(null);
       }
+      setSharingScreen((v) => !v);
+    } catch (error) {
+      console.error("Screen share error:", error);
+      showNotification("Screen share failed", "error");
+    }
+  }, [sharingScreen, showNotification]);
+
+  useEffect(() => {
+    if (!localStream) {
+      setMicLevel(0);
+      return;
+    }
+    
+    const audioCtx = new AudioContext();
+    const analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+
+    const source = audioCtx.createMediaStreamSource(localStream);
+    source.connect(analyser);
+
+    const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+    let rafId;
+
+    const update = () => {
+      analyser.getByteFrequencyData(dataArray);
+      const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+      setMicLevel(prev => prev * 0.75 + avg * 0.25);
+      rafId = requestAnimationFrame(update);
     };
 
-    window.addEventListener("invalidate:tasks", onTasksInvalidate);
-    window.addEventListener("invalidate:teams", onTeamsInvalidate);
-    window.addEventListener("invalidate:extensions", onExtensionsInvalidate);
-    window.addEventListener("invalidate:comments", onCommentsInvalidate);
+    update();
 
     return () => {
-      window.removeEventListener("invalidate:tasks", onTasksInvalidate);
-      window.removeEventListener("invalidate:teams", onTeamsInvalidate);
-      window.removeEventListener("invalidate:extensions", onExtensionsInvalidate);
-      window.removeEventListener("invalidate:comments", onCommentsInvalidate);
+      cancelAnimationFrame(rafId);
+      analyser.disconnect();
+      source.disconnect();
+      audioCtx.close();
     };
-  }, [
-    routeTeamId, 
-    fetchTeamTasks, 
-    fetchPendingExtensions, 
-    fetchTeam,
-    teamTasks
-  ]);
+  }, [localStream]);
 
-  /* ---------------------------------------------------
-     SOCKET CONFERENCE LISTENERS (PURE SOCKET-ONLY APPROACH)
-     🚨 CRITICAL FIX: Remove conference from dependencies
-  --------------------------------------------------- */
-  useEffect(() => {
-    const socket = getSocket();
-    if (!socket) {
-      console.error("Socket not available");
-      setSocketConnected(false);
-      setLoadingConference(false);
-      return;
-    }
-
-    setSocketConnected(true);
+  const handleUserJoined = useCallback(async ({ socketId, userId, userName }) => {
+    if (!mountedRef.current || !localStream) return;
     
-    console.log("Setting up conference listeners for team:", routeTeamId);
+    console.log("User joined:", socketId, userId);
+    
+    const pc = createPeer(socketId, socket);
+    
+    pc.ontrack = (e) => {
+      if (!mountedRef.current) return;
+      setRemoteStreams(prev => ({
+        ...prev,
+        [socketId]: e.streams[0],
+      }));
+    };
+    
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit("conference:offer", { to: socketId, offer });
+    } catch (error) {
+      console.error("Error creating offer:", error);
+    }
+  }, [localStream, socket]);
 
-    // 🔐 FIX 1: Handle conference state from server
-    const handleConferenceState = ({ active, conference: conf }) => {
-      console.log("🎥 Conference state received:", { active, conf });
+  const handleOffer = useCallback(async ({ from, offer }) => {
+    if (!mountedRef.current) return;
+    
+    console.log("Received offer from:", from);
+    
+    const pc = createPeer(from, socket);
+    
+    pc.ontrack = (e) => {
+      if (!mountedRef.current) return;
+      setRemoteStreams(prev => ({
+        ...prev,
+        [from]: e.streams[0],
+      }));
+    };
+    
+    try {
+      await pc.setRemoteDescription(offer);
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      socket.emit("conference:answer", { to: from, answer });
+    } catch (error) {
+      console.error("Error handling offer:", error);
+    }
+  }, [socket]);
+
+  const handleAnswer = useCallback(async ({ from, answer }) => {
+    if (!mountedRef.current) return;
+    
+    console.log("Received answer from:", from);
+    
+    const pc = createPeer(from, socket);
+    try {
+      await pc.setRemoteDescription(answer);
+    } catch (error) {
+      console.error("Error handling answer:", error);
+    }
+  }, [socket]);
+
+  const handleIceCandidate = useCallback(({ from, candidate }) => {
+    if (!mountedRef.current) return;
+    
+    const pc = createPeer(from, socket);
+    try {
+      pc.addIceCandidate(candidate);
+    } catch (error) {
+      console.error("Error adding ICE candidate:", error);
+    }
+  }, [socket]);
+
+  const handleUserLeft = useCallback(({ socketId, userId }) => {
+    if (!mountedRef.current) return;
+    
+    console.log("User left:", socketId);
+    
+    removePeer(socketId);
+    setRemoteStreams(prev => {
+      const copy = { ...prev };
+      delete copy[socketId];
+      return copy;
+    });
+    
+    if (activeSpeaker === socketId) {
+      console.log("Active speaker left, clearing speaker");
+      setActiveSpeaker(null);
+    }
+  }, [activeSpeaker]);
+
+  useEffect(() => {
+    if (conferenceStartedRef.current) return;
+    conferenceStartedRef.current = true;
+    
+    mountedRef.current = true;
+    const mounted = () => mountedRef.current;
+
+    const start = async () => {
+      try {
+        if (!socket || !socket.connected) {
+          console.warn("Socket not connected, waiting...");
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          if (!socket || !socket.connected) {
+            showNotification("Connection issue. Please refresh.", "error");
+            return;
+          }
+        }
+
+        let stream = null;
+        try {
+          stream = await initializeMedia({ audio: true, video: true });
+          setLocalStreamState(stream);
+
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = stream;
+          }
+        } catch (mediaError) {
+          console.warn("Media initialization failed, joining without camera:", mediaError);
+          showNotification("Joining without camera/microphone", "warning");
+        }
+
+        joinConference(conferenceId);
+        
+        if (stream) {
+          showNotification("Media initialized successfully", "success");
+        } else {
+          showNotification("Joined conference without camera/microphone", "info");
+        }
+        
+      } catch (error) {
+        console.error("Failed to initialize conference:", error);
+        showNotification(`Conference initialization failed: ${error.message}`, "error");
+        showNotification("Could not join conference. Please try again.", "error");
+      }
+    };
+
+    start();
+
+    const handleParticipantsUpdate = ({ users }) => {
+      if (!mounted()) return;
+      setParticipants(users);
+    };
+
+    const handleHandsUpdated = ({ raisedHands }) => {
+      if (!mounted()) return;
+      setRaisedHands(raisedHands);
+    };
+
+    const handleConferenceEnded = () => {
+      if (!mounted()) return;
+      handleLeave();
+    };
+
+    const handleActiveSpeakerUpdate = ({ socketId }) => {
+      if (!mounted()) return;
+      console.log("Active speaker updated:", socketId);
+      setActiveSpeaker(socketId);
       
-      if (active && conf) {
-        const newConference = {
-          conferenceId: conf.conferenceId,
-          teamId: conf.teamId,
-          createdBy: conf.createdBy,
-          participants: conf.participants || [],
-          participantCount: conf.participants?.length || 0,
-          speakerMode: conf.speakerMode,
-          startedAt: conf.startedAt,
-        };
-        
-        // 🚨 CRITICAL FIX: Compare before updating
-        const currentConf = conferenceRef.current;
-        const isSameConference = currentConf && 
-          currentConf.conferenceId === newConference.conferenceId &&
-          currentConf.participantCount === newConference.participantCount &&
-          JSON.stringify(currentConf.participants) === JSON.stringify(newConference.participants);
-        
-        if (!isSameConference) {
-          console.log("🔄 Updating conference state (changed)");
-          setConference(newConference);
-          conferenceRef.current = newConference;
-        } else {
-          console.log("⏸️ Conference state unchanged, skipping update");
-        }
-      } else {
-        // Only set to null if we currently have a conference
-        if (conferenceRef.current !== null) {
-          console.log("📭 Clearing conference (no active conference)");
-          setConference(null);
-          conferenceRef.current = null;
-        } else {
-          console.log("⏸️ Already no conference, skipping update");
-        }
+      if (socketId === socket.id) {
+        showNotification("You are now the active speaker", "success");
+      }
+    };
+
+    const handleSpeakerModeToggled = ({ enabled }) => {
+      if (!mounted()) return;
+      console.log("Speaker mode toggled:", enabled);
+      setSpeakerModeEnabled(enabled);
+      
+      if (!enabled) {
+        setActiveSpeaker(null);
       }
       
-      // Always clear loading state
-      console.log("✅ Clearing loading conference state");
-      setLoadingConference(false);
+      showNotification(`Speaker mode ${enabled ? "enabled" : "disabled"}`, "info");
     };
 
-    // Listen for conference started in this team
-    const handleConferenceStarted = ({ conferenceId, teamId: startedTeamId, createdBy }) => {
-      console.log("🎥 Conference started event:", { conferenceId, startedTeamId, createdBy });
-      if (String(startedTeamId) !== String(routeTeamId)) return;
+    const handleSpeakerAssigned = ({ socketId }) => {
+      if (!mounted()) return;
+      console.log("Speaker assigned by admin:", socketId);
+      setActiveSpeaker(socketId);
       
-      // Set basic conference info
-      const newConference = {
-        conferenceId,
-        teamId: startedTeamId,
-        createdBy,
-        participants: [],
-        participantsCount: 1,
-        participantCount: 1,
-      };
-      setConference(newConference);
-      conferenceRef.current = newConference;
+      if (socketId === socket.id) {
+        showNotification("You have been assigned as speaker by admin", "success");
+      }
+    };
+
+    const handleForceMute = () => {
+      if (!mounted()) return;
+      console.log("Admin forced mute");
+      if (localStream) {
+        toggleAudio(false);
+        setMicOn(false);
+        showNotification("Admin has muted your microphone", "warning");
+      }
+    };
+
+    const handleForceCameraOff = () => {
+      if (!mounted()) return;
+      console.log("Admin turned off camera");
+      if (localStream) {
+        toggleVideo(false);
+        setCamOn(false);
+        showNotification("Admin has turned off your camera", "warning");
+      }
+    };
+
+    const handleRemovedByAdmin = () => {
+      if (!mounted()) return;
+      console.log("Removed by admin");
+      handleLeave();
+      showNotification("You have been removed from the conference by the admin", "error");
+    };
+
+    const handleMediaUpdate = ({ socketId, micOn, camOn }) => {
+      if (!mounted()) return;
+
+      if (socketId === socket.id) return;
+
+      setParticipants(prev =>
+        prev.map(p =>
+          p.socketId === socketId
+            ? { ...p, micOn, camOn }
+            : p
+        )
+      );
+    };
+
+    const handleConferenceInvited = ({ conferenceId: invitedConfId }) => {
+      if (!mounted()) return;
+      showNotification(`You are invited to conference ${invitedConfId}`, "info");
+    };
+
+    const handleConferenceState = ({ active, conference: conf }) => {
+      if (!mounted()) return;
       
-      showSnack("Conference started successfully!", "success");
-      setLoadingConference(false);
-    };
-
-    // Listen for conference ended in this team
-    const handleConferenceEnded = ({ conferenceId, teamId: endedTeamId }) => {
-      console.log("🎥 Conference ended event:", { conferenceId, endedTeamId });
-      if (String(endedTeamId) !== String(routeTeamId)) return;
-      
-      setConference(null);
-      conferenceRef.current = null;
-      showSnack("Conference ended", "info");
-    };
-
-    // Listen for conference creation success
-    const handleConferenceCreated = ({ conferenceId, teamId: createdTeamId }) => {
-      console.log("🎥 Conference created:", { conferenceId, createdTeamId });
-      if (String(createdTeamId) !== String(routeTeamId)) return;
-      
-      // Navigate to conference room
-      setTimeout(() => {
-        navigate(`/conference/${conferenceId}`);
-      }, 500);
-    };
-
-    // Listen for conference creation error
-    const handleConferenceError = ({ message }) => {
-      console.error("🎥 Conference error:", message);
-      showSnack(`Conference error: ${message}`, "error");
-      setLoadingConference(false);
-    };
-
-    // Listen for user joined conference
-
-
-
-    // 🟢 FIX 4: Handle conference invites
-    const handleConferenceInvited = ({ conferenceId }) => {
-      console.log("🎥 Conference invited:", conferenceId);
-      showSnack(`You are invited to a conference`, "info");
-      // Optionally auto-join or show join button
-    };
-
-    // 🔐 Request conference state via socket only
-    const requestConferenceState = () => {
-      const id = teamIdRef.current;
-      if (!id) {
-        console.warn("No teamId available for conference check");
+      if (!active) {
+        showNotification("Conference is not active", "warning");
+        handleLeave();
         return;
       }
-      console.log("Requesting conference state via socket for team:", id);
-      socket.emit("conference:check", { teamId: id });
+      
+      if (conf && currentUser) {
+        const isCreator = conf.createdBy === currentUser._id;
+        setIsAdminOrManager(isCreator);
+      }
+
+      if (conf?.participants) {
+        setParticipants(conf.participants);
+      }
     };
 
-    // Set up socket listeners
-    socket.on("conference:state", handleConferenceState);
-    socket.on("conference:started", handleConferenceStarted);
+    socket.on("conference:user-joined", handleUserJoined);
+    socket.on("conference:offer", handleOffer);
+    socket.on("conference:answer", handleAnswer);
+    socket.on("conference:ice-candidate", handleIceCandidate);
+    socket.on("conference:user-left", handleUserLeft);
+    socket.on("conference:participants", handleParticipantsUpdate);
+    socket.on("conference:hands-updated", handleHandsUpdated);
     socket.on("conference:ended", handleConferenceEnded);
-    socket.on("conference:created", handleConferenceCreated);
-    socket.on("conference:error", handleConferenceError);
+    
+    socket.on("conference:active-speaker", handleActiveSpeakerUpdate);
+    socket.on("conference:speaker-mode-toggled", handleSpeakerModeToggled);
+    socket.on("conference:speaker-assigned", handleSpeakerAssigned);
+    
+    socket.on("conference:force-mute", handleForceMute);
+    socket.on("conference:force-camera-off", handleForceCameraOff);
+    socket.on("conference:removed-by-admin", handleRemovedByAdmin);
+    
+    socket.on("conference:media-update", handleMediaUpdate);
+    
     socket.on("conference:invited", handleConferenceInvited);
     
-    // Request conference state ONCE
-    setLoadingConference(true);
-    requestConferenceState();
-    
-    // Also listen for socket reconnection
-    const handleReconnect = () => {
-      const id = teamIdRef.current;
-      console.log("Socket reconnected, requesting conference state for:", id);
-      setSocketConnected(true);
-      requestConferenceState();
-    };
-    
-    socket.on("reconnect", handleReconnect);
-    
-    // Listen for socket disconnection
-    const handleDisconnect = () => {
-      console.log("Socket disconnected");
-      setSocketConnected(false);
-    };
-    
-    socket.on("disconnect", handleDisconnect);
+    socket.on("conference:state", handleConferenceState);
 
     return () => {
-      console.log("Cleaning up conference listeners");
-      socket.off("conference:state", handleConferenceState);
-      socket.off("conference:started", handleConferenceStarted);
+      mountedRef.current = false;      
+      stopSpeakerDetection();
+      
+      socket.off("conference:user-joined", handleUserJoined);
+      socket.off("conference:offer", handleOffer);
+      socket.off("conference:answer", handleAnswer);
+      socket.off("conference:ice-candidate", handleIceCandidate);
+      socket.off("conference:user-left", handleUserLeft);
+      socket.off("conference:participants", handleParticipantsUpdate);
+      socket.off("conference:hands-updated", handleHandsUpdated);
       socket.off("conference:ended", handleConferenceEnded);
-      socket.off("conference:created", handleConferenceCreated);
-      socket.off("conference:error", handleConferenceError);
+      
+      socket.off("conference:active-speaker", handleActiveSpeakerUpdate);
+      socket.off("conference:speaker-mode-toggled", handleSpeakerModeToggled);
+      socket.off("conference:speaker-assigned", handleSpeakerAssigned);
+      
+      socket.off("conference:force-mute", handleForceMute);
+      socket.off("conference:force-camera-off", handleForceCameraOff);
+      socket.off("conference:removed-by-admin", handleRemovedByAdmin);
+      
+      socket.off("conference:media-update", handleMediaUpdate);
+      
       socket.off("conference:invited", handleConferenceInvited);
-      socket.off("reconnect", handleReconnect);
-      socket.off("disconnect", handleDisconnect);
+      socket.off("conference:state", handleConferenceState);
     };
-  }, [routeTeamId, navigate, showSnack]); // 🚨 CRITICAL FIX: Removed conference from dependencies
-
-  /* ---------------------------------------------------
-     🚨 CRITICAL FIX 3: Refetch when role changes
-     When role updates, tasks and extensions visibility may change
-  --------------------------------------------------- */
+  }, [
+    conferenceId, 
+    currentUser, 
+    socket, 
+    showNotification, 
+    handleLeave, 
+    handleUserJoined, 
+    handleOffer, 
+    handleAnswer, 
+    handleIceCandidate, 
+    handleUserLeft,
+    localStream
+  ]);
+  
   useEffect(() => {
-    if (!team || !myRole) return;
-    
-    fetchTeamTasks();
-    fetchPendingExtensions();
-  }, [myRole, team, fetchTeamTasks, fetchPendingExtensions]);
+    if (!localStream || !speakerModeEnabled) return;
 
-  /* ---------------------------------------------------
-     INITIAL LOAD
-  --------------------------------------------------- */
+    const cleanup = startSpeakerDetection((speaking) => {
+      if (!speakerModeEnabled) return;
+
+      socket.emit("conference:speaking", {
+        conferenceId,
+        speaking,
+      });
+    });
+
+    return cleanup;
+  }, [
+    localStream,
+    speakerModeEnabled,
+    conferenceId,
+    socket,
+  ]);
+
   useEffect(() => {
-    fetchTeam();
-  }, [fetchTeam]);
-
-  useEffect(() => {
-    if (!routeTeamId) return;
-    joinTeamRoom(routeTeamId);
-    return () => {
-      leaveTeamRoom(routeTeamId);
-    };
-  }, [routeTeamId]);
-
-  /* ---------------------------------------------------
-     CONFERENCE HANDLERS (PURE SOCKET-ONLY)
-     🚨 CRITICAL FIX: No REST calls
-  --------------------------------------------------- */
-  const handleStartConference = () => {
-    if (!socketConnected) {
-      showSnack("Connection error. Please refresh the page.", "error");
-      return;
-    }
-
-    if (!["admin", "manager"].includes(myRole)) {
-      showSnack("Only admins and managers can start conferences", "error");
-      return;
-    }
-
-    if (conference) {
-      showSnack("Conference already active. Join instead.", "warning");
-      return;
-    }
-
-    setLoadingConference(true);
-    console.log("Starting conference for team:", routeTeamId);
+    if (!localStream || !speakerModeEnabled || !activeSpeaker) return;
     
-    try {
-      requestConferenceCreation(routeTeamId);
-      
-      // Set a timeout to reset loading state if no response
-      setTimeout(() => {
-        if (loadingConference) {
-          setLoadingConference(false);
-          showSnack("Conference creation taking longer than expected...", "info");
-        }
-      }, 5000);
-      
-    } catch (error) {
-      console.error("Error starting conference:", error);
-      setLoadingConference(false);
-      showSnack("Failed to start conference", "error");
-    }
-  };
-
-  const handleJoinConference = () => {
-    if (!conference) {
-      showSnack("No active conference to join", "error");
-      return;
-    }
+    const audioTracks = localStream.getAudioTracks();
+    if (audioTracks.length === 0) return;
     
-    if (!socketConnected) {
-      showSnack("Connection error. Please refresh the page.", "error");
-      return;
-    }
+    const shouldSpeak = activeSpeaker === socket.id || isAdminOrManager;
     
-    console.log("Joining conference:", conference.conferenceId);
-    navigate(`/conference/${conference.conferenceId}`);
-  };
-
-  /* ---------------------------------------------------
-     CONFERENCE STATUS REFRESH (SOCKET-ONLY) WITH LOCK
-  --------------------------------------------------- */
-  const handleRefreshConference = useCallback(() => {
-    if (refreshLockRef.current) {
-      showSnack("Please wait before refreshing again", "warning");
-      return;
-    }
-    
-    const socket = getSocket();
-    if (!socket || !socket.connected) {
-      showSnack("Socket not available", "error");
-      return;
-    }
-    
-    refreshLockRef.current = true;
-    setLoadingConference(true);
-    
-    console.log("Refreshing conference status");
-    socket.emit("conference:check", { teamId: teamIdRef.current });
-    
-    // Release lock after 1 second
-    setTimeout(() => {
-      refreshLockRef.current = false;
-    }, 1000);
-  }, [showSnack]);
-
-  /* ---------------------------------------------------
-     APPROVE - FIXED with optimistic update
-  --------------------------------------------------- */
-  const handleApproveExtension = async (taskId) => {
-    if (!window.confirm("Approve this extension request?")) return;
-    
-    // Optimistic update
-    setPendingExtensions(prev => prev.filter(t => t._id !== taskId));
-    
-    try {
-      await teamTasksAPI.approveExtension(taskId);
-      // Socket event will update the task itself
-    } catch (err) {
-      console.error("Approve error:", err);
-      showSnack(err.response?.data?.message || "Server error", "error");
-      // Re-fetch on error
-      fetchPendingExtensions();
-    }
-  };
-
-  /* ---------------------------------------------------
-     REJECT - FIXED with optimistic update
-  --------------------------------------------------- */
-  const handleRejectExtension = async (taskId) => {
-    if (!window.confirm("Reject this extension request?")) return;
-    
-    // Optimistic update
-    setPendingExtensions(prev => prev.filter(t => t._id !== taskId));
-    
-    try {
-      await teamTasksAPI.rejectExtension(taskId);
-      // Socket event will update the task itself
-    } catch (err) {
-      console.error("Reject error:", err);
-      showSnack(err.response?.data?.message || "Server error", "error");
-      // Re-fetch on error
-      fetchPendingExtensions();
-    }
-  };
-
-  /* ---------------------------------------------------
-     LEAVE TEAM
-  --------------------------------------------------- */
-  const handleLeaveTeam = async () => {
-    if (!window.confirm("Leave team?")) return;
-
-    try {
-      await teamsAPI.leaveTeam(routeTeamId);
-      showSnack("Left team", "success");
-      navigate("/teams");
-    } catch (err) {
-      console.error("Leave error:", err);
-      showSnack(err.response?.data?.message || "Error leaving team", "error");
-    }
-  };
-
-  /* ---------------------------------------------------
-     UPDATE ROLE
-  --------------------------------------------------- */
-  const handleUpdateRole = async (userId, newRole) => {
-    try {
-      await teamsAPI.updateMemberRole(routeTeamId, userId, newRole);
-
-      // ✅ FIX: update local state immediately
-      setTeam(prev => ({
-        ...prev,
-        members: prev.members.map(m =>
-          resolveUserId(m.user) === userId
-            ? { ...m, role: newRole }
-            : m
-        )
-      }));
-
-      showSnack("Role updated", "success");
-    } catch (err) {
-      showSnack("Failed to update role", "error");
-    }
-  };
-
-  /* ---------------------------------------------------
-     REMOVE MEMBER
-  --------------------------------------------------- */
-  const handleRemoveMember = async (userId) => {
-    if (!window.confirm("Remove member?")) return;
-
-    try {
-      await teamsAPI.removeMember(routeTeamId, userId);
-      // Socket event will trigger invalidate:teams
-      showSnack("Member removed", "success");
-    } catch (err) {
-      console.error("Remove member error:", err);
-      showSnack("Failed to remove member", "error");
-    }
-  };
-
-  /* ---------------------------------------------------
-     COPY INVITE
-  --------------------------------------------------- */
-  const handleCopyInviteLink = () => {
-    if (!team) return;
-    navigator.clipboard.writeText(`${window.location.origin}/join/${team._id}`);
-    showSnack("Invite link copied!", "success");
-  };
-
-  /* ---------------------------------------------------
-     UPDATE TEAM
-  --------------------------------------------------- */
-  const handleUpdateTeam = async () => {
-    try {
-      await teamsAPI.updateTeam(routeTeamId, teamFormData);
-      // Socket event will trigger invalidate:teams
-      setEditTeamDialog(false);
-      showSnack("Team updated", "success");
-    } catch (err) {
-      console.error("Update team error:", err);
-      showSnack("Failed to update team", "error");
-    }
-  };
-
-  /* ---------------------------------------------------
-     DELETE TEAM
-  --------------------------------------------------- */
-  const handleDeleteTeam = async () => {
-    if (!window.confirm("Are you sure you want to delete this team? This action cannot be undone.")) return;
-
-    try {
-      await teamsAPI.deleteTeam(routeTeamId);
-      showSnack("Team deleted successfully", "success");
-      navigate("/teams");
-    } catch (err) {
-      console.error("Delete team error:", err);
-      showSnack(err.response?.data?.message || "Failed to delete team", "error");
-    }
-  };
-
-  /* ---------------------------------------------------
-     TASK HANDLERS - FIXED with optimistic updates
-  --------------------------------------------------- */
-  const handleDeleteTask = async (taskId) => {
-    if (!window.confirm("Delete this task?")) return;
-    
-    // Optimistic update
-    setTeamTasks(prev => prev.filter(t => t._id !== taskId));
-    setPendingExtensions(prev => prev.filter(t => t._id !== taskId));
-    
-    try {
-      await teamTasksAPI.deleteTask(taskId);
-      showSnack("Task deleted", "success");
-    } catch (err) {
-      console.error("Delete task error:", err);
-      showSnack("Failed to delete task", "error");
-      // Rollback on error
-      fetchTeamTasks();
-      fetchPendingExtensions();
-    }
-  };
-
-  const handleStatusChange = async (taskId, newStatus) => {
-    // Optimistic update
-    setTeamTasks(prev =>
-      prev.map(t => t._id === taskId ? { ...t, status: newStatus } : t)
-    );
-    
-    try {
-      await teamTasksAPI.updateTask(taskId, { status: newStatus });
-      showSnack("Task status updated", "success");
-    } catch (err) {
-      console.error("Status change error:", err);
-      showSnack("Failed to update task status", "error");
-      // Rollback on error
-      fetchTeamTasks();
-    }
-  };
-
-  const handleQuickComplete = async (taskId) => {
-    // Optimistic update
-    setTeamTasks(prev =>
-      prev.map(t => t._id === taskId ? { ...t, status: "completed" } : t)
-    );
-    
-    try {
-      await teamTasksAPI.updateTask(taskId, { status: "completed" });
-      showSnack("Task completed", "success");
-    } catch (err) {
-      console.error("Quick complete error:", err);
-      showSnack("Failed to complete task", "error");
-      // Rollback on error
-      fetchTeamTasks();
-    }
-  };
-
-  const handleTaskSubmit = async (data) => {
-    try {
-      if (editingTask) {
-        // Optimistic update for edit
-        const updatedTask = { ...editingTask, ...data };
-        setTeamTasks(prev =>
-          prev.map(t => t._id === editingTask._id ? updatedTask : t)
-        );
-        
-        await teamTasksAPI.updateTask(editingTask._id, data);
-        showSnack("Task updated", "success");
-      } else {
-        // Optimistic update for create
-        const tempTask = {
-          ...data,
-          _id: `temp-${Date.now()}`,
-          team: { _id: routeTeamId, name: team.name },
-          status: "todo",
-          extensionRequest: null
-        };
-        setTeamTasks(prev => [...prev, tempTask]);
-        
-        const res = await teamTasksAPI.createTask(routeTeamId, data);
-        // Replace temp task with real one
-        setTeamTasks(prev =>
-          prev.map(t => t._id === tempTask._id ? res.data : t)
-        );
-        showSnack("Task created", "success");
+    audioTracks.forEach(track => {
+      if (shouldSpeak && !track.enabled) {
+        track.enabled = true;
+        setMicOn(true);
+        console.log("Admin override: Unmuting because I'm the speaker");
+      } else if (!shouldSpeak && track.enabled) {
+        track.enabled = false;
+        setMicOn(false);
+        console.log("Admin override: Muting because I'm not the speaker");
       }
-      
-      setShowTaskForm(false);
-      setEditingTask(null);
-    } catch (err) {
-      console.error("Task submit error:", err);
-      showSnack("Failed to save task", "error");
-      // Rollback on error
-      fetchTeamTasks();
+    });
+  }, [activeSpeaker, speakerModeEnabled, localStream, socket.id, isAdminOrManager]);
+
+  const handleAdminAction = useCallback((action, targetSocketId) => {
+    const socket = getSocket();
+
+    if (!socket || !socket.connected) {
+      console.warn("Socket not connected, admin action blocked");
+      return;
     }
-  };
 
-  /* ---------------------------------------------------
-     MANUAL REFRESH FUNCTIONS
-  --------------------------------------------------- */
-  const handleRefreshTasks = async () => {
-    setLoadingTasks(true);
-    try {
-      await fetchTeamTasks();
-      showSnack("Tasks refreshed", "success");
-    } catch (err) {
-      showSnack("Failed to refresh tasks", "error");
+    socket.emit("conference:admin-action", {
+      action,
+      targetSocketId,
+      conferenceId,
+    });
+  }, [conferenceId]);
+
+  const handleClearAllHands = useCallback(() => {
+    const socket = getSocket();
+    if (!socket || !socket.connected) return;
+
+    socket.emit("conference:admin-action", {
+      action: "clear-hands",
+      conferenceId,
+    });
+  }, [conferenceId]);
+
+  const handleOpenAdminMenu = useCallback((event, participantId) => {
+    setAdminMenuAnchor(event.currentTarget);
+    setSelectedParticipantId(participantId);
+  }, []);
+
+  const handleCloseAdminMenu = useCallback(() => {
+    setAdminMenuAnchor(null);
+    setSelectedParticipantId(null);
+  }, []);
+
+  const toggleParticipantsPanel = useCallback(() => {
+    setParticipantsPanelOpen(!participantsPanelOpen);
+  }, [participantsPanelOpen]);
+
+  const toggleSpeakerMode = useCallback(() => {
+    const newMode = !speakerModeEnabled;
+    setSpeakerModeEnabled(newMode);
+    
+    if (!newMode) {
+      setActiveSpeaker(null);
+      if (localStream) {
+        localStream.getAudioTracks().forEach(track => {
+          if (!track.enabled) {
+            track.enabled = true;
+            setMicOn(true);
+          }
+        });
+      }
     }
-  };
+    
+    socket.emit("conference:toggle-speaker-mode", {
+      conferenceId,
+      enabled: newMode,
+    });
+    
+    showNotification(`Speaker mode ${newMode ? "enabled" : "disabled"}`, "info");
+  }, [speakerModeEnabled, localStream, conferenceId, socket, showNotification]);
 
-  const handleRefreshExtensions = async () => {
-    setLoadingExtensions(true);
-    try {
-      await fetchPendingExtensions();
-      showSnack("Extensions refreshed", "success");
-    } catch (err) {
-      showSnack("Failed to refresh extensions", "error");
-    }
-  };
+  const setAsSpeaker = useCallback((socketId) => {
+    socket.emit("conference:set-speaker", {
+      conferenceId,
+      targetSocketId: socketId,
+    });
+    setActiveSpeaker(socketId);
+    showNotification(`Set as active speaker`, "success");
+  }, [conferenceId, socket, showNotification]);
 
-  /* ---------------------------------------------------
-     RENDER CONFERENCE CARD COMPONENT
-  --------------------------------------------------- */
-  const renderConferenceCard = () => (
-    <Card sx={{ 
-      maxWidth: 400, 
-      mb: 4, 
-      borderRadius: 2,
-      border: conference ? "2px solid #00e676" : "1px solid #e0e0e0",
-      boxShadow: conference ? "0 4px 20px rgba(0, 230, 118, 0.15)" : "0 2px 8px rgba(0,0,0,0.1)",
-      position: "relative",
-    }}>
-      <CardContent>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
-          <VideocamIcon color={conference ? "success" : "primary"} />
-          <Typography variant="h6" component="div" fontWeight={700}>
-            {conference ? "Active Conference" : "Team Conference"}
-          </Typography>
-          {conference && (
-            <Chip
-              label="Live"
-              color="error"
-              size="small"
-              sx={{ 
-                ml: "auto", 
-                animation: "pulse 2s infinite",
-                fontWeight: "bold" 
-              }}
-            />
-          )}
-        </Box>
+  const clearSpeaker = useCallback(() => {
+    setActiveSpeaker(null);
+    socket.emit("conference:clear-speaker", { conferenceId });
+    showNotification("Speaker cleared", "info");
+  }, [conferenceId, socket, showNotification]);
 
-        {loadingConference ? (
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2, py: 2 }}>
-            <CircularProgress size={24} />
-            <Typography variant="body2" color="text.secondary">
-              Checking conference status...
-            </Typography>
-          </Box>
-        ) : conference ? (
-          <>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              Conference ID: <strong>{conference.conferenceId}</strong>
-            </Typography>
-            
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2, mt: 2, mb: 2 }}>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                <GroupsIcon fontSize="small" />
-                <Typography variant="body2">
-                  <strong>{conference.participantCount ?? 0}</strong>
+  const toggleLayout = useCallback((newLayout) => {
+    setLayout(newLayout);
+  }, []);
 
-                </Typography>
-              </Box>
+  const allCameraStreams = useMemo(() => {
+    return Object.entries(remoteStreams).filter(([socketId, stream]) => stream);
+  }, [remoteStreams]);
 
-              {conference.speakerMode?.enabled && (
-                <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                  <VolumeUpIcon fontSize="small" color="success" />
-                  <Typography variant="body2" color="success.main" fontWeight={600}>
-                    Speaker Mode Active
-                  </Typography>
-                </Box>
-              )}
-            </Box>
+  const activeSpeakerParticipant = participants.find(p => p.socketId === activeSpeaker);
+  const activeSpeakerName = activeSpeakerParticipant?.userName || 
+    (activeSpeaker === socket.id ? "You" : `User ${activeSpeaker?.slice(0, 4)}`);
 
-            {conference.participants && conference.participants.length > 0 && (
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="body2" color="text.secondary" gutterBottom>
-                  Active Participants:
-                </Typography>
-                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-                  {conference.participants.slice(0, 5).map((participant, index) => (
-                    <Chip
-                      key={participant.socketId || index}
-                      icon={<PersonIcon fontSize="small" />}
-                      label={participant.userName || participant.name || "User"}
-                      size="small"
-                      variant="outlined"
-                      sx={{ 
-                        borderColor: "#00e676",
-                        color: conference.createdBy === participant.userId ? "#1976d2" : "inherit"
-                      }}
-                    />
-                  ))}
-                  {conference.participants.length > 5 && (
-                    <Chip
-                      label={`+${conference.participants.length - 5} more`}
-                      size="small"
-                      variant="outlined"
-                    />
-                  )}
-                </Box>
-              </Box>
-            )}
-            
-            {conference.startedAt && (
-              <Typography variant="caption" color="text.secondary" display="block" mt={1}>
-                Started: {new Date(conference.startedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-              </Typography>
-            )}
-          </>
-        ) : (
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            No active conference right now. {["admin", "manager"].includes(myRole) 
-              ? "Start a conference to collaborate in real-time." 
-              : "Only admins and managers can start a conference."}
-          </Typography>
-        )}
-      </CardContent>
-
-      <CardActions sx={{ justifyContent: "center", p: 2, pt: 0 }}>
-        {loadingConference ? (
-          <Button disabled fullWidth size="large">
-            <CircularProgress size={24} />
-          </Button>
-        ) : conference ? (
-          <Button
-            variant="contained"
-            color="success"
-            startIcon={<VideocamIcon />}
-            onClick={handleJoinConference}
-            fullWidth
-            size="large"
-            disabled={!socketConnected}
-          >
-            {socketConnected ? "Join Conference" : "Connecting..."}
-          </Button>
-        ) : ["admin", "manager"].includes(myRole) ? (
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<VideocamIcon />}
-            onClick={handleStartConference}
-            fullWidth
-            size="large"
-            disabled={!socketConnected || loadingConference}
-          >
-            {socketConnected ? "Start Conference" : "Connecting..."}
-          </Button>
-        ) : (
-          <Button
-            variant="outlined"
-            disabled
-            fullWidth
-            size="large"
-          >
-            Join Conference
-          </Button>
-        )}
-      </CardActions>
-      
-      <Box sx={{ p: 2, pt: 0, textAlign: "center" }}>
-        <Button 
-          size="small" 
-          startIcon={<RefreshIcon />}
-          onClick={handleRefreshConference}
-          disabled={loadingConference || refreshLockRef.current}
-        >
-          {refreshLockRef.current ? "Refreshing..." : "Refresh Status"}
-        </Button>
-      </Box>
-    </Card>
-  );
-
-  /* ---------------------------------------------------
-     LOADING
-  --------------------------------------------------- */
-  if (loadingTeam)
-    return (
-      <Box sx={{ height: "100vh", display: "flex", justifyContent: "center", alignItems: "center" }}>
-        <CircularProgress />
-      </Box>
-    );
-
-  if (!team)
-    return (
-      <Box sx={{ p: 4 }}>
-        <Typography color="error">Team not found.</Typography>
-      </Box>
-    );
-
-  const inviteURL = `${window.location.origin}/join/${team._id}`;
-
-  /* ---------------------------------------------------
-     RENDER UI
-  --------------------------------------------------- */
   return (
-    <Box sx={{ px: 2, pt: { xs: 10, sm: 8 }, maxWidth: 1200, mx: "auto" }}>
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={4000}
-        onClose={() => setSnackbar({ ...snackbar, open: false })}
-      >
-        <Alert severity={snackbar.severity}>{snackbar.message}</Alert>
-      </Snackbar>
-
-      {/* HEADER */}
-      <Paper sx={{ p: 3, borderRadius: 3, mb: 3, boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>
-        <Stack direction="row" justifyContent="space-between" alignItems="center">
-          <Stack direction="row" spacing={2}>
-            <Avatar sx={{ width: 70, height: 70, bgcolor: team.color, fontSize: 28 }}>
-              {team.icon || "T"}
-            </Avatar>
-
-            <Box>
-              <Typography variant="h5" fontWeight={700}>{team.name}</Typography>
-              <Typography color="text.secondary">{team.description || "No description"}</Typography>
-
-              {myRole && (
-                <Box sx={{ display: "flex", alignItems: "center", gap: 2, mt: 1 }}>
-                  <Chip
-                    label={myRole.toUpperCase()}
-                    color={isAdmin ? "primary" : "default"}
-                    size="small"
-                  />
-                  <Typography variant="caption" color="text.secondary">
-                    {team.members?.length || 0} members • {teamTasks.length} tasks
-                  </Typography>
-                </Box>
-              )}
-            </Box>
-          </Stack>
-
-          {isAdmin && (
-            <IconButton onClick={() => setEditTeamDialog(true)}>
-              <EditIcon />
-            </IconButton>
-          )}
-        </Stack>
-
-        <Divider sx={{ my: 2 }} />
-
-        <Tabs value={tab} onChange={(e, v) => setTab(v)}>
-          <Tab label="Overview" />
-          <Tab label="Members" />
-          <Tab label="Tasks" />
-          <Tab
-            label={
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                Extensions
-                {["admin", "manager"].includes(myRole) &&
-                  pendingExtensions.length > 0 && (
-                    <Chip
-                      label={pendingExtensions.length}
-                      color="error"
-                      size="small"
-                    />
-                  )}
-              </Box>
-            }
-          />
-          <Tab label="Settings" />
-        </Tabs>
-      </Paper>
-
-      {/* OVERVIEW */}
-      {tab === 0 && (
-        <>
-          {/* CONFERENCE SECTION - SOCKET-ONLY */}
-          <Paper sx={{ p: 3, borderRadius: 3, mb: 3 }}>
-            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-              <Typography variant="h6" fontWeight={700}>
-                Team Conference
+    <Box sx={{ display: "flex", height: "100vh", background: "#000" }}>
+      <Box sx={{ 
+        flex: 1, 
+        display: "flex", 
+        flexDirection: "column",
+        p: 2 
+      }}>
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+          <Typography color="white" fontWeight={600}>
+            Conference Room: {conferenceId}
+            {isAdminOrManager && (
+              <Typography component="span" color="#4caf50" fontSize="0.8rem" ml={1}>
+                (Admin)
               </Typography>
-              <Chip 
-                label={socketConnected ? "Connected" : "Disconnected"} 
-                color={socketConnected ? "success" : "error"} 
-                size="small" 
-              />
-            </Box>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Real-time audio/video collaboration for this team
-            </Typography>
-            
-            {renderConferenceCard()}
-
-            {!socketConnected && (
-              <Alert severity="warning" sx={{ mt: 2 }}>
-                Socket connection lost. Please refresh the page to restore conference functionality.
-              </Alert>
             )}
-          </Paper>
-
-          {/* ANALYTICS SECTION */}
-          <Paper sx={{ p: 3, borderRadius: 3 }}>
-            <TeamAnalytics team={team} tasks={teamTasks} myRole={myRole} />
-
-            <Button 
-              sx={{ mt: 3 }} 
-              variant="outlined" 
-              startIcon={<ContentCopyIcon />} 
-              onClick={handleCopyInviteLink}
-            >
-              Copy Invite Link
-            </Button>
-          </Paper>
-        </>
-      )}
-
-      {/* MEMBERS */}
-      {tab === 1 && (
-        <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Typography variant="h6" fontWeight={700}>Team Members</Typography>
-          <Stack spacing={2} sx={{ mt: 2 }}>
-            {team.members?.map((m) => {
-              const memberId = resolveUserId(m.user);
-              const isCurrent = memberId === resolveUserId(user?._id);
-
-              return (
-                <Paper key={memberId} sx={{ p: 2, display: "flex", justifyContent: "space-between" }}>
-                  <Box>
-                    <Typography fontWeight={600}>{m.user?.name || "User"}</Typography>
-                    <Typography variant="body2" color="text.secondary">{m.role}</Typography>
-                  </Box>
-                  <Stack direction="row" alignItems="center" spacing={1}>
-                    {isAdmin && (
-                      <FormControl size="small">
-                        <Select value={m.role} onChange={(e) => handleUpdateRole(memberId, e.target.value)}>
-                          <MenuItem value="member">Member</MenuItem>
-                          <MenuItem value="manager">Manager</MenuItem>
-                          <MenuItem value="admin">Admin</MenuItem>
-                        </Select>
-                      </FormControl>
-                    )}
-                    {isAdmin && !isCurrent && (
-                      <IconButton color="error" onClick={() => handleRemoveMember(memberId)}>
-                        <DeleteIcon />
-                      </IconButton>
-                    )}
-                    {!isAdmin && isCurrent && (
-                      <Button size="small" variant="outlined" color="error" onClick={handleLeaveTeam}>
-                        Leave
-                      </Button>
-                    )}
-                  </Stack>
-                </Paper>
-              );
-            })}
-          </Stack>
-        </Paper>
-      )}
-
-      {/* TASKS */}
-      {tab === 2 && (
-        <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-            <Typography variant="h6" fontWeight={700}>Team Tasks</Typography>
-            <Box sx={{ display: "flex", gap: 1 }}>
-              <Button 
-                variant="outlined" 
-                size="small"
-                startIcon={<RefreshIcon />}
-                onClick={handleRefreshTasks}
-                disabled={loadingTasks}
+          </Typography>
+          
+          <Box sx={{ display: "flex", gap: 1 }}>
+            <Tooltip title="Grid Layout">
+              <IconButton
+                onClick={() => toggleLayout(LAYOUT.GRID)}
+                sx={{
+                  background: layout === LAYOUT.GRID ? "#2196f3" : "#424242",
+                  color: "white",
+                  "&:hover": { background: layout === LAYOUT.GRID ? "#1976d2" : "#303030" },
+                }}
               >
-                Refresh
-              </Button>
-              {canEditTasks && (
-                <Button 
-                  variant="contained" 
-                  onClick={() => {
-                    setEditingTask(null);
-                    setShowTaskForm(true);
+                <GroupsIcon />
+              </IconButton>
+            </Tooltip>
+            
+            <Tooltip title="Speaker Layout">
+              <IconButton
+                onClick={() => toggleLayout(LAYOUT.SPEAKER)}
+                sx={{
+                  background: layout === LAYOUT.SPEAKER ? "#2196f3" : "#424242",
+                  color: "white",
+                  "&:hover": { background: layout === LAYOUT.SPEAKER ? "#1976d2" : "#303030" },
+                }}
+              >
+                <PresentToAllIcon />
+              </IconButton>
+            </Tooltip>
+            
+            <Tooltip title={speakerModeEnabled ? "Disable Speaker Mode" : "Enable Speaker Mode"}>
+              <IconButton
+                onClick={toggleSpeakerMode}
+                sx={{
+                  background: speakerModeEnabled ? "#00e676" : "#424242",
+                  color: speakerModeEnabled ? "#000" : "white",
+                  "&:hover": {
+                    background: speakerModeEnabled ? "#00c853" : "#303030",
+                  },
+                }}
+              >
+                <VolumeUpIcon />
+              </IconButton>
+            </Tooltip>
+            
+            {isAdminOrManager && raisedHands.length > 0 && (
+              <Tooltip title="Clear All Raised Hands">
+                <IconButton
+                  onClick={handleClearAllHands}
+                  sx={{
+                    background: "#ff9800",
+                    color: "white",
+                    "&:hover": { background: "#f57c00" },
                   }}
                 >
-                  Create Task
-                </Button>
-              )}
-            </Box>
-          </Box>
-
-          {loadingTasks ? (
-            <Box sx={{ p: 4, textAlign: "center" }}>
-              <CircularProgress />
-            </Box>
-          ) : teamTasks.length === 0 ? (
-            <Typography sx={{ p: 3 }} color="text.secondary">No tasks available.</Typography>
-          ) : (
-            <Stack spacing={2} sx={{ mt: 2 }}>
-              {teamTasks.map((t) => (
-                <TeamTaskItem
-                  key={t._id}
-                  task={t}
-                  canEdit={canEditTasks || resolveUserId(t.assignedTo) === resolveUserId(user?._id)}
-                  isAdminOrManager={canEditTasks}
-                  currentUserId={resolveUserId(user?._id)}
-                  teamId={routeTeamId}
-                  onEdit={() => {
-                    setEditingTask(t);
-                    setShowTaskForm(true);
-                  }}
-                  onDelete={() => handleDeleteTask(t._id)}
-                  onStatusChange={(taskId, newStatus) => handleStatusChange(taskId, newStatus)}
-                  onQuickComplete={() => handleQuickComplete(t._id)}
-                />
-              ))}
-            </Stack>
-          )}
-
-          {showTaskForm && (
-            <TeamTaskForm
-              open={showTaskForm}
-              task={editingTask}
-              teamMembers={team.members}
-              onCancel={() => {
-                setShowTaskForm(false);
-                setEditingTask(null);
-              }}
-              onSubmit={handleTaskSubmit}
-            />
-          )}
-        </Paper>
-      )}
-
-      {/* EXTENSIONS */}
-      {tab === 3 && (
-        <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Box sx={{ display: "flex", justifyContent:"space-between", alignItems: "center", mb: 2 }}>
-            <Typography variant="h6" fontWeight={700}>Extension Requests</Typography>
-            <Box sx={{ display: "flex", gap: 1 }}>
-              <Button 
-                variant="outlined" 
-                startIcon={<RefreshIcon />}
-                onClick={handleRefreshExtensions}
-                disabled={loadingExtensions}
-              >
-                Refresh
-              </Button>
-            </Box>
-          </Box>
-
-          {!["admin", "manager"].includes(myRole) ? (
-            <Typography sx={{ mt: 2 }} color="text.secondary">
-              Only admins and managers can review extension requests.
-            </Typography>
-          ) : loadingExtensions ? (
-            <Box sx={{ p: 4, textAlign: "center" }}>
-              <CircularProgress />
-            </Box>
-          ) : pendingExtensions.length === 0 ? (
-            <Typography sx={{ mt: 2 }} color="text.secondary">
-              No pending extension requests.
-            </Typography>
-          ) : (
-            <Stack spacing={2} sx={{ mt: 2 }}>
-              {pendingExtensions.map((t) => (
-                <Paper key={t._id} sx={{ p: 2 }}>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} md={8}>
-                      <Typography variant="h6">{t.title}</Typography>
-                      <Typography color="text.secondary">
-                        Assigned to: {t.assignedTo?.name || "Unassigned"}
-                      </Typography>
-                      <Typography sx={{ mt: 1 }}>{t.description}</Typography>
-                      <Typography variant="caption" sx={{ display: "block", mt: 1 }}>
-                        Requested by: {t.extensionRequest?.requestedBy?.name || "Unknown"} •{" "}
-                        {t.extensionRequest?.requestedAt
-                          ? new Date(t.extensionRequest.requestedAt).toLocaleString()
-                          : ""}
-                      </Typography>
-                      <Typography variant="caption" sx={{ display: "block", mt: 0.5 }}>
-                        Reason: {t.extensionRequest?.reason}
-                      </Typography>
-                      {t.extensionRequest?.requestedDueDate && (
-                        <Typography variant="caption" sx={{ display: "block", mt: 0.5 }}>
-                          Requested Due Date:{" "}
-                          {new Date(t.extensionRequest.requestedDueDate).toLocaleDateString()}
-                        </Typography>
-                      )}
-                    </Grid>
-                    <Grid item xs={12} md={4} sx={{ display: "flex", justifyContent: "flex-end", gap: 1 }}>
-                      <Button
-                        variant="contained"
-                        color="success"
-                        size="small"
-                        startIcon={<CheckIcon />}
-                        sx={{ borderRadius: 1, textTransform: "none" }}
-                        onClick={() => handleApproveExtension(t._id)}
-                      >
-                        Approve
-                      </Button>
-                      <Button
-                        variant="contained"
-                        color="error"
-                        size="small"
-                        startIcon={<CloseIcon />}
-                        sx={{ borderRadius: 1, textTransform: "none" }}
-                        onClick={() => handleRejectExtension(t._id)}
-                      >
-                        Reject
-                      </Button>
-                    </Grid>
-                  </Grid>
-                </Paper>
-              ))}
-            </Stack>
-          )}
-        </Paper>
-      )}
-
-      {/* SETTINGS */}
-      {tab === 4 && (
-        <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Typography variant="h6" fontWeight={700}>Team Settings</Typography>
-          {!isAdmin ? (
-            <Box sx={{ mt: 2 }}>
-              <Typography color="text.secondary">Only admins can manage settings.</Typography>
-              <Button sx={{ mt: 2 }} variant="outlined" color="error" onClick={handleLeaveTeam}>
-                Leave Team
-              </Button>
-            </Box>
-          ) : (
-            <Stack spacing={4} sx={{ mt: 2 }}>
-              <Box>
-                <Typography fontWeight={600}>Invite Members</Typography>
-                <Paper sx={{ p: 2, mt: 1, display: "flex", gap: 2 }}>
-                  <Typography sx={{ flexGrow: 1, wordBreak: "break-all" }}>
-                    {inviteURL}
-                  </Typography>
-                  <Button variant="contained" onClick={handleCopyInviteLink}>
-                    Copy
-                  </Button>
-                </Paper>
-              </Box>
-              <Box>
-                <Typography fontWeight={600}>Team Actions</Typography>
-                <Stack spacing={2} sx={{ mt: 1 }}>
-                  <Button variant="contained" onClick={() => setEditTeamDialog(true)}>
-                    Edit Team Info
-                  </Button>
-                  <Button variant="outlined" color="error" onClick={handleDeleteTeam}>
-                    Delete Team
-                  </Button>
-                </Stack>
-              </Box>
-            </Stack>
-          )}
-        </Paper>
-      )}
-
-      {/* EDIT TEAM DIALOG */}
-      <Dialog open={editTeamDialog} onClose={() => setEditTeamDialog(false)}>
-        <DialogTitle>Edit Team</DialogTitle>
-        <DialogContent>
-          <Stack spacing={3} sx={{ mt: 2 }}>
-            <TextField
-              label="Team Name"
-              value={teamFormData.name}
-              onChange={(e) => setTeamFormData({ ...teamFormData, name: e.target.value })}
-              fullWidth
-            />
-            <TextField
-              label="Description"
-              value={teamFormData.description}
-              onChange={(e) => setTeamFormData({ ...teamFormData, description: e.target.value })}
-              fullWidth
-              multiline
-              rows={3}
-            />
-            <Box>
-              <Typography>Team Color</Typography>
-              <input
-                type="color"
-                value={teamFormData.color}
-                onChange={(e) => setTeamFormData({ ...teamFormData, color: e.target.value })}
-                style={{
-                  width: "100%",
-                  height: "40px",
-                  borderRadius: "8px",
-                  cursor: "pointer",
+                  <ClearAllIcon />
+                </IconButton>
+              </Tooltip>
+            )}
+            
+            <Tooltip title={participantsPanelOpen ? "Hide Participants" : "Show Participants"}>
+              <IconButton
+                onClick={toggleParticipantsPanel}
+                sx={{
+                  background: participantsPanelOpen ? "#2196f3" : "#424242",
+                  color: "white",
+                  "&:hover": { background: participantsPanelOpen ? "#1976d2" : "#303030" },
                 }}
+              >
+                <PersonIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
+        </Box>
+
+        {speakerModeEnabled && (
+          <Box sx={{ 
+            mb: 2, 
+            p: 1, 
+            background: "rgba(0, 230, 118, 0.1)", 
+            borderRadius: 1,
+            border: "1px solid rgba(0, 230, 118, 0.3)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between"
+          }}>
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              <VolumeUpIcon sx={{ color: "#00e676", fontSize: 20 }} />
+              <Typography color="#00e676" fontWeight={500}>
+                Speaker Mode Active
+              </Typography>
+            </Box>
+            
+            {activeSpeaker && (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <Typography color="white" variant="body2">
+                  Current Speaker:
+                </Typography>
+                <Chip 
+                  label={activeSpeakerName}
+                  size="small"
+                  sx={{ 
+                    background: "#00e676", 
+                    color: "#000", 
+                    fontWeight: "bold" 
+                  }}
+                />
+                {isAdminOrManager && (
+                  <IconButton 
+                    size="small" 
+                    onClick={clearSpeaker}
+                    sx={{ color: "#ff4444" }}
+                  >
+                    <ClearAllIcon fontSize="small" />
+                  </IconButton>
+                )}
+              </Box>
+            )}
+            
+            {!activeSpeaker && (
+              <Typography color="#aaa" variant="body2">
+                Waiting for speaker...
+              </Typography>
+            )}
+          </Box>
+        )}
+
+        {layout === LAYOUT.PRESENTATION ? (
+          <>
+            <Box sx={{ flex: 1, mb: 2 }}>
+              <VideoTile
+                videoRef={localVideoRef}
+                label={screenSharer === "me" ? "You (Presenting)" : "Presenter"}
+                isScreen
+                isActiveSpeaker={speakerModeEnabled && activeSpeaker === socket.id}
               />
             </Box>
-            <TextField
-              label="Icon (emoji)"
-              value={teamFormData.icon}
-              onChange={(e) => setTeamFormData({ ...teamFormData, icon: e.target.value })}
-              fullWidth
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setEditTeamDialog(false)}>Cancel</Button>
-          <Button variant="contained" onClick={handleUpdateTeam}>
-            Save
-          </Button>
-        </DialogActions>
-      </Dialog>
+
+            <Box sx={{ display: "flex", gap: 2, overflowX: "auto", height: "200px" }}>
+              {allCameraStreams.map(([socketId, stream]) => {
+                const participant = participants.find(p => p.socketId === socketId);
+                const userName = participant?.userName || `User ${socketId.slice(0, 4)}`;
+                
+                return (
+                  <Box key={socketId} sx={{ position: "relative" }}>
+                    <VideoTile 
+                      stream={stream} 
+                      label={userName} 
+                      small
+                      isActiveSpeaker={speakerModeEnabled && activeSpeaker === socketId}
+                    />
+                    {isAdminOrManager && socketId !== socket.id && (
+                      <IconButton
+                        size="small"
+                        onClick={(e) => handleOpenAdminMenu(e, socketId)}
+                        sx={{
+                          position: "absolute",
+                          top: 4,
+                          right: 4,
+                          background: "rgba(0,0,0,0.7)",
+                          color: "white",
+                          "&:hover": { background: "rgba(0,0,0,0.9)" },
+                        }}
+                      >
+                        <MoreVertIcon fontSize="small" />
+                      </IconButton>
+                    )}
+                  </Box>
+                );
+              })}
+            </Box>
+          </>
+        ) : layout === LAYOUT.SPEAKER ? (
+          <Box sx={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
+            {activeSpeaker && (
+              <Box sx={{ flex: 2, minHeight: "60%" }}>
+                {activeSpeaker === socket.id ? (
+                  <VideoTile 
+                    videoRef={localVideoRef} 
+                    label="You (Speaking)"
+                    isActiveSpeaker={true}
+                    large
+                  >
+                    {handRaised && <RaiseHandIndicator label="Your Hand is Raised" />}
+                  </VideoTile>
+                ) : (
+                  allCameraStreams
+                    .filter(([socketId]) => socketId === activeSpeaker)
+                    .map(([socketId, stream]) => {
+                      const participant = participants.find(p => p.socketId === socketId);
+                      const userName = participant?.userName || `User ${socketId.slice(0, 4)}`;
+                      
+                      return (
+                        <VideoTile 
+                          key={socketId}
+                          stream={stream} 
+                          label={`${userName} (Speaking)`}
+                          isActiveSpeaker={true}
+                          large
+                        />
+                      );
+                    })
+                )}
+              </Box>
+            )}
+            
+            <Box sx={{ 
+              flex: 1, 
+              display: "grid", 
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: 1
+            }}>
+              {activeSpeaker !== socket.id && (
+                <Box sx={{ position: "relative" }}>
+                  <VideoTile 
+                    videoRef={localVideoRef} 
+                    label="You"
+                    small
+                    isActiveSpeaker={false}
+                  />
+                </Box>
+              )}
+              
+              {allCameraStreams
+                .filter(([socketId]) => socketId !== activeSpeaker)
+                .map(([socketId, stream]) => {
+                  const participant = participants.find(p => p.socketId === socketId);
+                  const userName = participant?.userName || `User ${socketId.slice(0, 4)}`;
+                  
+                  return (
+                    <Box key={socketId} sx={{ position: "relative" }}>
+                      <VideoTile 
+                        stream={stream} 
+                        label={userName}
+                        small
+                        isActiveSpeaker={false}
+                      />
+                      
+                      {isAdminOrManager && socketId !== socket.id && (
+                        <IconButton
+                          size="small"
+                          onClick={(e) => handleOpenAdminMenu(e, socketId)}
+                          sx={{
+                            position: "absolute",
+                            top: 4,
+                            right: 4,
+                            background: "rgba(0,0,0,0.7)",
+                            color: "white",
+                            "&:hover": { background: "rgba(0,0,0,0.9)" },
+                          }}
+                        >
+                          <MoreVertIcon fontSize="small" />
+                        </IconButton>
+                      )}
+                    </Box>
+                  );
+                })}
+            </Box>
+          </Box>
+        ) : (
+          <Box sx={{
+            flex: 1,
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+            gap: 2,
+            overflow: "auto",
+          }}>
+            <Box sx={{ position: "relative" }}>
+              <VideoTile 
+                videoRef={localVideoRef} 
+                label="You"
+                isLocal
+                isActiveSpeaker={speakerModeEnabled && activeSpeaker === socket.id}
+              >
+                {handRaised && <RaiseHandIndicator label="Your Hand is Raised" />}
+              </VideoTile>
+            </Box>
+
+            {allCameraStreams.map(([socketId, stream]) => {
+              const participant = participants.find(p => p.socketId === socketId);
+              const userName = participant?.userName || `User ${socketId.slice(0, 4)}`;
+              const isHandRaised = raisedHands.includes(socketId);
+              
+              return (
+                <Box key={socketId} sx={{ position: "relative" }}>
+                  <VideoTile 
+                    stream={stream} 
+                    label={userName}
+                    isActiveSpeaker={speakerModeEnabled && activeSpeaker === socketId}
+                  >
+                    {isHandRaised && <RaiseHandIndicator label="Hand Raised" />}
+                  </VideoTile>
+                  
+                  {isAdminOrManager && socketId !== socket.id && (
+                    <>
+                      <IconButton
+                        size="small"
+                        onClick={(e) => handleOpenAdminMenu(e, socketId)}
+                        sx={{
+                          position: "absolute",
+                          top: 8,
+                          right: 8,
+                          background: "rgba(0,0,0,0.7)",
+                          color: "white",
+                          "&:hover": { background: "rgba(0,0,0,0.9)" },
+                        }}
+                      >
+                        <MoreVertIcon fontSize="small" />
+                      </IconButton>
+                      
+                      {isHandRaised && isAdminOrManager && (
+                        <IconButton
+                          size="small"
+                          onClick={() => handleAdminAction("lower-hand", socketId)}
+                          sx={{
+                            position: "absolute",
+                            top: 40,
+                            right: 8,
+                            background: "rgba(255, 152, 0, 0.8)",
+                            color: "white",
+                            "&:hover": { background: "rgba(255, 152, 0, 1)" },
+                          }}
+                          title="Lower Hand"
+                        >
+                          <HandshakeIcon fontSize="small" />
+                        </IconButton>
+                      )}
+                      
+                      {speakerModeEnabled && (
+                        <IconButton
+                          size="small"
+                          onClick={() => setAsSpeaker(socketId)}
+                          sx={{
+                            position: "absolute",
+                            top: 72,
+                            right: 8,
+                            background: "rgba(0, 230, 118, 0.8)",
+                            color: "black",
+                            "&:hover": { background: "rgba(0, 230, 118, 1)" },
+                          }}
+                          title="Set as Speaker"
+                        >
+                          <VolumeUpIcon fontSize="small" />
+                        </IconButton>
+                      )}
+                    </>
+                  )}
+                </Box>
+              );
+            })}
+          </Box>
+        )}
+
+        <Box sx={{
+          display: "flex",
+          justifyContent: "center",
+          gap: 2,
+          mt: 2,
+          pt: 2,
+          borderTop: "1px solid #333",
+        }}>
+          <Tooltip title={micOn ? "Mute Microphone" : "Unmute Microphone"}>
+            <span>
+              <IconButton
+                onClick={handleToggleMic}
+                disabled={speakerModeEnabled && activeSpeaker !== socket.id && !isAdminOrManager}
+                sx={{
+                  position: "relative",
+                  backgroundColor: "#1e1e1e",
+                  color: micOn
+                    ? `rgba(0, 230, 118, ${Math.min(micLevel / 60, 1)})`
+                    : "#9e9e9e",
+                  border:
+                    micOn && micLevel > 12
+                      ? "1px solid #00e676"
+                      : "1px solid #444",
+                  boxShadow:
+                    micOn && micLevel > 15
+                      ? "0 0 14px rgba(0, 230, 118, 0.8)"
+                      : "none",
+                  transition: "all 0.12s ease-out",
+                  "&:hover": { backgroundColor: "#2a2a2a" },
+                  "&.Mui-disabled": {
+                    backgroundColor: "#222",
+                    color: "#555",
+                    boxShadow: "none",
+                  },
+                }}
+              >
+                <MicIcon />
+
+                {!micOn && (
+                  <Box
+                    sx={{
+                      position: "absolute",
+                      width: "140%",
+                      height: 2,
+                      background: "#ff5252",
+                      transform: "rotate(-45deg)",
+                    }}
+                  />
+                )}
+              </IconButton>
+            </span>
+          </Tooltip>
+
+          <Tooltip title={camOn ? "Turn Camera Off" : "Turn Camera On"}>
+            <IconButton
+              onClick={handleToggleCam}
+              disabled={!localStream}
+              sx={{
+                background: camOn ? "#1565c0" : "#424242",
+                color: "white",
+                "&:hover": {
+                  background: camOn ? "#0d47a1" : "#303030",
+                },
+                "&.Mui-disabled": {
+                  background: "#333",
+                  color: "#666",
+                },
+              }}
+            >
+              {camOn ? <VideocamIcon /> : <VideocamOffIcon />}
+            </IconButton>
+          </Tooltip>
+
+          <Tooltip title={sharingScreen ? "Stop Screen Share" : "Start Screen Share"}>
+            <IconButton
+              onClick={handleScreenShare}
+              disabled={!localStream}
+              sx={{
+                background: sharingScreen ? "#6a1b9a" : "#424242",
+                color: "white",
+                "&:hover": {
+                  background: sharingScreen ? "#4a148c" : "#303030",
+                },
+                "&.Mui-disabled": {
+                  background: "#333",
+                  color: "#666",
+                },
+              }}
+            >
+              {sharingScreen ? <StopScreenShareIcon /> : <ScreenShareIcon />}
+            </IconButton>
+          </Tooltip>
+
+          <Tooltip title={handRaised ? "Lower Hand" : "Raise Hand"}>
+            <IconButton
+              onClick={handleRaiseHand}
+              sx={{
+                background: handRaised ? "#f9a825" : "#424242",
+                color: "white",
+                "&:hover": {
+                  background: handRaised ? "#f57f17" : "#303030",
+                },
+              }}
+            >
+              <PanToolIcon />
+            </IconButton>
+          </Tooltip>
+
+          {isAdminOrManager && speakerModeEnabled && (
+            <>
+              <Tooltip title="Clear Speaker">
+                <IconButton
+                  onClick={clearSpeaker}
+                  sx={{
+                    background: "#ff4444",
+                    color: "white",
+                    "&:hover": { background: "#cc0000" },
+                  }}
+                >
+                  <ClearAllIcon />
+                </IconButton>
+              </Tooltip>
+              
+              <Tooltip title="Set Yourself as Speaker">
+                <IconButton
+                  onClick={() => setAsSpeaker(socket.id)}
+                  disabled={!localStream}
+                  sx={{
+                    background: "#00e676",
+                    color: "black",
+                    "&:hover": { background: "#00c853" },
+                    "&.Mui-disabled": {
+                      background: "#333",
+                      color: "#666",
+                    },
+                  }}
+                >
+                  <MicExternalOnIcon />
+                </IconButton>
+              </Tooltip>
+            </>
+          )}
+
+          <Tooltip title="Leave Conference">
+            <IconButton
+              onClick={handleLeave}
+              sx={{
+                background: "#d32f2f",
+                color: "white",
+                "&:hover": { background: "#c62828" },
+              }}
+            >
+              <CallEndIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
+
+        <Box sx={{ mt: 1, display: "flex", justifyContent: "center", alignItems: "center", gap: 1 }}>
+          <Typography color="#aaa" variant="caption">
+            Participants: {participants.length}
+          </Typography>
+          <Typography color="#aaa" variant="caption">
+            • Hands Raised: {raisedHands.length}
+          </Typography>
+          {speakerModeEnabled && (
+            <Typography color="#00e676" variant="caption" ml={1}>
+              • Speaker Mode
+            </Typography>
+          )}
+          {isAdminOrManager && (
+            <Typography color="#4caf50" variant="caption" ml={1}>
+              • Admin Mode
+            </Typography>
+          )}
+          {!localStream && (
+            <Typography color="#ff9800" variant="caption" ml={1}>
+              • Audio/Video Disabled
+            </Typography>
+          )}
+        </Box>
+      </Box>
+
+      {participantsPanelOpen && (
+        <ParticipantsPanel
+          participants={participants}
+          raisedHands={raisedHands}
+          isAdminOrManager={isAdminOrManager}
+          onAdminAction={handleAdminAction}
+          currentUserId={currentUser?._id}
+          onClose={() => setParticipantsPanelOpen(false)}
+          speakerModeEnabled={speakerModeEnabled}
+          activeSpeaker={activeSpeaker}
+          onSetSpeaker={setAsSpeaker}
+          onToggleSpeakerMode={toggleSpeakerMode}
+        />
+      )}
+
+      <Menu
+        anchorEl={adminMenuAnchor}
+        open={Boolean(adminMenuAnchor)}
+        onClose={handleCloseAdminMenu}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <MenuItem onClick={() => {
+          handleAdminAction("mute", selectedParticipantId);
+          handleCloseAdminMenu();
+        }}>
+          <ListItemIcon>
+            <VolumeOffIcon fontSize="small" />
+          </ListItemIcon>
+          Force Mute
+        </MenuItem>
+        
+        <MenuItem onClick={() => {
+          handleAdminAction("camera-off", selectedParticipantId);
+          handleCloseAdminMenu();
+        }}>
+          <ListItemIcon>
+            <VideocamOffIcon fontSize="small" />
+          </ListItemIcon>
+          Turn Camera Off
+        </MenuItem>
+        
+        {speakerModeEnabled && (
+          <MenuItem onClick={() => {
+            setAsSpeaker(selectedParticipantId);
+            handleCloseAdminMenu();
+          }}>
+            <ListItemIcon>
+              <VolumeUpIcon fontSize="small" color="success" />
+            </ListItemIcon>
+            <Typography color="success.main">Set as Speaker</Typography>
+          </MenuItem>
+        )}
+        
+        <MenuItem onClick={() => {
+          handleAdminAction("lower-hand", selectedParticipantId);
+          handleCloseAdminMenu();
+        }}>
+          <ListItemIcon>
+            <HandshakeIcon fontSize="small" />
+          </ListItemIcon>
+          Lower Hand
+        </MenuItem>
+        
+        <Divider />
+        
+        <MenuItem onClick={() => {
+          handleAdminAction("remove-from-conference", selectedParticipantId);
+          handleCloseAdminMenu();
+        }}>
+          <ListItemIcon>
+            <PersonRemoveIcon fontSize="small" color="error" />
+          </ListItemIcon>
+          <Typography color="error">Remove from Conference</Typography>
+        </MenuItem>
+      </Menu>
+
+      <Snackbar
+        open={notification.open}
+        autoHideDuration={4000}
+        onClose={() => setNotification({ ...notification, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert 
+          onClose={() => setNotification({ ...notification, open: false })} 
+          severity={notification.severity}
+          sx={{ width: '100%' }}
+        >
+          {notification.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }
