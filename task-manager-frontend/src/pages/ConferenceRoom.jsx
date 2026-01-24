@@ -562,6 +562,11 @@ const handleToggleCam = useCallback(() => {
         const isCreator = conf.createdBy === currentUser._id;
         setIsAdminOrManager(isCreator);
       }
+
+      if (conf?.participants) {
+  setParticipants(conf.participants);
+      }
+
     };
 
     socket.on("conference:user-joined", handleUserJoined);
@@ -1304,7 +1309,7 @@ const handleClearAllHands = useCallback(() => {
 
         <Box sx={{ mt: 1, display: "flex", justifyContent: "center", alignItems: "center", gap: 1 }}>
           <Typography color="#aaa" variant="caption">
-            Participants: {participants.length || allCameraStreams.length + 1}
+            Participants: {participants.length}
           </Typography>
           <Typography color="#aaa" variant="caption">
             • Hands Raised: {raisedHands.length}

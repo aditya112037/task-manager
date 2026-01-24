@@ -145,6 +145,7 @@ module.exports = function registerConferenceSocket(io, socket) {
 
       const conferenceId = `${teamId}-${Date.now()}`;
 
+
       // Initialize conference
       conferences.set(conferenceId, {
         conferenceId,
@@ -189,7 +190,11 @@ module.exports = function registerConferenceSocket(io, socket) {
       });
 
       // Send conference state to requester
-      const participants = Array.from(conference.participants.values());
+const participants = Array.from(conference.participants.values());
+
+io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
+  users: participants,
+});
       socket.emit("conference:state", {
         active: true,
         conference: {
