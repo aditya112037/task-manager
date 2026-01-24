@@ -34,9 +34,9 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import VideocamIcon from "@mui/icons-material/Videocam";
-import GroupsIcon from "@mui/icons-material/Groups";
+
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
-import PersonIcon from "@mui/icons-material/Person";
+
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { teamsAPI, teamTasksAPI } from "../services/api";
