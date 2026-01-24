@@ -270,7 +270,7 @@ export const setupConferenceCreationListeners = (handlers) => {
   const { onCreated, onCreateError } = handlers;
 
   if (onCreated) socket.on("conference:created", onCreated);
-  if (onCreateError) socket.on("conference:create:error", onCreateError);
+if (onCreateError) socket.on("conference:error", onCreateError);
 
   return () => {
     if (onCreated) socket.off("conference:created", onCreated);
