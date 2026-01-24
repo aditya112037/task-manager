@@ -480,11 +480,11 @@ export default function TeamDetails() {
       showSnack("Only admins and managers can start conferences", "error");
       return;
     }
-
-    if (conference) {
-      showSnack("Conference already active. Join instead.", "warning");
-      return;
-    }
+    
+if (conferenceRef.current) {
+  showSnack("Conference already active. Join instead.", "warning");
+  return;
+}
 
     setLoadingConference(true);
     console.log("Starting conference for team:", routeTeamId);

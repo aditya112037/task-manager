@@ -251,7 +251,7 @@ export const requestConferenceCreation = (teamId) => {
   }
 
   console.log("Requesting conference creation for team:", teamId);
-  socket.emit("conference:create", { teamId });
+  socket.emit("conference:start", { teamId });
   return true;
 };
 
