@@ -853,7 +853,6 @@ export default function TeamDetails() {
                 <GroupsIcon fontSize="small" />
                 <Typography variant="body2">
                   <strong>{conference.participantCount ?? 0}</strong>
-
                 </Typography>
               </Box>
 

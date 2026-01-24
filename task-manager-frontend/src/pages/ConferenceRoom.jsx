@@ -57,7 +57,6 @@ const LAYOUT = {
 
 export default function ConferenceRoom() {
   const { conferenceId } = useParams();
-  const teamId = conferenceId?.split("-")[0];
   const navigate = useNavigate();
   const socket = getSocket();
   const { user: currentUser } = useAuth();
@@ -363,10 +362,10 @@ export default function ConferenceRoom() {
 
     start();
 
-    const handleParticipantsUpdate = ({ users }) => {
-      if (!mounted()) return;
-      setParticipants(users);
-    };
+const handleParticipantsUpdate = ({ participants }) => {
+  if (!mounted()) return;
+  setParticipants(participants || []);
+};
 
     const handleHandsUpdated = ({ raisedHands }) => {
       if (!mounted()) return;
