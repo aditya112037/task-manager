@@ -9,9 +9,6 @@ module.exports = function registerConferenceSocket(io, socket) {
 
   const getUserFromSocket = () => socket.user;
 
-  const isAdminOrManager = (member) =>
-    member && ["admin", "manager"].includes(member.role);
-
   const getConferenceRoom = (conferenceId) =>
     `conference_${conferenceId}`;
 
@@ -51,7 +48,7 @@ module.exports = function registerConferenceSocket(io, socket) {
       if (conference.speakerMode.speakerTimeouts) {
         conference.speakerMode.speakerTimeouts.delete(socketId);
       }
-    }, 2000);
+    }, 4000);
     
     if (!conference.speakerMode.speakerTimeouts) {
       conference.speakerMode.speakerTimeouts = new Map();
@@ -61,7 +58,7 @@ module.exports = function registerConferenceSocket(io, socket) {
 
   /* ---------------------------------------------------
      CONFERENCE CHECK ENDPOINT (FOR TEAMDETAILS.JSX)
-     🚨 CRITICAL FIX: Add this missing handler
+     ✅ FIXED: State only, no participants
   --------------------------------------------------- */
   socket.on("conference:check", async ({ teamId }) => {
     try {
@@ -74,18 +71,15 @@ module.exports = function registerConferenceSocket(io, socket) {
       const conference = getConferenceByTeamId(teamId);
       
       if (conference) {
-        // Conference exists, return its state
-        const participants = Array.from(conference.participants.values());
+        // Conference exists, return its state (NO participants here)
         const conferenceState = {
           active: true,
           conference: {
             conferenceId: conference.conferenceId,
             teamId: conference.teamId,
             createdBy: conference.createdBy,
-            participants: participants,
-            participantCount: participants.length,
-            speakerMode: conference.speakerMode,
             startedAt: conference.createdAt,
+            speakerMode: conference.speakerMode,
           }
         };
         
@@ -110,6 +104,7 @@ module.exports = function registerConferenceSocket(io, socket) {
 
   /* ---------------------------------------------------
      CREATE CONFERENCE
+     ✅ FIXED: Consistent payload structure
   --------------------------------------------------- */
   socket.on("conference:create", async ({ teamId }) => {
     try {
@@ -145,7 +140,6 @@ module.exports = function registerConferenceSocket(io, socket) {
 
       const conferenceId = `${teamId}-${Date.now()}`;
 
-
       // Initialize conference
       conferences.set(conferenceId, {
         conferenceId,
@@ -176,12 +170,6 @@ module.exports = function registerConferenceSocket(io, socket) {
         camOn: true,
       });
 
-      // Emit success
-      socket.emit("conference:created", {
-        conferenceId,
-        teamId,
-      });
-
       // Notify team room
       io.to(`team_${teamId}`).emit("conference:started", {
         conferenceId,
@@ -189,23 +177,30 @@ module.exports = function registerConferenceSocket(io, socket) {
         createdBy: user._id,
       });
 
-      // Send conference state to requester
-const participants = Array.from(conference.participants.values());
+      // ✅ FIXED: Authoritative participants list
+      const participants = Array.from(conference.participants.values());
 
-io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
-  users: participants,
-});
+      // 🔐 Authoritative participants list
+      io.to(getConferenceRoom(conferenceId)).emit(
+        "conference:participants",
+        { participants }
+      );
+
+      // ✅ Explicit join confirmation for creator
+      socket.emit("conference:joined", {
+        participants,
+      });
+
+      // ✅ Conference existence state (NO participants here)
       socket.emit("conference:state", {
         active: true,
         conference: {
           conferenceId,
           teamId,
           createdBy: user._id,
-          participants,
-          participantCount: participants.length,
-          speakerMode: conference.speakerMode,
           startedAt: conference.createdAt,
-        }
+          speakerMode: conference.speakerMode,
+        },
       });
 
       console.log(`✅ Conference created: ${conferenceId} for team ${teamId}`);
@@ -217,6 +212,7 @@ io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
 
   /* ---------------------------------------------------
      JOIN CONFERENCE
+     ✅ FIXED: Minimal & clean payload structure
   --------------------------------------------------- */
   socket.on("conference:join", async ({ conferenceId }) => {
     try {
@@ -252,6 +248,11 @@ io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
       // Join the conference room
       socket.join(getConferenceRoom(conferenceId));
 
+      if (conference.participants.has(socket.id)) {
+        return; // already joined
+      }
+
+
       // Add participant
       conference.participants.set(socket.id, {
         userId: user._id,
@@ -262,7 +263,7 @@ io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
         camOn: true,
       });
 
-      // Notify existing participants
+      // Notify others
       socket.to(getConferenceRoom(conferenceId)).emit(
         "conference:user-joined",
         {
@@ -272,35 +273,28 @@ io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
         }
       );
 
-      // Update participant list for all
+      // 🔐 Single source of truth
       const participants = Array.from(conference.participants.values());
-      io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
-        users: participants,
+      io.to(getConferenceRoom(conferenceId)).emit(
+        "conference:participants",
+        { participants }
+      );
+
+      // ✅ Join confirmation
+      socket.emit("conference:joined", {
+        participants,
       });
 
-      // Send conference state to new joiner
-      const conferenceState = {
-        conferenceId,
-        participants,
-        raisedHands: Array.from(conference.raisedHands),
-        speakerMode: {
-          enabled: conference.speakerMode.enabled,
-          activeSpeaker: conference.speakerMode.activeSpeaker,
-        },
-      };
-
-      socket.emit("conference:joined", conferenceState);
+      // ✅ Conference state (NO participants here)
       socket.emit("conference:state", {
         active: true,
         conference: {
           conferenceId: conference.conferenceId,
           teamId: conference.teamId,
           createdBy: conference.createdBy,
-          participants,
-          participantCount: participants.length,
-          speakerMode: conference.speakerMode,
           startedAt: conference.createdAt,
-        }
+          speakerMode: conference.speakerMode,
+        },
       });
 
       // Send current active speaker
@@ -309,6 +303,11 @@ io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
           socketId: conference.speakerMode.activeSpeaker,
         });
       }
+
+      // Send raised hands state
+      socket.emit("conference:hands-updated", {
+        raisedHands: Array.from(conference.raisedHands),
+      });
 
       console.log(`✅ User ${user.name} joined conference ${conferenceId}`);
     } catch (err) {
@@ -346,6 +345,7 @@ io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
 
   /* ---------------------------------------------------
      LEAVE CONFERENCE
+     ✅ FIXED: Consistent payload structure
   --------------------------------------------------- */
   socket.on("conference:leave", ({ conferenceId }) => {
     const conference = conferences.get(conferenceId);
@@ -375,11 +375,12 @@ io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
     // Leave room
     socket.leave(getConferenceRoom(conferenceId));
 
-    // Update participant list
+    // ✅ FIXED: Update participant list
     const participants = Array.from(conference.participants.values());
-    io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
-      users: participants,
-    });
+    io.to(getConferenceRoom(conferenceId)).emit(
+      "conference:participants",
+      { participants }
+    );
 
     // Notify others
     socket.to(getConferenceRoom(conferenceId)).emit(
@@ -624,6 +625,7 @@ io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
 
   /* ---------------------------------------------------
      ADMIN ACTIONS
+     ✅ FIXED: Consistent payload structure for remove-from-conference
   --------------------------------------------------- */
   socket.on("conference:admin-action", async ({ conferenceId, action, targetSocketId }) => {
     try {
@@ -685,6 +687,8 @@ io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
           
           if (conference.speakerMode.activeSpeaker === targetSocketId) {
             conference.speakerMode.activeSpeaker = null;
+            clearSpeakerTimeout(conference, targetSocketId);
+
             io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
               socketId: null,
             });
@@ -692,10 +696,12 @@ io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
           
           io.to(targetSocketId).emit("conference:removed-by-admin");
           
+          // ✅ FIXED: Consistent participants payload
           const participants = Array.from(conference.participants.values());
-          io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
-            users: participants,
-          });
+          io.to(getConferenceRoom(conferenceId)).emit(
+            "conference:participants",
+            { participants }
+          );
           
           io.to(getConferenceRoom(conferenceId)).emit("conference:hands-updated", {
             raisedHands: Array.from(conference.raisedHands),
@@ -722,6 +728,7 @@ io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
 
   /* ---------------------------------------------------
      DISCONNECT HANDLER
+     ✅ FIXED: Consistent payload structure
   --------------------------------------------------- */
   socket.on("disconnect", () => {
     console.log(`❌ Socket ${socket.id} disconnected`);
@@ -746,11 +753,12 @@ io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
           });
         }
 
-        // Update others
+        // ✅ FIXED: Update participant list
         const participants = Array.from(conference.participants.values());
-        io.to(getConferenceRoom(conferenceId)).emit("conference:participants", {
-          users: participants,
-        });
+        io.to(getConferenceRoom(conferenceId)).emit(
+          "conference:participants",
+          { participants }
+        );
 
         io.to(getConferenceRoom(conferenceId)).emit("conference:hands-updated", {
           raisedHands: Array.from(conference.raisedHands),
