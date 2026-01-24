@@ -173,8 +173,7 @@ export default function TeamDetails() {
       let tasks = res.data || [];
 
       // 🚨 CRITICAL: Use current myRole value, not from closure
-      const currentRole = myRole;
-      if (currentRole === "member") {
+      if (myRole === "member") {
         tasks = tasks.filter((t) => {
           const assigned = resolveUserId(t.assignedTo);
           const me = resolveUserId(user?._id);
@@ -195,8 +194,7 @@ export default function TeamDetails() {
   --------------------------------------------------- */
   const fetchPendingExtensions = useCallback(async () => {
     // 🚨 CRITICAL: Use current role check
-    const currentRole = myRole;
-    if (!["admin", "manager"].includes(currentRole)) {
+    if (!["admin", "manager"].includes(myRole)) {
       setPendingExtensions([]);
       return;
     }
@@ -378,53 +376,8 @@ export default function TeamDetails() {
     };
 
     // Listen for user joined conference
-    const handleUserJoined = ({ socketId, userId, userName }) => {
-      console.log("🎥 User joined conference:", { socketId, userId, userName });
-      // Update participant list if we have conference data
-      if (conferenceRef.current) {
-        setConference(prev => {
-          if (!prev) return prev;
-          
-          const existingParticipants = prev.participants || [];
-          const alreadyExists = existingParticipants.some(p => p.userId === userId || p.socketId === socketId);
-          
-          if (!alreadyExists) {
-            const updatedConference = {
-              ...prev,
-              participants: [...existingParticipants, { userId, socketId, userName }],
-              participantCount: existingParticipants.length + 1,
-            };
-            conferenceRef.current = updatedConference;
-            return updatedConference;
-          }
-          return prev;
-        });
-      }
-    };
 
-    // Listen for user left conference
-    const handleUserLeft = ({ socketId, userId }) => {
-      console.log("🎥 User left conference:", socketId, userId);
-      // Update participant list if we have conference data
-      if (conferenceRef.current) {
-        setConference(prev => {
-          if (!prev) return prev;
-          
-          const existingParticipants = prev.participants || [];
-          const newParticipants = existingParticipants.filter(p => 
-            p.userId !== userId && p.socketId !== socketId
-          );
-          
-          const updatedConference = {
-            ...prev,
-            participants: newParticipants,
-            participantCount: Math.max(0, newParticipants.length),
-          };
-          conferenceRef.current = updatedConference;
-          return updatedConference;
-        });
-      }
-    };
+
 
     // 🟢 FIX 4: Handle conference invites
     const handleConferenceInvited = ({ conferenceId }) => {
@@ -450,8 +403,6 @@ export default function TeamDetails() {
     socket.on("conference:ended", handleConferenceEnded);
     socket.on("conference:created", handleConferenceCreated);
     socket.on("conference:error", handleConferenceError);
-    socket.on("conference:user-joined", handleUserJoined);
-    socket.on("conference:user-left", handleUserLeft);
     socket.on("conference:invited", handleConferenceInvited);
     
     // Request conference state ONCE
@@ -483,8 +434,6 @@ export default function TeamDetails() {
       socket.off("conference:ended", handleConferenceEnded);
       socket.off("conference:created", handleConferenceCreated);
       socket.off("conference:error", handleConferenceError);
-      socket.off("conference:user-joined", handleUserJoined);
-      socket.off("conference:user-left", handleUserLeft);
       socket.off("conference:invited", handleConferenceInvited);
       socket.off("reconnect", handleReconnect);
       socket.off("disconnect", handleDisconnect);
@@ -903,7 +852,8 @@ export default function TeamDetails() {
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                 <GroupsIcon fontSize="small" />
                 <Typography variant="body2">
-                  <strong>{conference.participantCount || conference.participantsCount || 1}</strong> participant(s)
+                  <strong>{conference.participantCount ?? 0}</strong>
+
                 </Typography>
               </Box>
 
