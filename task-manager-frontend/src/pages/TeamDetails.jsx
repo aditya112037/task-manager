@@ -281,7 +281,7 @@ export default function TeamDetails() {
     
     console.log("Setting up conference listeners for team:", routeTeamId);
 
-    // 🔐 FIX 1: Handle conference state from server
+    // 🔐 FIXED: Handle conference state from server - ALWAYS update React state
     const handleConferenceState = ({ active, conference: conf }) => {
       console.log("🎥 Conference state received:", { active, conf });
       
@@ -311,17 +311,13 @@ export default function TeamDetails() {
           console.log("⏸️ Conference state unchanged, skipping update");
         }
       } else {
-        // Only set to null if we currently have a conference
-        if (conferenceRef.current !== null) {
-          console.log("📭 Clearing conference (no active conference)");
-          setConference(null);
-          conferenceRef.current = null;
-        } else {
-          console.log("⏸️ Already no conference, skipping update");
-        }
+        // ✅ FIXED: ALWAYS update React state, even if ref is already null
+        console.log("📭 No active conference - updating state");
+        setConference(null);
+        conferenceRef.current = null;
       }
       
-      // Always clear loading state
+      // ✅ ALWAYS clear loading state - THIS IS THE KEY FIX
       console.log("✅ Clearing loading conference state");
       setLoadingConference(false);
     };
@@ -374,10 +370,6 @@ export default function TeamDetails() {
       showSnack(`Conference error: ${message}`, "error");
       setLoadingConference(false);
     };
-
-    // Listen for user joined conference
-
-
 
     // 🟢 FIX 4: Handle conference invites
     const handleConferenceInvited = ({ conferenceId }) => {
@@ -480,11 +472,11 @@ export default function TeamDetails() {
       showSnack("Only admins and managers can start conferences", "error");
       return;
     }
-    
-if (conferenceRef.current) {
-  showSnack("Conference already active. Join instead.", "warning");
-  return;
-}
+
+    if (conferenceRef.current) {
+      showSnack("Conference already active. Join instead.", "warning");
+      return;
+    }
 
     setLoadingConference(true);
     console.log("Starting conference for team:", routeTeamId);
@@ -492,13 +484,8 @@ if (conferenceRef.current) {
     try {
       requestConferenceCreation(routeTeamId);
       
-      // Set a timeout to reset loading state if no response
-      setTimeout(() => {
-        if (loadingConference) {
-          setLoadingConference(false);
-          showSnack("Conference creation taking longer than expected...", "info");
-        }
-      }, 5000);
+      // ✅ FIXED: Removed the problematic timeout that would reset loading state
+      // The loading will be cleared by conference:created or conference:error events
       
     } catch (error) {
       console.error("Error starting conference:", error);
