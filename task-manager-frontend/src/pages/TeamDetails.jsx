@@ -34,9 +34,9 @@ import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import VideocamIcon from "@mui/icons-material/Videocam";
-
+import GroupsIcon from "@mui/icons-material/Groups";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
-
+import PersonIcon from "@mui/icons-material/Person";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { teamsAPI, teamTasksAPI } from "../services/api";
@@ -88,7 +88,7 @@ export default function TeamDetails() {
   const [editTeamDialog, setEditTeamDialog] = useState(false);
   const [teamFormData, setTeamFormData] = useState({});
 
-  // ✅ FIX 1: Conference state - SOCKET-ONLY (simplified shape)
+  // Conference state - SOCKET-ONLY
   const [conference, setConference] = useState(null);
   const [loadingConference, setLoadingConference] = useState(false);
   const [socketConnected, setSocketConnected] = useState(true);
@@ -268,7 +268,7 @@ export default function TeamDetails() {
 
   /* ---------------------------------------------------
      SOCKET CONFERENCE LISTENERS (PURE SOCKET-ONLY APPROACH)
-     ✅ FIX 2: Simplified conference state handler
+     🚨 CRITICAL FIX: Remove conference from dependencies
   --------------------------------------------------- */
   useEffect(() => {
     const socket = getSocket();
@@ -283,27 +283,44 @@ export default function TeamDetails() {
     
     console.log("Setting up conference listeners for team:", routeTeamId);
 
-    // ✅ FIX 2: Handle conference state from server (SIMPLIFIED)
+    // 🔐 FIX 1: Handle conference state from server
     const handleConferenceState = ({ active, conference: conf }) => {
       console.log("🎥 Conference state received:", { active, conf });
       
       if (active && conf) {
-        // ✅ FIX 1: Use simplified conference shape
         const newConference = {
           conferenceId: conf.conferenceId,
           teamId: conf.teamId,
           createdBy: conf.createdBy,
-          startedAt: conf.startedAt,
+          participants: conf.participants || [],
+          participantCount: conf.participants?.length || 0,
           speakerMode: conf.speakerMode,
+          startedAt: conf.startedAt,
         };
         
-        // Update ref and state
-        conferenceRef.current = newConference;
-        setConference(newConference);
+        // 🚨 CRITICAL FIX: Compare before updating
+        const currentConf = conferenceRef.current;
+        const isSameConference = currentConf && 
+          currentConf.conferenceId === newConference.conferenceId &&
+          currentConf.participantCount === newConference.participantCount &&
+          JSON.stringify(currentConf.participants) === JSON.stringify(newConference.participants);
+        
+        if (!isSameConference) {
+          console.log("🔄 Updating conference state (changed)");
+          setConference(newConference);
+          conferenceRef.current = newConference;
+        } else {
+          console.log("⏸️ Conference state unchanged, skipping update");
+        }
       } else {
-        // Clear conference state
-        conferenceRef.current = null;
-        setConference(null);
+        // Only set to null if we currently have a conference
+        if (conferenceRef.current !== null) {
+          console.log("📭 Clearing conference (no active conference)");
+          setConference(null);
+          conferenceRef.current = null;
+        } else {
+          console.log("⏸️ Already no conference, skipping update");
+        }
       }
       
       // Always clear loading state
@@ -321,10 +338,12 @@ export default function TeamDetails() {
         conferenceId,
         teamId: startedTeamId,
         createdBy,
-        startedAt: new Date().toISOString(),
+        participants: [],
+        participantsCount: 1,
+        participantCount: 1,
       };
-      conferenceRef.current = newConference;
       setConference(newConference);
+      conferenceRef.current = newConference;
       
       showSnack("Conference started successfully!", "success");
       setLoadingConference(false);
@@ -335,8 +354,8 @@ export default function TeamDetails() {
       console.log("🎥 Conference ended event:", { conferenceId, endedTeamId });
       if (String(endedTeamId) !== String(routeTeamId)) return;
       
-      conferenceRef.current = null;
       setConference(null);
+      conferenceRef.current = null;
       showSnack("Conference ended", "info");
     };
 
@@ -356,6 +375,55 @@ export default function TeamDetails() {
       console.error("🎥 Conference error:", message);
       showSnack(`Conference error: ${message}`, "error");
       setLoadingConference(false);
+    };
+
+    // Listen for user joined conference
+    const handleUserJoined = ({ socketId, userId, userName }) => {
+      console.log("🎥 User joined conference:", { socketId, userId, userName });
+      // Update participant list if we have conference data
+      if (conferenceRef.current) {
+        setConference(prev => {
+          if (!prev) return prev;
+          
+          const existingParticipants = prev.participants || [];
+          const alreadyExists = existingParticipants.some(p => p.userId === userId || p.socketId === socketId);
+          
+          if (!alreadyExists) {
+            const updatedConference = {
+              ...prev,
+              participants: [...existingParticipants, { userId, socketId, userName }],
+              participantCount: existingParticipants.length + 1,
+            };
+            conferenceRef.current = updatedConference;
+            return updatedConference;
+          }
+          return prev;
+        });
+      }
+    };
+
+    // Listen for user left conference
+    const handleUserLeft = ({ socketId, userId }) => {
+      console.log("🎥 User left conference:", socketId, userId);
+      // Update participant list if we have conference data
+      if (conferenceRef.current) {
+        setConference(prev => {
+          if (!prev) return prev;
+          
+          const existingParticipants = prev.participants || [];
+          const newParticipants = existingParticipants.filter(p => 
+            p.userId !== userId && p.socketId !== socketId
+          );
+          
+          const updatedConference = {
+            ...prev,
+            participants: newParticipants,
+            participantCount: Math.max(0, newParticipants.length),
+          };
+          conferenceRef.current = updatedConference;
+          return updatedConference;
+        });
+      }
     };
 
     // 🟢 FIX 4: Handle conference invites
@@ -382,10 +450,9 @@ export default function TeamDetails() {
     socket.on("conference:ended", handleConferenceEnded);
     socket.on("conference:created", handleConferenceCreated);
     socket.on("conference:error", handleConferenceError);
+    socket.on("conference:user-joined", handleUserJoined);
+    socket.on("conference:user-left", handleUserLeft);
     socket.on("conference:invited", handleConferenceInvited);
-    
-    // ✅ REMOVED: participants-related listeners (user-joined, user-left)
-    // These are handled in the ConferenceRoom component
     
     // Request conference state ONCE
     setLoadingConference(true);
@@ -416,11 +483,13 @@ export default function TeamDetails() {
       socket.off("conference:ended", handleConferenceEnded);
       socket.off("conference:created", handleConferenceCreated);
       socket.off("conference:error", handleConferenceError);
+      socket.off("conference:user-joined", handleUserJoined);
+      socket.off("conference:user-left", handleUserLeft);
       socket.off("conference:invited", handleConferenceInvited);
       socket.off("reconnect", handleReconnect);
       socket.off("disconnect", handleDisconnect);
     };
-  }, [routeTeamId, navigate, showSnack]);
+  }, [routeTeamId, navigate, showSnack]); // 🚨 CRITICAL FIX: Removed conference from dependencies
 
   /* ---------------------------------------------------
      🚨 CRITICAL FIX 3: Refetch when role changes
@@ -786,7 +855,7 @@ export default function TeamDetails() {
   };
 
   /* ---------------------------------------------------
-     RENDER CONFERENCE CARD COMPONENT (UPDATED)
+     RENDER CONFERENCE CARD COMPONENT
   --------------------------------------------------- */
   const renderConferenceCard = () => (
     <Card sx={{ 
@@ -831,6 +900,13 @@ export default function TeamDetails() {
             </Typography>
             
             <Box sx={{ display: "flex", alignItems: "center", gap: 2, mt: 2, mb: 2 }}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                <GroupsIcon fontSize="small" />
+                <Typography variant="body2">
+                  <strong>{conference.participantCount || conference.participantsCount || 1}</strong> participant(s)
+                </Typography>
+              </Box>
+
               {conference.speakerMode?.enabled && (
                 <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                   <VolumeUpIcon fontSize="small" color="success" />
@@ -841,6 +917,36 @@ export default function TeamDetails() {
               )}
             </Box>
 
+            {conference.participants && conference.participants.length > 0 && (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Active Participants:
+                </Typography>
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
+                  {conference.participants.slice(0, 5).map((participant, index) => (
+                    <Chip
+                      key={participant.socketId || index}
+                      icon={<PersonIcon fontSize="small" />}
+                      label={participant.userName || participant.name || "User"}
+                      size="small"
+                      variant="outlined"
+                      sx={{ 
+                        borderColor: "#00e676",
+                        color: conference.createdBy === participant.userId ? "#1976d2" : "inherit"
+                      }}
+                    />
+                  ))}
+                  {conference.participants.length > 5 && (
+                    <Chip
+                      label={`+${conference.participants.length - 5} more`}
+                      size="small"
+                      variant="outlined"
+                    />
+                  )}
+                </Box>
+              </Box>
+            )}
+            
             {conference.startedAt && (
               <Typography variant="caption" color="text.secondary" display="block" mt={1}>
                 Started: {new Date(conference.startedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
