@@ -16,6 +16,8 @@ import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 
 import AdminPanel from "./AdminPanel";
 
+
+
 export default function ParticipantsPanel({
   participants = [],
   raisedHands = [],
@@ -54,16 +56,16 @@ export default function ParticipantsPanel({
         {participants.map((p) => {
           const handRaised = raisedHands.includes(p.socketId);
           const isCurrentUser = p.userId === currentUserId;
-          
+          const roleLabel = p.role === "admin" ? "Host" : "Participant";
           // ✅ Use the correct property names with fallbacks
           const displayName = p.userName || p.name || "User";
-          const micOn = Boolean(p.micOn ?? true);
-          const camOn = Boolean(p.camOn ?? true);
+          const micOn = Boolean(p.micOn);
+          const camOn = Boolean(p.camOn);
           const isActiveSpeaker = speakerModeEnabled && activeSpeaker === p.socketId;
 
           return (
             <Box
-              key={p.socketId || p.userId}
+              key={p.socketId}
               sx={{
                 display: "flex",
                 alignItems: "center",
@@ -96,7 +98,7 @@ export default function ParticipantsPanel({
                     {displayName} {isCurrentUser && "(You)"}
                   </Typography>
                   <Typography fontSize="0.7rem" color="#aaa">
-                    {p.role || "Participant"}
+                    {roleLabel}
                   </Typography>
                 </Box>
               </Box>
