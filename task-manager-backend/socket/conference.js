@@ -132,7 +132,7 @@ module.exports = function registerConferenceSocket(io, socket) {
         (m) => String(m.user) === String(user._id)
       );
 
-      if (!isAdminOrManager(member)) {
+      if (!["admin", "manager"].includes(member.role)) {
         return socket.emit("conference:error", {
           message: "Only admin or manager can create a conference",
         });
@@ -392,16 +392,6 @@ module.exports = function registerConferenceSocket(io, socket) {
     io.to(getConferenceRoom(conferenceId)).emit("conference:hands-updated", {
       raisedHands: Array.from(conference.raisedHands),
     });
-
-    // Auto-end if empty
-    if (conference.participants.size === 0) {
-      deleteConference(conferenceId);
-      io.to(`team_${conference.teamId}`).emit("conference:ended", {
-        conferenceId,
-        teamId: conference.teamId,
-      });
-      console.log(`🏁 Conference ${conferenceId} ended (empty)`);
-    }
 
     console.log(`✅ User left, ${conference.participants.size} remaining`);
   });
@@ -772,10 +762,12 @@ module.exports = function registerConferenceSocket(io, socket) {
         // Auto-end if empty
         if (conference.participants.size === 0) {
           deleteConference(conferenceId);
-          io.to(`team_${conference.teamId}`).emit("conference:ended", {
-            conferenceId,
-            teamId: conference.teamId,
-          });
+
+io.to(`team_${conference.teamId}`).emit("conference:state", {
+  active: false,
+  conference: null,
+});
+
           console.log(`🏁 Conference ${conferenceId} auto-ended on disconnect`);
         }
         
