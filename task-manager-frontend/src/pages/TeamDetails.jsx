@@ -292,8 +292,6 @@ export default function TeamDetails() {
           conferenceId: conf.conferenceId,
           teamId: conf.teamId,
           createdBy: conf.createdBy,
-          participants: conf.participants || [],
-          participantCount: conf.participants?.length || 0,
           speakerMode: conf.speakerMode,
           startedAt: conf.startedAt,
         };
@@ -338,10 +336,8 @@ export default function TeamDetails() {
         participantsCount: 1,
         participantCount: 1,
       };
-      setConference(newConference);
-      conferenceRef.current = newConference;
-      
-      showSnack("Conference started successfully!", "success");
+       showSnack("Conference started successfully!", "success");
+        socket.emit("conference:check", { teamId: teamIdRef.current });
       setLoadingConference(false);
     };
 
@@ -356,15 +352,7 @@ export default function TeamDetails() {
     };
 
     // Listen for conference creation success
-    const handleConferenceCreated = ({ conferenceId, teamId: createdTeamId }) => {
-      console.log("🎥 Conference created:", { conferenceId, createdTeamId });
-      if (String(createdTeamId) !== String(routeTeamId)) return;
-      
-      // Navigate to conference room
-      setTimeout(() => {
-        navigate(`/conference/${conferenceId}`);
-      }, 500);
-    };
+
 
     // Listen for conference creation error
     const handleConferenceError = ({ message }) => {
@@ -397,9 +385,13 @@ export default function TeamDetails() {
     socket.on("conference:state", handleConferenceState);
     socket.on("conference:started", handleConferenceStarted);
     socket.on("conference:ended", handleConferenceEnded);
-    socket.on("conference:created", handleConferenceCreated);
     socket.on("conference:error", handleConferenceError);
     socket.on("conference:invited", handleConferenceInvited);
+    socket.on("conference:participants", ({ participants }) => {
+  setConference(prev =>
+    prev ? { ...prev, participantCount: participants.length } : prev
+  );
+});
     
     // Request conference state ONCE
  if (!hasRequestedInitialStateRef.current) {
@@ -433,7 +425,7 @@ const handleReconnect = () => {
       socket.off("conference:state", handleConferenceState);
       socket.off("conference:started", handleConferenceStarted);
       socket.off("conference:ended", handleConferenceEnded);
-      socket.off("conference:created", handleConferenceCreated);
+
       socket.off("conference:error", handleConferenceError);
       socket.off("conference:invited", handleConferenceInvited);
       socket.off("reconnect", handleReconnect);

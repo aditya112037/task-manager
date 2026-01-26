@@ -466,8 +466,8 @@ const handleParticipantsUpdate = ({ participants }) => {
       
       // ✅ This is now the ONLY place admin role is determined
       if (conf && currentUser) {
-        const isCreator = conf.createdBy === currentUser._id;
-        setIsAdminOrManager(isCreator);
+        const me = participants.find(p => p.userId === currentUser._id);
+        setIsAdminOrManager(["admin", "manager"].includes(me?.role));
       }
 
       if (conf?.participants) {
