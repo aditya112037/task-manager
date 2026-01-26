@@ -96,10 +96,13 @@ export default function TeamDetails() {
   // 🟢 FIX 1: Refresh lock for conference refresh
   const refreshLockRef = useRef(false);
 
+  // 🟢 FIX 2: Reset flag on reconnect/disconnect
   const hasRequestedInitialStateRef = useRef(false);
-  // 🟢 FIX 2: Store conference state in ref to avoid dependency issues
+  
+  // 🟢 FIX 3: Store conference state in ref to avoid dependency issues
   const conferenceRef = useRef(null);
-  // 🟢 FIX 3: Team ID ref to prevent stale closures
+  
+  // 🟢 FIX 4: Team ID ref to prevent stale closures
   const teamIdRef = useRef(routeTeamId);
 
   // Update teamId ref when routeTeamId changes
@@ -114,7 +117,7 @@ export default function TeamDetails() {
     severity: "success",
   });
 
-  // 🚨 CRITICAL FIX 2: Memoized role that updates immediately when team changes
+  // 🚨 CRITICAL FIX: Memoized role that updates immediately when team changes
   const myRole = useMemo(() => {
     if (!team || !user) return null;
     const member = team.members?.find(
@@ -166,7 +169,7 @@ export default function TeamDetails() {
 
   /* ---------------------------------------------------
      LOAD TASKS
-     🚨 CRITICAL FIX 4: Use current role, not stale closure
+     🚨 CRITICAL FIX: Use current role, not stale closure
   --------------------------------------------------- */
   const fetchTeamTasks = useCallback(async () => {
     setLoadingTasks(true);
@@ -214,7 +217,7 @@ export default function TeamDetails() {
   }, [routeTeamId, myRole, showSnack]);
 
   /* ---------------------------------------------------
-     🚨 CRITICAL FIX 1: COMPLETE invalidation listeners
+     🚨 CRITICAL FIX: COMPLETE invalidation listeners
      Listen to ALL events: tasks, teams, extensions, comments
   --------------------------------------------------- */
   useEffect(() => {
@@ -283,9 +286,12 @@ export default function TeamDetails() {
     
     console.log("Setting up conference listeners for team:", routeTeamId);
 
-    // 🔐 FIXED: Handle conference state from server - ALWAYS update React state
+    // 🔐 FIXED: Handle conference state from server
     const handleConferenceState = ({ active, conference: conf }) => {
       console.log("🎥 Conference state received:", { active, conf });
+      
+      // ✅ FIXED: ALWAYS clear loading state
+      setLoadingConference(false);
       
       if (active && conf) {
         const newConference = {
@@ -294,14 +300,15 @@ export default function TeamDetails() {
           createdBy: conf.createdBy,
           speakerMode: conf.speakerMode,
           startedAt: conf.startedAt,
+          // ✅ FIXED: Participants should ONLY come from conference:participants event
+          participants: [],
+          participantCount: 0,
         };
         
         // 🚨 CRITICAL FIX: Compare before updating
         const currentConf = conferenceRef.current;
         const isSameConference = currentConf && 
-          currentConf.conferenceId === newConference.conferenceId &&
-          currentConf.participantCount === newConference.participantCount &&
-          JSON.stringify(currentConf.participants) === JSON.stringify(newConference.participants);
+          currentConf.conferenceId === newConference.conferenceId;
         
         if (!isSameConference) {
           console.log("🔄 Updating conference state (changed)");
@@ -316,29 +323,16 @@ export default function TeamDetails() {
         setConference(null);
         conferenceRef.current = null;
       }
-      
-      // ✅ ALWAYS clear loading state - THIS IS THE KEY FIX
-      console.log("✅ Clearing loading conference state");
-      setLoadingConference(false);
     };
 
-    // Listen for conference started in this team
-    const handleConferenceStarted = ({ conferenceId, teamId: startedTeamId, createdBy }) => {
-      console.log("🎥 Conference started event:", { conferenceId, startedTeamId, createdBy });
+    // ✅ FIX 2: Handle conference started - REQUEST STATE INSTEAD OF CREATING PARTIAL STATE
+    const handleConferenceStarted = ({ teamId: startedTeamId }) => {
+      console.log("🎥 Conference started event for team:", startedTeamId);
       if (String(startedTeamId) !== String(routeTeamId)) return;
       
-      // Set basic conference info
-      const newConference = {
-        conferenceId,
-        teamId: startedTeamId,
-        createdBy,
-        participants: [],
-        participantsCount: 1,
-        participantCount: 1,
-      };
-       showSnack("Conference started successfully!", "success");
-        socket.emit("conference:check", { teamId: teamIdRef.current });
-      setLoadingConference(false);
+      showSnack("Conference started successfully!", "success");
+      // ✅ SINGLE SOURCE OF TRUTH: Request authoritative state from server
+      socket.emit("conference:check", { teamId: teamIdRef.current });
     };
 
     // Listen for conference ended in this team
@@ -351,9 +345,6 @@ export default function TeamDetails() {
       showSnack("Conference ended", "info");
     };
 
-    // Listen for conference creation success
-
-
     // Listen for conference creation error
     const handleConferenceError = ({ message }) => {
       console.error("🎥 Conference error:", message);
@@ -361,14 +352,44 @@ export default function TeamDetails() {
       setLoadingConference(false);
     };
 
-    // 🟢 FIX 4: Handle conference invites
+    // 🟢 FIX: Handle conference invites
     const handleConferenceInvited = ({ conferenceId }) => {
       console.log("🎥 Conference invited:", conferenceId);
       showSnack(`You are invited to a conference`, "info");
-      // Optionally auto-join or show join button
     };
 
+    // 🟢 FIX: Handle participants update with structural equality check
+    const handleConferenceParticipants = ({ participants }) => {
+      console.log("🎥 Conference participants received:", participants);
       
+      setConference(prev => {
+        if (!prev) return prev;
+        
+        // ✅ FIX: Cheap shallow check to prevent unnecessary re-renders
+        const sameParticipants = 
+          prev.participants?.length === participants?.length &&
+          prev.participants?.every((p, i) => 
+            p.socketId === participants[i]?.socketId &&
+            p.userId === participants[i]?.userId &&
+            p.userName === participants[i]?.userName
+          );
+        
+        if (sameParticipants) {
+          console.log("⏸️ Participants unchanged, skipping update");
+          return prev;
+        }
+        
+        console.log("🔄 Participants updated, triggering re-render");
+        const updated = {
+          ...prev,
+          participants: participants || [],
+          participantCount: participants?.length || 0
+        };
+        
+        conferenceRef.current = updated;
+        return updated;
+      });
+    };
 
     // 🔐 Request conference state via socket only
     const requestConferenceState = () => {
@@ -381,60 +402,68 @@ export default function TeamDetails() {
       socket.emit("conference:check", { teamId: id });
     };
 
+    // 🟢 FIXED: Handle socket reconnection - RESET THE FLAG
+    const handleReconnect = () => {
+      console.log("🔄 Socket reconnected, resetting conference state flag");
+      hasRequestedInitialStateRef.current = false;
+      setSocketConnected(true);
+      
+      // Request conference state again
+      if (teamIdRef.current) {
+        socket.emit("conference:check", { teamId: teamIdRef.current });
+      }
+    };
+
+    // 🟢 FIX: Handle socket disconnect properly (use socket.io events)
+    const handleDisconnect = () => {
+      console.log("Socket connection lost");
+      hasRequestedInitialStateRef.current = false;
+      setSocketConnected(false);
+    };
+
     // Set up socket listeners
     socket.on("conference:state", handleConferenceState);
     socket.on("conference:started", handleConferenceStarted);
     socket.on("conference:ended", handleConferenceEnded);
     socket.on("conference:error", handleConferenceError);
     socket.on("conference:invited", handleConferenceInvited);
-    socket.on("conference:participants", ({ participants }) => {
-  setConference(prev =>
-    prev ? { ...prev, participantCount: participants.length } : prev
-  );
-});
+    socket.on("conference:participants", handleConferenceParticipants);
     
-    // Request conference state ONCE
- if (!hasRequestedInitialStateRef.current) {
-  hasRequestedInitialStateRef.current = true;
-  setLoadingConference(true);
-  requestConferenceState();
-}
+    // Request conference state ONCE - with fixed flag logic
+    if (!hasRequestedInitialStateRef.current) {
+      hasRequestedInitialStateRef.current = true;
+      setLoadingConference(true);
+      requestConferenceState();
+    }
     
-    // Also listen for socket reconnection
-const handleReconnect = () => {
-  if (hasRequestedInitialStateRef.current) return;
-
-  hasRequestedInitialStateRef.current = true;
-  setSocketConnected(true);
-  requestConferenceState();
-};
-
-    
-    socket.on("reconnect", handleReconnect);
-    
-    // Listen for socket disconnection
-    const handleDisconnect = () => {
-      console.log("Socket disconnected");
-      setSocketConnected(false);
-    };
-    
-    socket.on("disconnect", handleDisconnect);
+    // ✅ FIX: Use socket.io events for connection management (best practice)
+    socket.io.on("reconnect", handleReconnect);
+    socket.io.on("reconnect_error", handleDisconnect);
+    socket.io.on("reconnect_failed", handleDisconnect);
 
     return () => {
-      console.log("Cleaning up conference listeners");
+      console.log("Cleaning up conference listeners and resetting refresh lock");
+      
+      // ✅ FIX 5: Reset refresh lock on unmount
+      refreshLockRef.current = false;
+      
+      // Clean up socket listeners
       socket.off("conference:state", handleConferenceState);
       socket.off("conference:started", handleConferenceStarted);
       socket.off("conference:ended", handleConferenceEnded);
-
       socket.off("conference:error", handleConferenceError);
       socket.off("conference:invited", handleConferenceInvited);
-      socket.off("reconnect", handleReconnect);
-      socket.off("disconnect", handleDisconnect);
+      socket.off("conference:participants", handleConferenceParticipants);
+      
+      // Clean up socket.io connection listeners
+      socket.io.off("reconnect", handleReconnect);
+      socket.io.off("reconnect_error", handleDisconnect);
+      socket.io.off("reconnect_failed", handleDisconnect);
     };
-  }, [routeTeamId, navigate, showSnack]); // 🚨 CRITICAL FIX: Removed conference from dependencies
+  }, [routeTeamId, navigate, showSnack]);
 
   /* ---------------------------------------------------
-     🚨 CRITICAL FIX 3: Refetch when role changes
+     🚨 CRITICAL FIX: Refetch when role changes
      When role updates, tasks and extensions visibility may change
   --------------------------------------------------- */
   useEffect(() => {
@@ -485,8 +514,8 @@ const handleReconnect = () => {
     try {
       requestConferenceCreation(routeTeamId);
       
-      // ✅ FIXED: Removed the problematic timeout that would reset loading state
-      // The loading will be cleared by conference:created or conference:error events
+      // The loading will be cleared by conference:error or conference:state events
+      // Navigation happens explicitly when user clicks Join Conference
       
     } catch (error) {
       console.error("Error starting conference:", error);
@@ -531,7 +560,7 @@ const handleReconnect = () => {
     console.log("Refreshing conference status");
     socket.emit("conference:check", { teamId: teamIdRef.current });
     
-    // Release lock after 1 second
+    // ✅ FIX 3: Simple timeout without misleading return
     setTimeout(() => {
       refreshLockRef.current = false;
     }, 1000);
@@ -840,7 +869,7 @@ const handleReconnect = () => {
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
                 <GroupsIcon fontSize="small" />
                 <Typography variant="body2">
-                  <strong>{conference.participantCount ?? 0}</strong>
+                  <strong>{conference.participantCount ?? 0}</strong> participants
                 </Typography>
               </Box>
 
