@@ -378,6 +378,8 @@ export default function TeamDetails() {
       // Optionally auto-join or show join button
     };
 
+      const hasRequestedInitialStateRef = useRef(false);
+
     // 🔐 Request conference state via socket only
     const requestConferenceState = () => {
       const id = teamIdRef.current;
@@ -398,16 +400,21 @@ export default function TeamDetails() {
     socket.on("conference:invited", handleConferenceInvited);
     
     // Request conference state ONCE
-    setLoadingConference(true);
-    requestConferenceState();
+ if (!hasRequestedInitialStateRef.current) {
+  hasRequestedInitialStateRef.current = true;
+  setLoadingConference(true);
+  requestConferenceState();
+}
     
     // Also listen for socket reconnection
-    const handleReconnect = () => {
-      const id = teamIdRef.current;
-      console.log("Socket reconnected, requesting conference state for:", id);
-      setSocketConnected(true);
-      requestConferenceState();
-    };
+const handleReconnect = () => {
+  if (hasRequestedInitialStateRef.current) return;
+
+  hasRequestedInitialStateRef.current = true;
+  setSocketConnected(true);
+  requestConferenceState();
+};
+
     
     socket.on("reconnect", handleReconnect);
     
