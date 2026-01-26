@@ -95,6 +95,8 @@ export default function TeamDetails() {
 
   // 🟢 FIX 1: Refresh lock for conference refresh
   const refreshLockRef = useRef(false);
+
+  const hasRequestedInitialStateRef = useRef(false);
   // 🟢 FIX 2: Store conference state in ref to avoid dependency issues
   const conferenceRef = useRef(null);
   // 🟢 FIX 3: Team ID ref to prevent stale closures
@@ -378,7 +380,7 @@ export default function TeamDetails() {
       // Optionally auto-join or show join button
     };
 
-      const hasRequestedInitialStateRef = useRef(false);
+      
 
     // 🔐 Request conference state via socket only
     const requestConferenceState = () => {
