@@ -326,7 +326,7 @@ export default function TeamDetails() {
     // ✅ FIX 2: Handle conference started - REQUEST STATE INSTEAD OF CREATING PARTIAL STATE
     const handleConferenceStarted = ({ teamId: startedTeamId }) => {
       console.log("🎥 Conference started event for team:", startedTeamId);
-      if (teamId !== routeTeamId) return;
+      if (String(startedTeamId) !== String(teamIdRef.current)) return;
       showSnack("Conference started", "success");
     };
 
