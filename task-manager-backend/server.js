@@ -8,8 +8,6 @@ const { Server } = require("socket.io");
 const registerConferenceSocket = require("./socket/conference");
 const jwt = require("jsonwebtoken");
 const User = require("./models/user");
-
-// Shared conference store
 const { conferences } = require("./utils/conferenceStore");
 
 dotenv.config();
@@ -19,20 +17,24 @@ const app = express();
 const server = http.createServer(app);
 
 /* ---------------------------------------------------
-   ✅ CORS CONFIG — SINGLE SOURCE OF TRUTH
+   CORS CONFIG (🔥 THIS WAS MISSING)
 --------------------------------------------------- */
 const allowedOrigins = [
   "http://localhost:3000",
   "https://task-manager-psi-lake.vercel.app",
 ];
 
-app.use(cors({
-  origin: allowedOrigins,
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: allowedOrigins,
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  })
+);
 
-
-
+/* ---------------------------------------------------
+   MIDDLEWARE
+--------------------------------------------------- */
 app.use(express.json());
 app.use(passport.initialize());
 
@@ -60,14 +62,19 @@ global.emitToTeam = (teamId, event, payload = {}) => {
 --------------------------------------------------- */
 io.use(async (socket, next) => {
   try {
-    let token =
-      socket.handshake.auth?.token ||
-      socket.handshake.headers?.authorization?.replace("Bearer ", "");
+    let token = socket.handshake.auth?.token;
+
+    if (!token && socket.handshake.headers?.authorization) {
+      const authHeader = socket.handshake.headers.authorization;
+      if (authHeader.startsWith("Bearer ")) {
+        token = authHeader.slice(7);
+      }
+    }
 
     if (!token) return next(new Error("Unauthorized"));
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id).select("_id name email");
+    const user = await User.findById(decoded.id).select("name email _id");
 
     if (!user) return next(new Error("Unauthorized"));
 
@@ -76,22 +83,24 @@ io.use(async (socket, next) => {
 
     next();
   } catch (err) {
-    return next(new Error("Unauthorized"));
+    next(new Error("Unauthorized"));
   }
 });
 
 /* ---------------------------------------------------
-   SOCKET CONNECTION
+   SOCKET HANDLERS
 --------------------------------------------------- */
 io.on("connection", (socket) => {
-  console.log("🔥 Socket connected:", socket.user.email);
+  console.log("🔥 Socket connected:", socket.id, socket.user?.email);
 
   socket.on("joinTeam", (teamId) => {
-    if (teamId) socket.join(`team_${teamId}`);
+    if (!teamId) return;
+    socket.join(`team_${teamId}`);
   });
 
   socket.on("leaveTeam", (teamId) => {
-    if (teamId) socket.leave(`team_${teamId}`);
+    if (!teamId) return;
+    socket.leave(`team_${teamId}`);
   });
 
   registerConferenceSocket(io, socket);
@@ -102,7 +111,7 @@ io.on("connection", (socket) => {
 });
 
 /* ---------------------------------------------------
-   ROUTES (LOGIN WILL WORK NOW)
+   ROUTES (🔥 THESE WERE FAILING)
 --------------------------------------------------- */
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/auth", require("./routes/googleAuth"));
@@ -119,8 +128,9 @@ app.use("/api/ics", require("./routes/ics"));
 app.get("/", (req, res) => {
   res.json({
     status: "OK",
-    conferences: conferences.size,
-    sockets: io.engine.clientsCount,
+    message: "🚀 Task Manager API Running",
+    socketConnections: io.engine.clientsCount,
+    activeConferences: conferences.size,
   });
 });
 
@@ -133,13 +143,3 @@ server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🔌 Socket.IO ready`);
 });
-
-/* ---------------------------------------------------
-   GRACEFUL SHUTDOWN
---------------------------------------------------- */
-process.on("SIGINT", () => {
-  conferences.clear();
-  server.close(() => process.exit(0));
-});
-
-module.exports = { app, server, io };
