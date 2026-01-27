@@ -77,7 +77,7 @@ export default function ConferenceRoom() {
   const [camOn, setCamOn] = useState(true);
   const [sharingScreen, setSharingScreen] = useState(false);
   const [localStream, setLocalStreamState] = useState(null);
-  const [isAdminOrManager, setIsAdminOrManager] = useState(false);
+  const [isAdminOrManager] = useState(false);
   const [activeSpeaker, setActiveSpeaker] = useState(null);
   const [speakerModeEnabled, setSpeakerModeEnabled] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: "", severity: "info" });
