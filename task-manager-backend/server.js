@@ -17,45 +17,58 @@ const app = express();
 const server = http.createServer(app);
 
 /* ---------------------------------------------------
-   HARD STOP FOR PREFLIGHT (CRITICAL)
+   CRITICAL: PREFLIGHT HANDLER - MUST BE FIRST
 --------------------------------------------------- */
 app.use((req, res, next) => {
+  console.log(`📨 ${req.method} ${req.path} - Origin: ${req.headers.origin}`);
+  
   if (req.method === "OPTIONS") {
-    res.header("Access-Control-Allow-Origin", req.headers.origin);
-    res.header(
-      "Access-Control-Allow-Methods",
-      "GET,POST,PUT,DELETE,OPTIONS"
-    );
-    res.header(
-      "Access-Control-Allow-Headers",
-      "Content-Type, Authorization"
-    );
+    console.log("🛡️ Intercepting OPTIONS preflight");
+    res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
+    res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
+    res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept");
     res.header("Access-Control-Allow-Credentials", "true");
-    return res.sendStatus(204);
+    res.header("Access-Control-Max-Age", "86400"); // 24 hours
+    return res.status(200).end();
   }
   next();
 });
 
 /* ---------------------------------------------------
-   CORS CONFIG
+   CORS CONFIGURATION
 --------------------------------------------------- */
 const allowedOrigins = [
   "http://localhost:3000",
   "https://task-manager-psi-lake.vercel.app",
+  "https://task-manager-8vth.onrender.com", // Add render domain too
 ];
 
-app.use(
-  cors({
-    origin: allowedOrigins,
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  })
-);
+const corsOptions = {
+  origin: function (origin, callback) {
+    console.log("🌐 CORS check for origin:", origin);
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1 || origin.includes("onrender.com")) {
+      callback(null, true);
+    } else {
+      console.error(`🚫 CORS blocked: ${origin}`);
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  credentials: true,
+  optionsSuccessStatus: 200,
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Accept"]
+};
+
+app.use(cors(corsOptions));
 
 /* ---------------------------------------------------
    MIDDLEWARE
 --------------------------------------------------- */
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(passport.initialize());
 
 /* ---------------------------------------------------
@@ -63,16 +76,29 @@ app.use(passport.initialize());
 --------------------------------------------------- */
 const io = new Server(server, {
   cors: {
-    origin: allowedOrigins,
+    origin: function(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin) || origin.includes("onrender.com")) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
+    methods: ["GET", "POST"]
   },
+  transports: ["websocket", "polling"],
+  allowEIO3: true,
+  pingTimeout: 60000,
+  pingInterval: 25000,
   connectionStateRecovery: {
     maxDisconnectionDuration: 2 * 60 * 1000,
   },
 });
 
+// Store io instance globally for use in routes
 global._io = io;
 
+// Helper function to emit to team rooms
 global.emitToTeam = (teamId, event, payload = {}) => {
   io.to(`team_${teamId}`).emit(event, payload);
 };
@@ -82,6 +108,8 @@ global.emitToTeam = (teamId, event, payload = {}) => {
 --------------------------------------------------- */
 io.use(async (socket, next) => {
   try {
+    console.log("🔐 Socket auth attempt for:", socket.id);
+    
     let token = socket.handshake.auth?.token;
 
     if (!token && socket.handshake.headers?.authorization) {
@@ -91,19 +119,29 @@ io.use(async (socket, next) => {
       }
     }
 
-    if (!token) return next(new Error("Unauthorized"));
+    if (!token) {
+      console.log("❌ No token provided");
+      return next(new Error("Authentication token required"));
+    }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log("✅ Token decoded for user:", decoded.id);
+    
     const user = await User.findById(decoded.id).select("name email _id");
 
-    if (!user) return next(new Error("Unauthorized"));
+    if (!user) {
+      console.log("❌ User not found");
+      return next(new Error("User not found"));
+    }
 
     socket.user = user;
     socket.userId = user._id.toString();
 
+    console.log("✅ Socket authenticated:", user.email);
     next();
   } catch (err) {
-    next(new Error("Unauthorized"));
+    console.error("❌ Socket auth error:", err.message);
+    next(new Error("Authentication failed"));
   }
 });
 
@@ -115,19 +153,36 @@ io.on("connection", (socket) => {
 
   socket.on("joinTeam", (teamId) => {
     if (!teamId) return;
+    console.log(`👥 Socket ${socket.id} joining team: ${teamId}`);
     socket.join(`team_${teamId}`);
   });
 
   socket.on("leaveTeam", (teamId) => {
     if (!teamId) return;
+    console.log(`👋 Socket ${socket.id} leaving team: ${teamId}`);
     socket.leave(`team_${teamId}`);
   });
 
+  // Conference socket handlers
   registerConferenceSocket(io, socket);
 
   socket.on("disconnect", (reason) => {
-    console.log("❌ Socket disconnected:", reason);
+    console.log("❌ Socket disconnected:", socket.id, reason);
   });
+});
+
+/* ---------------------------------------------------
+   ADD HEADERS MIDDLEWARE (For all responses)
+--------------------------------------------------- */
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin) || (origin && origin.includes("onrender.com"))) {
+    res.header("Access-Control-Allow-Origin", origin);
+  }
+  res.header("Access-Control-Allow-Credentials", "true");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  next();
 });
 
 /* ---------------------------------------------------
@@ -143,14 +198,45 @@ app.use("/api/notifications", require("./routes/notifications"));
 app.use("/api/ics", require("./routes/ics"));
 
 /* ---------------------------------------------------
-   HEALTH CHECK
+   HEALTH CHECK (IMPORTANT!)
 --------------------------------------------------- */
 app.get("/", (req, res) => {
   res.json({
     status: "OK",
     message: "🚀 Task Manager API Running",
-    socketConnections: io.engine.clientsCount,
+    socketConnections: io.engine?.clientsCount || 0,
     activeConferences: conferences.size,
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || "development"
+  });
+});
+
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    status: "healthy",
+    uptime: process.uptime(),
+    timestamp: Date.now()
+  });
+});
+
+/* ---------------------------------------------------
+   ERROR HANDLING MIDDLEWARE
+--------------------------------------------------- */
+app.use((err, req, res, next) => {
+  console.error("💥 Server error:", err.stack);
+  res.status(err.status || 500).json({
+    error: {
+      message: err.message || "Internal Server Error",
+      ...(process.env.NODE_ENV === "development" && { stack: err.stack })
+    }
+  });
+});
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    error: "Not Found",
+    message: `Route ${req.method} ${req.path} not found`
   });
 });
 
@@ -161,5 +247,18 @@ const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`🔌 Socket.IO ready`);
+  console.log(`🌐 Allowed origins:`, allowedOrigins);
+  console.log(`🔌 Socket.IO ready with transports: websocket, polling`);
+  console.log(`📊 Environment: ${process.env.NODE_ENV || "development"}`);
+});
+
+// Handle unhandled promise rejections
+process.on("unhandledRejection", (err) => {
+  console.error("💥 Unhandled Promise Rejection:", err);
+});
+
+// Handle uncaught exceptions
+process.on("uncaughtException", (err) => {
+  console.error("💥 Uncaught Exception:", err);
+  process.exit(1);
 });
