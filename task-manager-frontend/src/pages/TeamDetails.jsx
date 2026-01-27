@@ -299,7 +299,6 @@ export default function TeamDetails() {
           speakerMode: conf.speakerMode,
           startedAt: conf.startedAt,
           // ✅ FIXED: Participants should ONLY come from conference:participants event
-          participants: [],
           participantCount: 0,
         };
         
@@ -354,37 +353,27 @@ export default function TeamDetails() {
     };
 
     // 🟢 FIX: Handle participants update with structural equality check
-    const handleConferenceParticipants = ({ participants }) => {
-      console.log("🎥 Conference participants received:", participants);
-      
-      setConference(prev => {
-        if (!prev) return prev;
-        
-        // ✅ FIX: Cheap shallow check to prevent unnecessary re-renders
-        const sameParticipants = 
-          prev.participants?.length === participants?.length &&
-          prev.participants?.every((p, i) => 
-            p.socketId === participants[i]?.socketId &&
-            p.userId === participants[i]?.userId &&
-            p.userName === participants[i]?.userName
-          );
-        
-        if (sameParticipants) {
-          console.log("⏸️ Participants unchanged, skipping update");
-          return prev;
-        }
-        
-        console.log("🔄 Participants updated, triggering re-render");
-        const updated = {
-          ...prev,
-          participants: participants || [],
-          participantCount: conference.participants.size
-        };
-        
-        conferenceRef.current = updated;
-        return updated;
-      });
+const handleConferenceParticipants = ({ participants }) => {
+  if (!Array.isArray(participants)) return;
+
+  setConference(prev => {
+    if (!prev) return prev;
+
+    // Only update count, nothing else
+    if (prev.participantCount === participants.length) {
+      return prev;
+    }
+
+    const updated = {
+      ...prev,
+      participantCount: participants.length,
     };
+
+    conferenceRef.current = updated;
+    return updated;
+  });
+};
+
 
     // 🔐 Request conference state via socket only
     const requestConferenceState = () => {
