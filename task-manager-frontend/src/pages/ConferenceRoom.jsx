@@ -185,8 +185,8 @@ export default function ConferenceRoom() {
     }
   }, [sharingScreen, showNotification]);
 
-  useEffect(() => {
-  if (!conferenceId || !socket || !socket.connected) return;
+useEffect(() => {
+  if (!conferenceId || !socket?.connected) return;
   if (!roleRef.current) return;
 
   const shouldAutoJoin =
@@ -196,10 +196,10 @@ export default function ConferenceRoom() {
 
   if (!shouldAutoJoin) return;
 
-  console.log("Auto-joining conference as privileged user");
-
+  console.log("🔑 Auto-joining conference as host");
   joinConference(conferenceId);
-}, [conferenceId, socket]);
+}, [conferenceId, socket?.connected]);
+
 
 
 
@@ -483,12 +483,11 @@ const handleConferenceState = ({ active, conference: conf }) => {
   }
 
   if (conf && currentUser) {
-    const me = conf.participants?.find(
-      p => p.userId === currentUser._id
-    );
+  if (conf.createdBy?._id === currentUser._id) {
+    roleRef.current = "admin";
+    setIsAdminOrManager(true);
+  }
 
-    roleRef.current = me?.role || null;
-    setIsAdminOrManager(["admin", "manager"].includes(me?.role));
   }
 
   if (conf?.participants) {

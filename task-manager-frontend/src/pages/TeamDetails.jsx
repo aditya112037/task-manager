@@ -436,8 +436,9 @@ export default function TeamDetails() {
     
     // ✅ FIX: Use socket.io events for connection management (best practice)
     socket.io.on("reconnect", handleReconnect);
-    socket.io.on("reconnect_error", handleDisconnect);
-    socket.io.on("reconnect_failed", handleDisconnect);
+socket.on("disconnect", handleDisconnect);
+socket.on("connect", handleReconnect);
+
 
     return () => {
       console.log("Cleaning up conference listeners and resetting refresh lock");
@@ -867,7 +868,7 @@ const renderConferenceCard = () => (
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 1 }}>
             <GroupsIcon fontSize="small" />
             <Typography variant="body2">
-              <strong>{conference.participantsCount ?? 0}</strong> participants
+              <strong>{conference.participantCount ?? 0}</strong> participants
             </Typography>
           </Box>
 
