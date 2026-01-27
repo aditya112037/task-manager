@@ -25,24 +25,6 @@ const allowedOrigins = [
   "http://localhost:3000",
   "https://task-manager-psi-lake.vercel.app",
 ];
-app.use(cors({
-  origin: [
-    "https://task-manager-psi-lake.vercel.app",
-    "http://localhost:3000"
-  ],
-  credentials: true,
-}));
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin) return callback(null, true);
-      if (allowedOrigins.includes(origin)) return callback(null, true);
-      return callback(new Error("CORS Not Allowed"));
-    },
-    credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  })
-);
 
 app.use(express.json());
 app.use(passport.initialize());
@@ -262,7 +244,7 @@ app.use("/api/ics", require("./routes/ics"));
 /* ---------------------------------------------------
    START SERVER
 --------------------------------------------------- */
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
