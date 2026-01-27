@@ -62,6 +62,7 @@ export default function ConferenceRoom() {
   const { user: currentUser } = useAuth();
 
   const localVideoRef = useRef(null);
+  const roleRef = useRef(null);
   const [adminMenuAnchor, setAdminMenuAnchor] = useState(null);
   const [selectedParticipantId, setSelectedParticipantId] = useState(null);
   const [participantsPanelOpen, setParticipantsPanelOpen] = useState(true);
@@ -183,6 +184,24 @@ export default function ConferenceRoom() {
       showNotification("Screen share failed", "error");
     }
   }, [sharingScreen, showNotification]);
+
+  useEffect(() => {
+  if (!conferenceId || !socket || !socket.connected) return;
+  if (!roleRef.current) return;
+
+  const shouldAutoJoin =
+    roleRef.current === "admin" ||
+    roleRef.current === "manager" ||
+    roleRef.current === "creator";
+
+  if (!shouldAutoJoin) return;
+
+  console.log("Auto-joining conference as privileged user");
+
+  joinConference(conferenceId);
+}, [conferenceId, socket]);
+
+
 
   // Audio analyser for mic level
   useEffect(() => {
@@ -343,7 +362,6 @@ export default function ConferenceRoom() {
           showNotification("Joining without camera/microphone", "warning");
         }
 
-        joinConference(conferenceId);
         
         if (stream) {
           showNotification("Media initialized successfully", "success");
@@ -455,25 +473,29 @@ const handleParticipantsUpdate = ({ participants }) => {
       showNotification(`You are invited to conference ${invitedConfId}`, "info");
     };
 
-    const handleConferenceState = ({ active, conference: conf }) => {
-      if (!mounted()) return;
-      
-      if (!active) {
-        showNotification("Conference is not active", "warning");
-        handleLeave();
-        return;
-      }
-      
-      // ✅ This is now the ONLY place admin role is determined
-if (conf?.participants && currentUser) {
-  const me = conf.participants.find(p => p.userId === currentUser._id);
-  setIsAdminOrManager(["admin", "manager"].includes(me?.role));
-}
+const handleConferenceState = ({ active, conference: conf }) => {
+  if (!mounted()) return;
 
-      if (conf?.participants) {
-        setParticipants(conf.participants);
-      }
-    };
+  if (!active) {
+    showNotification("Conference is not active", "warning");
+    handleLeave();
+    return;
+  }
+
+  if (conf && currentUser) {
+    const me = conf.participants?.find(
+      p => p.userId === currentUser._id
+    );
+
+    roleRef.current = me?.role || null;
+    setIsAdminOrManager(["admin", "manager"].includes(me?.role));
+  }
+
+  if (conf?.participants) {
+    setParticipants(conf.participants);
+  }
+};
+
 
     socket.on("conference:user-joined", handleUserJoined);
     socket.on("conference:offer", handleOffer);

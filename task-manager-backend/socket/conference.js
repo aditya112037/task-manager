@@ -60,47 +60,34 @@ module.exports = function registerConferenceSocket(io, socket) {
      CONFERENCE CHECK ENDPOINT (FOR TEAMDETAILS.JSX)
      ✅ FIXED: State only, no participants
   --------------------------------------------------- */
-  socket.on("conference:check", async ({ teamId }) => {
-    try {
-      const user = getUserFromSocket();
-      if (!user) return;
+ socket.on("conference:check", async ({ teamId }) => {
+  const conference = await getActiveConference(teamId);
 
-      console.log("🔍 conference:check requested for team:", teamId);
-      
-      // Find conference for this team
-      const conference = getConferenceByTeamId(teamId);
-      
-      if (conference) {
-        // Conference exists, return its state (NO participants here)
-        const conferenceState = {
-          active: true,
-          conference: {
-            conferenceId: conference.conferenceId,
-            teamId: conference.teamId,
-            createdBy: conference.createdBy,
-            startedAt: conference.createdAt,
-            speakerMode: conference.speakerMode,
-          }
-        };
-        
-        console.log("✅ Conference found, sending state:", conferenceState);
-        socket.emit("conference:state", conferenceState);
-      } else {
-        // No conference for this team
-        console.log("❌ No conference found for team:", teamId);
-        socket.emit("conference:state", {
-          active: false,
-          conference: null
-        });
-      }
-    } catch (err) {
-      console.error("conference:check error:", err);
-      socket.emit("conference:state", {
-        active: false,
-        conference: null
-      });
-    }
+  if (!conference) {
+    socket.emit("conference:state", { active: false });
+    return;
+  }
+
+  socket.emit("conference:state", {
+    active: true,
+    conference: {
+      conferenceId: conference.conferenceId,
+      teamId: conference.teamId,
+      startedAt: conference.startedAt,
+
+      // ✅ REQUIRED FOR UI
+      createdBy: {
+        _id: conference.createdBy._id,
+        name: conference.createdBy.name,
+        role: conference.createdBy.role,
+      },
+
+      // ✅ CLEAN COUNT (no participant list here)
+      participantCount: conference.participants?.length || 0,
+    },
   });
+});
+
 
   /* ---------------------------------------------------
      CREATE CONFERENCE

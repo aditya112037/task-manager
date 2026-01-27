@@ -823,164 +823,111 @@ export default function TeamDetails() {
   /* ---------------------------------------------------
      RENDER CONFERENCE CARD COMPONENT
   --------------------------------------------------- */
-  const renderConferenceCard = () => (
-    <Card sx={{ 
-      maxWidth: 400, 
-      mb: 4, 
+const renderConferenceCard = () => (
+  <Card
+    sx={{
+      maxWidth: 400,
+      mb: 4,
       borderRadius: 2,
       border: conference ? "2px solid #00e676" : "1px solid #e0e0e0",
-      boxShadow: conference ? "0 4px 20px rgba(0, 230, 118, 0.15)" : "0 2px 8px rgba(0,0,0,0.1)",
-      position: "relative",
-    }}>
-      <CardContent>
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
-          <VideocamIcon color={conference ? "success" : "primary"} />
-          <Typography variant="h6" component="div" fontWeight={700}>
-            {conference ? "Active Conference" : "Team Conference"}
-          </Typography>
-          {conference && (
-            <Chip
-              label="Live"
-              color="error"
-              size="small"
-              sx={{ 
-                ml: "auto", 
-                animation: "pulse 2s infinite",
-                fontWeight: "bold" 
-              }}
-            />
-          )}
-        </Box>
+      boxShadow: conference
+        ? "0 4px 20px rgba(0, 230, 118, 0.15)"
+        : "0 2px 8px rgba(0,0,0,0.1)",
+    }}
+  >
+    <CardContent>
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
+        <VideocamIcon color={conference ? "success" : "primary"} />
+        <Typography variant="h6" fontWeight={700}>
+          {conference ? "Active Conference" : "Team Conference"}
+        </Typography>
+        {conference && (
+          <Chip
+            label="Live"
+            color="error"
+            size="small"
+            sx={{ ml: "auto", fontWeight: "bold" }}
+          />
+        )}
+      </Box>
 
-        {loadingConference ? (
-          <Box sx={{ display: "flex", alignItems: "center", gap: 2, py: 2 }}>
-            <CircularProgress size={24} />
-            <Typography variant="body2" color="text.secondary">
-              Checking conference status...
+      {loadingConference ? (
+        <Box sx={{ display: "flex", gap: 2, py: 2 }}>
+          <CircularProgress size={24} />
+          <Typography variant="body2" color="text.secondary">
+            Checking conference status…
+          </Typography>
+        </Box>
+      ) : conference ? (
+        <>
+          {/* ✅ HOST */}
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            Host: <strong>{conference.createdBy?.name || "Unknown"}</strong>
+          </Typography>
+
+          {/* ✅ PARTICIPANT COUNT */}
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 1 }}>
+            <GroupsIcon fontSize="small" />
+            <Typography variant="body2">
+              <strong>{conference.participantsCount ?? 0}</strong> participants
             </Typography>
           </Box>
-        ) : conference ? (
-          <>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              Conference ID: <strong>{conference.conferenceId}</strong>
+
+          {/* ✅ START TIME */}
+          {conference.startedAt && (
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              display="block"
+              mt={1}
+            >
+              Started:{" "}
+              {new Date(conference.startedAt).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
             </Typography>
-            
-            <Box sx={{ display: "flex", alignItems: "center", gap: 2, mt: 2, mb: 2 }}>
-              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                <GroupsIcon fontSize="small" />
-                <Typography variant="body2">
-                  <strong>{conference.participantCount ?? 0}</strong> participants
-                </Typography>
-              </Box>
+          )}
+        </>
+      ) : (
+        <Typography variant="body2" color="text.secondary">
+          No active conference right now.
+        </Typography>
+      )}
+    </CardContent>
 
-              {conference.speakerMode?.enabled && (
-                <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                  <VolumeUpIcon fontSize="small" color="success" />
-                  <Typography variant="body2" color="success.main" fontWeight={600}>
-                    Speaker Mode Active
-                  </Typography>
-                </Box>
-              )}
-            </Box>
+    {/* ✅ BUTTON TEXT LOGIC */}
+    <CardActions sx={{ justifyContent: "center", p: 2, pt: 0 }}>
+      <Button
+        variant="contained"
+        color={conference ? "success" : "primary"}
+        startIcon={<VideocamIcon />}
+        fullWidth
+        size="large"
+        disabled={!socketConnected || loadingConference}
+        onClick={conference ? handleJoinConference : handleStartConference}
+      >
+        {conference
+          ? ["admin", "manager"].includes(myRole)
+            ? "Enter Conference"
+            : "Join Conference"
+          : "Start Conference"}
+      </Button>
+    </CardActions>
 
-            {conference.participants && conference.participants.length > 0 && (
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="body2" color="text.secondary" gutterBottom>
-                  Active Participants:
-                </Typography>
-                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1 }}>
-                  {conference.participants.slice(0, 5).map((participant, index) => (
-                    <Chip
-                      key={participant.socketId || index}
-                      icon={<PersonIcon fontSize="small" />}
-                      label={participant.userName || participant.name || "User"}
-                      size="small"
-                      variant="outlined"
-                      sx={{ 
-                        borderColor: "#00e676",
-                        color: conference.createdBy === participant.userId ? "#1976d2" : "inherit"
-                      }}
-                    />
-                  ))}
-                  {conference.participants.length > 5 && (
-                    <Chip
-                      label={`+${conference.participants.length - 5} more`}
-                      size="small"
-                      variant="outlined"
-                    />
-                  )}
-                </Box>
-              </Box>
-            )}
-            
-            {conference.startedAt && (
-              <Typography variant="caption" color="text.secondary" display="block" mt={1}>
-                Started: {new Date(conference.startedAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-              </Typography>
-            )}
-          </>
-        ) : (
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            No active conference right now. {["admin", "manager"].includes(myRole) 
-              ? "Start a conference to collaborate in real-time." 
-              : "Only admins and managers can start a conference."}
-          </Typography>
-        )}
-      </CardContent>
+    <Box sx={{ textAlign: "center", pb: 2 }}>
+      <Button
+        size="small"
+        startIcon={<RefreshIcon />}
+        onClick={handleRefreshConference}
+        disabled={loadingConference || refreshLockRef.current}
+      >
+        {refreshLockRef.current ? "Refreshing…" : "Refresh Status"}
+      </Button>
+    </Box>
+  </Card>
+);
 
-      <CardActions sx={{ justifyContent: "center", p: 2, pt: 0 }}>
-        {loadingConference ? (
-          <Button disabled fullWidth size="large">
-            <CircularProgress size={24} />
-          </Button>
-        ) : conference ? (
-          <Button
-            variant="contained"
-            color="success"
-            startIcon={<VideocamIcon />}
-            onClick={handleJoinConference}
-            fullWidth
-            size="large"
-            disabled={!socketConnected}
-          >
-            {socketConnected ? "Join Conference" : "Connecting..."}
-          </Button>
-        ) : ["admin", "manager"].includes(myRole) ? (
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<VideocamIcon />}
-            onClick={handleStartConference}
-            fullWidth
-            size="large"
-            disabled={!socketConnected || loadingConference}
-          >
-            {socketConnected ? "Start Conference" : "Connecting..."}
-          </Button>
-        ) : (
-          <Button
-            variant="outlined"
-            disabled
-            fullWidth
-            size="large"
-          >
-            Join Conference
-          </Button>
-        )}
-      </CardActions>
-      
-      <Box sx={{ p: 2, pt: 0, textAlign: "center" }}>
-        <Button 
-          size="small" 
-          startIcon={<RefreshIcon />}
-          onClick={handleRefreshConference}
-          disabled={loadingConference || refreshLockRef.current}
-        >
-          {refreshLockRef.current ? "Refreshing..." : "Refresh Status"}
-        </Button>
-      </Box>
-    </Card>
-  );
 
   /* ---------------------------------------------------
      LOADING
