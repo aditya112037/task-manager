@@ -473,27 +473,7 @@ const handleParticipantsUpdate = ({ participants }) => {
       showNotification(`You are invited to conference ${invitedConfId}`, "info");
     };
 
-const handleConferenceState = ({ active, conference: conf }) => {
-  if (!mounted()) return;
 
-  if (!active) {
-    showNotification("Conference is not active", "warning");
-    handleLeave();
-    return;
-  }
-
-  if (conf && currentUser) {
-  if (conf.createdBy?._id === currentUser._id) {
-    roleRef.current = "admin";
-    setIsAdminOrManager(true);
-  }
-
-  }
-
-  if (conf?.participants) {
-    setParticipants(conf.participants);
-  }
-};
 
 
     socket.on("conference:user-joined", handleUserJoined);
@@ -517,7 +497,7 @@ const handleConferenceState = ({ active, conference: conf }) => {
     
     socket.on("conference:invited", handleConferenceInvited);
     
-    socket.on("conference:state", handleConferenceState);
+    
 
     return () => {
       mountedRef.current = false;      
@@ -543,7 +523,6 @@ const handleConferenceState = ({ active, conference: conf }) => {
       socket.off("conference:media-update", handleMediaUpdate);
       
       socket.off("conference:invited", handleConferenceInvited);
-      socket.off("conference:state", handleConferenceState);
     };
   }, [
     conferenceId, 

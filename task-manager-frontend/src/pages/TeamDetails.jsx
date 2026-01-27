@@ -326,11 +326,8 @@ export default function TeamDetails() {
     // ✅ FIX 2: Handle conference started - REQUEST STATE INSTEAD OF CREATING PARTIAL STATE
     const handleConferenceStarted = ({ teamId: startedTeamId }) => {
       console.log("🎥 Conference started event for team:", startedTeamId);
-      if (String(startedTeamId) !== String(routeTeamId)) return;
-      
-      showSnack("Conference started successfully!", "success");
-      // ✅ SINGLE SOURCE OF TRUTH: Request authoritative state from server
-      socket.emit("conference:check", { teamId: teamIdRef.current });
+      if (teamId !== routeTeamId) return;
+      showSnack("Conference started", "success");
     };
 
     // Listen for conference ended in this team
@@ -381,7 +378,7 @@ export default function TeamDetails() {
         const updated = {
           ...prev,
           participants: participants || [],
-          participantCount: participants?.length || 0
+          participantCount: conference.participants.size
         };
         
         conferenceRef.current = updated;
@@ -434,8 +431,6 @@ export default function TeamDetails() {
       requestConferenceState();
     }
     
-    // ✅ FIX: Use socket.io events for connection management (best practice)
-    socket.io.on("reconnect", handleReconnect);
 socket.on("disconnect", handleDisconnect);
 socket.on("connect", handleReconnect);
 
@@ -456,8 +451,6 @@ socket.on("connect", handleReconnect);
       
       // Clean up socket.io connection listeners
       socket.io.off("reconnect", handleReconnect);
-      socket.io.off("reconnect_error", handleDisconnect);
-      socket.io.off("reconnect_failed", handleDisconnect);
     };
   }, [routeTeamId, navigate, showSnack]);
 
