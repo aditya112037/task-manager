@@ -17,7 +17,27 @@ const app = express();
 const server = http.createServer(app);
 
 /* ---------------------------------------------------
-   CORS CONFIG (🔥 THIS WAS MISSING)
+   HARD STOP FOR PREFLIGHT (CRITICAL)
+--------------------------------------------------- */
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") {
+    res.header("Access-Control-Allow-Origin", req.headers.origin);
+    res.header(
+      "Access-Control-Allow-Methods",
+      "GET,POST,PUT,DELETE,OPTIONS"
+    );
+    res.header(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Authorization"
+    );
+    res.header("Access-Control-Allow-Credentials", "true");
+    return res.sendStatus(204);
+  }
+  next();
+});
+
+/* ---------------------------------------------------
+   CORS CONFIG
 --------------------------------------------------- */
 const allowedOrigins = [
   "http://localhost:3000",
@@ -111,7 +131,7 @@ io.on("connection", (socket) => {
 });
 
 /* ---------------------------------------------------
-   ROUTES (🔥 THESE WERE FAILING)
+   ROUTES
 --------------------------------------------------- */
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/auth", require("./routes/googleAuth"));
