@@ -23,7 +23,14 @@ import PersonRemoveIcon from "@mui/icons-material/PersonRemove";
 import GroupsIcon from "@mui/icons-material/Groups";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 import MicExternalOnIcon from "@mui/icons-material/MicExternalOn";
-import { raiseHand, lowerHand } from "../services/conferenceSocket";
+import { 
+  raiseHand, 
+  lowerHand, 
+  initMedia, 
+  cleanupConference,
+  leaveConference,
+  sendSpeakingStatus 
+} from "../services/conferenceSocket";
 import RaiseHandIndicator from "../components/Conference/RaiseHandIndicator";
 import ParticipantsPanel from "../components/Conference/ParticipantsPanel";
 import CallEndIcon from "@mui/icons-material/CallEnd";
@@ -35,7 +42,6 @@ import PersonIcon from "@mui/icons-material/Person";
 import PresentToAllIcon from "@mui/icons-material/PresentToAll";
 import { getSocket } from "../services/socket";
 import {
-  initializeMedia,
   createPeer,
   removePeer,
   toggleAudio,
@@ -99,23 +105,20 @@ export default function ConferenceRoom() {
     setNotification({ open: true, message, severity });
   }, []);
 
+  // ✅ FIX 2 & 4: Use centralized cleanup and leaveConference
   const handleLeave = useCallback(() => {
     conferenceStartedRef.current = false;
-
-    if (socket) {
-      socket.emit("conference:leave", { conferenceId });
-    }
     
     stopSpeakerDetection();
     
-    if (localStream) {
-      localStream.getTracks().forEach(track => track.stop());
-    }
+    // ✅ Use centralized cleanup instead of manual track stopping
+    leaveConference();
+    cleanupConference();
     
     setRemoteStreams({});
     
     navigate(-1);
-  }, [socket, conferenceId, localStream, navigate]);
+  }, [navigate]);
 
   const handleToggleMic = useCallback(() => {
     if (speakerModeEnabled && activeSpeaker !== socket.id && !isAdminOrManager) {
@@ -352,10 +355,11 @@ export default function ConferenceRoom() {
 
         let stream = null;
         try {
-          stream = await initializeMedia({ audio: true, video: true });
+          // ✅ FIX 1: Use locked media initialization instead of bypassing
+          stream = await initMedia();
           setLocalStreamState(stream);
 
-          if (localVideoRef.current) {
+          if (localVideoRef.current && stream) {
             localVideoRef.current.srcObject = stream;
           }
         } catch (mediaError) {
@@ -532,25 +536,21 @@ export default function ConferenceRoom() {
     localStream
   ]);
   
-  // ✅ FIX #3: Fixed conference:speaking payload
+  // ✅ Use sendSpeakingStatus instead of raw socket emit (optional but cleaner)
   useEffect(() => {
     if (!localStream || !speakerModeEnabled) return;
 
     const cleanup = startSpeakerDetection((speaking) => {
       if (!speakerModeEnabled) return;
 
-      socket.emit("conference:speaking", {
-        conferenceId,
-        speaking,
-      });
+      // ✅ Optional: Use the service function instead of raw emit
+      sendSpeakingStatus(speaking);
     });
 
     return cleanup;
   }, [
     localStream,
     speakerModeEnabled,
-    conferenceId,
-    socket,
   ]);
 
   // Admin override effect for speaker mode
