@@ -5,11 +5,7 @@ import Header from "./Header";
 import { useAuth } from "../../context/AuthContext";
 
 // 🔌 Socket helpers
-import {
-  initSocket,
-  getSocket,
-  connectSocket,
-} from "../../services/socket";
+import {getSocket} from "../../services/socket";
 
 const Layout = ({ children, toggleDarkMode, darkMode }) => {
   const { user } = useAuth();
@@ -29,47 +25,40 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
 useEffect(() => {
   if (!user?._id) return;
 
-  initSocket(user._id);
   const socket = getSocket();
+  if (!socket || !socket.connected) return;
+
   socketRef.current = socket;
 
-  connectSocket();
-
   // 🔁 TASKS
-  socket.on("invalidate:tasks", ({ teamId }) => {
+  const onTasksInvalidate = ({ teamId }) => {
     window.dispatchEvent(
       new CustomEvent("invalidate:tasks", { detail: { teamId } })
     );
-  });
+  };
 
   // 💬 COMMENTS
-  socket.on("invalidate:comments", ({ taskId }) => {
+  const onCommentsInvalidate = ({ taskId }) => {
     window.dispatchEvent(
       new CustomEvent("invalidate:comments", { detail: { taskId } })
     );
-  });
+  };
 
   // 👥 TEAMS / ROLES
-  socket.on("invalidate:teams", ({ teamId }) => {
+  const onTeamsInvalidate = ({ teamId }) => {
     window.dispatchEvent(
       new CustomEvent("invalidate:teams", { detail: { teamId } })
     );
-  });
+  };
 
-  socket.on("connect", () => {
-    console.log("✅ Socket connected");
-  });
-
-  socket.on("disconnect", (reason) => {
-    console.warn("❌ Socket disconnected:", reason);
-  });
+  socket.on("invalidate:tasks", onTasksInvalidate);
+  socket.on("invalidate:comments", onCommentsInvalidate);
+  socket.on("invalidate:teams", onTeamsInvalidate);
 
   return () => {
-    socket.off("invalidate:tasks");
-    socket.off("invalidate:comments");
-    socket.off("invalidate:teams");
-    socket.off("connect");
-    socket.off("disconnect");
+    socket.off("invalidate:tasks", onTasksInvalidate);
+    socket.off("invalidate:comments", onCommentsInvalidate);
+    socket.off("invalidate:teams", onTeamsInvalidate);
   };
 }, [user?._id]);
 
