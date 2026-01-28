@@ -425,7 +425,7 @@ socket.on("connect", handleReconnect);
      When role updates, tasks and extensions visibility may change
   --------------------------------------------------- */
   useEffect(() => {
-    if (!team || !myRole) return;
+    if (!myRole) return;
     
     fetchTeamTasks();
     fetchPendingExtensions();
