@@ -298,8 +298,6 @@ export default function TeamDetails() {
           createdBy: conf.createdBy,
           speakerMode: conf.speakerMode,
           startedAt: conf.startedAt,
-          // ✅ FIXED: Participants should ONLY come from conference:participants event
-          participantCount: 0,
         };
         
         // 🚨 CRITICAL FIX: Compare before updating
@@ -436,14 +434,19 @@ socket.on("connect", handleReconnect);
   --------------------------------------------------- */
 useEffect(() => {
   const socket = getSocket();
-  if (!socket || !socket.connected) return;
+  if (!socket) return;
 
-  joinTeamRoom(routeTeamId);
+  const join = () => joinTeamRoom(routeTeamId);
+
+  if (socket.connected) join();
+  else socket.on("connect", join);
 
   return () => {
     leaveTeamRoom(routeTeamId);
+    socket.off("connect", join);
   };
 }, [routeTeamId]);
+
 
 
   /* ---------------------------------------------------

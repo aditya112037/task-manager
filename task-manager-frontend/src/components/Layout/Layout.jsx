@@ -26,7 +26,7 @@ useEffect(() => {
   if (!user?._id) return;
 
   const socket = getSocket();
-  if (!socket || !socket.connected) return;
+  if (!socket) return;
 
   socketRef.current = socket;
 

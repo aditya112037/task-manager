@@ -36,14 +36,6 @@ function AppContent() {
     if (saved) setDarkMode(saved === "true");
   }, []);
 
-  // ✅ Socket bootstrap - ONCE when user logs in
-  useEffect(() => {
-    if (user) {
-      console.log("🔄 Initializing socket for authenticated user");
-      initSocket();
-    }
-    // Note: No cleanup needed - socket manages its own lifecycle
-  }, [user]);
 
   const toggleDarkMode = () => {
     const next = !darkMode;
