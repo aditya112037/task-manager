@@ -182,9 +182,6 @@ export const joinConference = (conferenceId) => {
   
   socket.emit("conference:join", { conferenceId });
 
-  // Setup automatic lock release
-
-
   // Event-based lock management
   const handleJoined = () => {
     locks.conference.joined = true;
@@ -204,8 +201,18 @@ export const joinConference = (conferenceId) => {
   socket.once("conference:joined", handleJoined);
   socket.once("conference:error", handleError);
 
-  // Safety timeout to release lock
-  
+  // ✅ FIX 2: Safety timeout to prevent permanent deadlock
+  setTimeout(() => {
+    if (locks.conference.joinInProgress) {
+      console.warn("Join timeout, releasing conference lock");
+      locks.conference.joinInProgress = false;
+      locks.conference.currentConferenceId = null;
+      
+      // Clean up listeners
+      socket.off("conference:joined", handleJoined);
+      socket.off("conference:error", handleError);
+    }
+  }, 5000);
 
   return true;
 };
@@ -270,11 +277,12 @@ export const setupConferenceCreationListeners = (handlers) => {
   const { onCreated, onCreateError } = handlers;
 
   if (onCreated) socket.on("conference:created", onCreated);
-if (onCreateError) socket.on("conference:error", onCreateError);
+  if (onCreateError) socket.on("conference:error", onCreateError);
 
   return () => {
     if (onCreated) socket.off("conference:created", onCreated);
-    if (onCreateError) socket.off("conference:create:error", onCreateError);
+    // ✅ FIX 1: Fixed listener mismatch - detach same event name
+    if (onCreateError) socket.off("conference:error", onCreateError);
   };
 };
 
@@ -453,8 +461,7 @@ export const cleanupConference = () => {
     console.warn("Error cleaning up WebRTC:", error);
   }
   
-  // Reset media locks (keep attempted flag for session)
-  locks.media.initAttempted = false;
+  // ✅ FIX 3: Keep initAttempted true for session safety
   locks.media.initInProgress = false;
   locks.media.initialized = false;
   
