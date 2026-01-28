@@ -240,11 +240,8 @@ export default function TeamDetails() {
     const onCommentsInvalidate = ({ detail }) => {
       if (!detail?.taskId) return;
       // Check if this task belongs to current team
-      const affectedTask = teamTasks.find(t => t._id === detail.taskId);
-      if (affectedTask) {
-        console.log("🔄 TeamDetails: invalidate:comments for task", detail.taskId);
         fetchTeamTasks();
-      }
+      
     };
 
     window.addEventListener("invalidate:tasks", onTasksInvalidate);
