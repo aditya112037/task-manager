@@ -3,7 +3,6 @@ import React, { useMemo, useState, useEffect } from "react";
 import { ThemeProvider, createTheme, CssBaseline } from "@mui/material";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
-import { initSocket } from "./services/socket";
 import Layout from "./components/Layout/Layout";
 import ConferenceRoom from "./pages/ConferenceRoom";
 import Login from "./components/Auth/Login";
@@ -29,7 +28,6 @@ const PublicRoute = ({ children }) => {
 
 function AppContent() {
   const [darkMode, setDarkMode] = useState(false);
-  const { user } = useAuth();
 
   useEffect(() => {
     const saved = localStorage.getItem("darkMode");
