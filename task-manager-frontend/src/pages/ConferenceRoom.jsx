@@ -185,23 +185,16 @@ export default function ConferenceRoom() {
     }
   }, [sharingScreen, showNotification]);
 
+const hasJoinedRef = useRef(false);
+
 useEffect(() => {
-  if (!conferenceId || !socket?.connected) return;
-  if (!roleRef.current) return;
+  if (!conferenceId) return;
+  if (!socket || !socket.connected) return;
+  if (hasJoinedRef.current) return;
 
-  const shouldAutoJoin =
-    roleRef.current === "admin" ||
-    roleRef.current === "manager" ||
-    roleRef.current === "creator";
-
-  if (!shouldAutoJoin) return;
-
-  console.log("🔑 Auto-joining conference as host");
+  hasJoinedRef.current = true;
   joinConference(conferenceId);
-}, [conferenceId, socket?.connected]);
-
-
-
+}, [conferenceId, socket]);
 
   // Audio analyser for mic level
   useEffect(() => {

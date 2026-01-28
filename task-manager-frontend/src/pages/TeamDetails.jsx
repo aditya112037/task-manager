@@ -434,17 +434,17 @@ socket.on("connect", handleReconnect);
   /* ---------------------------------------------------
      INITIAL LOAD
   --------------------------------------------------- */
-  useEffect(() => {
-    fetchTeam();
-  }, [fetchTeam]);
+useEffect(() => {
+  const socket = getSocket();
+  if (!socket || !socket.connected) return;
 
-  useEffect(() => {
-    if (!routeTeamId) return;
-    joinTeamRoom(routeTeamId);
-    return () => {
-      leaveTeamRoom(routeTeamId);
-    };
-  }, [routeTeamId]);
+  joinTeamRoom(routeTeamId);
+
+  return () => {
+    leaveTeamRoom(routeTeamId);
+  };
+}, [routeTeamId]);
+
 
   /* ---------------------------------------------------
      CONFERENCE HANDLERS (PURE SOCKET-ONLY)
