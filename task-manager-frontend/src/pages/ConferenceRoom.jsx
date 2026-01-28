@@ -62,7 +62,6 @@ export default function ConferenceRoom() {
   const { user: currentUser } = useAuth();
 
   const localVideoRef = useRef(null);
-  const roleRef = useRef(null);
   const [adminMenuAnchor, setAdminMenuAnchor] = useState(null);
   const [selectedParticipantId, setSelectedParticipantId] = useState(null);
   const [participantsPanelOpen, setParticipantsPanelOpen] = useState(true);
@@ -77,7 +76,6 @@ export default function ConferenceRoom() {
   const [camOn, setCamOn] = useState(true);
   const [sharingScreen, setSharingScreen] = useState(false);
   const [localStream, setLocalStreamState] = useState(null);
-  const [isAdminOrManager] = useState(false);
   const [activeSpeaker, setActiveSpeaker] = useState(null);
   const [speakerModeEnabled, setSpeakerModeEnabled] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: "", severity: "info" });
