@@ -1,4 +1,3 @@
-// TeamDetails.jsx - Fixed with Complete Socket-Only Conference System
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   Box,
@@ -264,7 +263,7 @@ export default function TeamDetails() {
     fetchTeamTasks, 
     fetchPendingExtensions, 
     fetchTeam,
-    teamTasks
+    // 🚨 REMOVED: teamTasks from dependencies to prevent loops
   ]);
 
   /* ---------------------------------------------------
@@ -298,6 +297,8 @@ export default function TeamDetails() {
           createdBy: conf.createdBy,
           speakerMode: conf.speakerMode,
           startedAt: conf.startedAt,
+          // ✅ FIX 3: Add participantCount to conference state
+          participantCount: conf.participantCount ?? 0,
         };
         
         // 🚨 CRITICAL FIX: Compare before updating
@@ -350,7 +351,6 @@ export default function TeamDetails() {
       showSnack(`You are invited to a conference`, "info");
     };
 
-
     // 🔐 Request conference state via socket only
     const requestConferenceState = () => {
       const id = teamIdRef.current;
@@ -360,25 +360,6 @@ export default function TeamDetails() {
       }
       console.log("Requesting conference state via socket for team:", id);
       socket.emit("conference:check", { teamId: id });
-    };
-
-    // 🟢 FIXED: Handle socket reconnection - RESET THE FLAG
-    const handleReconnect = () => {
-      console.log("🔄 Socket reconnected, resetting conference state flag");
-      hasRequestedInitialStateRef.current = false;
-      setSocketConnected(true);
-      
-      // Request conference state again
-      if (teamIdRef.current) {
-        socket.emit("conference:check", { teamId: teamIdRef.current });
-      }
-    };
-
-    // 🟢 FIX: Handle socket disconnect properly (use socket.io events)
-    const handleDisconnect = () => {
-      console.log("Socket connection lost");
-      hasRequestedInitialStateRef.current = false;
-      setSocketConnected(false);
     };
 
     // Set up socket listeners
@@ -394,10 +375,6 @@ export default function TeamDetails() {
       setLoadingConference(true);
       requestConferenceState();
     }
-    
-socket.on("disconnect", handleDisconnect);
-socket.on("connect", handleReconnect);
-
 
     return () => {
       console.log("Cleaning up conference listeners and resetting refresh lock");
@@ -411,12 +388,8 @@ socket.on("connect", handleReconnect);
       socket.off("conference:ended", handleConferenceEnded);
       socket.off("conference:error", handleConferenceError);
       socket.off("conference:invited", handleConferenceInvited);
-      // Clean up socket.io connection listeners
-      socket.off("connect", handleReconnect);
-      socket.off("disconnect", handleDisconnect);
-
     };
-  }, [routeTeamId, navigate, showSnack]);
+  }, [routeTeamId, showSnack]);
 
   /* ---------------------------------------------------
      🚨 CRITICAL FIX: Refetch when role changes
@@ -432,22 +405,27 @@ socket.on("connect", handleReconnect);
   /* ---------------------------------------------------
      INITIAL LOAD
   --------------------------------------------------- */
-useEffect(() => {
-  const socket = getSocket();
-  if (!socket) return;
+  useEffect(() => {
+    fetchTeam();
+  }, [fetchTeam]);
 
-  const join = () => joinTeamRoom(routeTeamId);
+  /* ---------------------------------------------------
+     JOIN/LEAVE TEAM ROOM
+  --------------------------------------------------- */
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
 
-  if (socket.connected) join();
-  else socket.on("connect", join);
+    const join = () => joinTeamRoom(routeTeamId);
 
-  return () => {
-    leaveTeamRoom(routeTeamId);
-    socket.off("connect", join);
-  };
-}, [routeTeamId]);
+    if (socket.connected) join();
+    else socket.on("connect", join);
 
-
+    return () => {
+      leaveTeamRoom(routeTeamId);
+      socket.off("connect", join);
+    };
+  }, [routeTeamId]);
 
   /* ---------------------------------------------------
      CONFERENCE HANDLERS (PURE SOCKET-ONLY)
@@ -784,111 +762,110 @@ useEffect(() => {
   /* ---------------------------------------------------
      RENDER CONFERENCE CARD COMPONENT
   --------------------------------------------------- */
-const renderConferenceCard = () => (
-  <Card
-    sx={{
-      maxWidth: 400,
-      mb: 4,
-      borderRadius: 2,
-      border: conference ? "2px solid #00e676" : "1px solid #e0e0e0",
-      boxShadow: conference
-        ? "0 4px 20px rgba(0, 230, 118, 0.15)"
-        : "0 2px 8px rgba(0,0,0,0.1)",
-    }}
-  >
-    <CardContent>
-      <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
-        <VideocamIcon color={conference ? "success" : "primary"} />
-        <Typography variant="h6" fontWeight={700}>
-          {conference ? "Active Conference" : "Team Conference"}
-        </Typography>
-        {conference && (
-          <Chip
-            label="Live"
-            color="error"
-            size="small"
-            sx={{ ml: "auto", fontWeight: "bold" }}
-          />
-        )}
-      </Box>
-
-      {loadingConference ? (
-        <Box sx={{ display: "flex", gap: 2, py: 2 }}>
-          <CircularProgress size={24} />
-          <Typography variant="body2" color="text.secondary">
-            Checking conference status…
+  const renderConferenceCard = () => (
+    <Card
+      sx={{
+        maxWidth: 400,
+        mb: 4,
+        borderRadius: 2,
+        border: conference ? "2px solid #00e676" : "1px solid #e0e0e0",
+        boxShadow: conference
+          ? "0 4px 20px rgba(0, 230, 118, 0.15)"
+          : "0 2px 8px rgba(0,0,0,0.1)",
+      }}
+    >
+      <CardContent>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
+          <VideocamIcon color={conference ? "success" : "primary"} />
+          <Typography variant="h6" fontWeight={700}>
+            {conference ? "Active Conference" : "Team Conference"}
           </Typography>
+          {conference && (
+            <Chip
+              label="Live"
+              color="error"
+              size="small"
+              sx={{ ml: "auto", fontWeight: "bold" }}
+            />
+          )}
         </Box>
-      ) : conference ? (
-        <>
-          {/* ✅ HOST */}
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            Host: <strong>{conference.createdBy?.name || "Unknown"}</strong>
-          </Typography>
 
-          {/* ✅ PARTICIPANT COUNT */}
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 1 }}>
-            <GroupsIcon fontSize="small" />
-            <Typography variant="body2">
-              <strong>{conference.participantCount ?? 0}</strong> participants
+        {loadingConference ? (
+          <Box sx={{ display: "flex", gap: 2, py: 2 }}>
+            <CircularProgress size={24} />
+            <Typography variant="body2" color="text.secondary">
+              Checking conference status…
             </Typography>
           </Box>
-
-          {/* ✅ START TIME */}
-          {conference.startedAt && (
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              display="block"
-              mt={1}
-            >
-              Started:{" "}
-              {new Date(conference.startedAt).toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-              })}
+        ) : conference ? (
+          <>
+            {/* ✅ HOST */}
+            <Typography variant="body2" color="text.secondary" gutterBottom>
+              Host: <strong>{conference.createdBy?.name || "Unknown"}</strong>
             </Typography>
-          )}
-        </>
-      ) : (
-        <Typography variant="body2" color="text.secondary">
-          No active conference right now.
-        </Typography>
-      )}
-    </CardContent>
 
-    {/* ✅ BUTTON TEXT LOGIC */}
-    <CardActions sx={{ justifyContent: "center", p: 2, pt: 0 }}>
-      <Button
-        variant="contained"
-        color={conference ? "success" : "primary"}
-        startIcon={<VideocamIcon />}
-        fullWidth
-        size="large"
-        disabled={!socketConnected || loadingConference}
-        onClick={conference ? handleJoinConference : handleStartConference}
-      >
-        {conference
-          ? ["admin", "manager"].includes(myRole)
-            ? "Enter Conference"
-            : "Join Conference"
-          : "Start Conference"}
-      </Button>
-    </CardActions>
+            {/* ✅ PARTICIPANT COUNT */}
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 1 }}>
+              <GroupsIcon fontSize="small" />
+              <Typography variant="body2">
+                <strong>{conference.participantCount ?? 0}</strong> participants
+              </Typography>
+            </Box>
 
-    <Box sx={{ textAlign: "center", pb: 2 }}>
-      <Button
-        size="small"
-        startIcon={<RefreshIcon />}
-        onClick={handleRefreshConference}
-        disabled={loadingConference || refreshLockRef.current}
-      >
-        {refreshLockRef.current ? "Refreshing…" : "Refresh Status"}
-      </Button>
-    </Box>
-  </Card>
-);
+            {/* ✅ START TIME */}
+            {conference.startedAt && (
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                display="block"
+                mt={1}
+              >
+                Started:{" "}
+                {new Date(conference.startedAt).toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </Typography>
+            )}
+          </>
+        ) : (
+          <Typography variant="body2" color="text.secondary">
+            No active conference right now.
+          </Typography>
+        )}
+      </CardContent>
 
+      {/* ✅ BUTTON TEXT LOGIC */}
+      <CardActions sx={{ justifyContent: "center", p: 2, pt: 0 }}>
+        <Button
+          variant="contained"
+          color={conference ? "success" : "primary"}
+          startIcon={<VideocamIcon />}
+          fullWidth
+          size="large"
+          disabled={!socketConnected || loadingConference}
+          onClick={conference ? handleJoinConference : handleStartConference}
+        >
+          {conference
+            ? ["admin", "manager"].includes(myRole)
+              ? "Enter Conference"
+              : "Join Conference"
+            : "Start Conference"}
+        </Button>
+      </CardActions>
+
+      <Box sx={{ textAlign: "center", pb: 2 }}>
+        <Button
+          size="small"
+          startIcon={<RefreshIcon />}
+          onClick={handleRefreshConference}
+          disabled={loadingConference || refreshLockRef.current}
+        >
+          {refreshLockRef.current ? "Refreshing…" : "Refresh Status"}
+        </Button>
+      </Box>
+    </Card>
+  );
 
   /* ---------------------------------------------------
      LOADING

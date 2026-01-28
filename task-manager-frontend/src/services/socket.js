@@ -3,6 +3,9 @@ import { io } from "socket.io-client";
 
 let socket = null;
 
+/* ---------------------------------------------------
+   CREATE SOCKET (NO AUTO-CONNECT)
+--------------------------------------------------- */
 export const initSocket = () => {
   if (socket) return socket;
 
@@ -12,11 +15,16 @@ export const initSocket = () => {
     return null;
   }
 
-  const socketUrl = process.env.REACT_APP_API_URL || "http://localhost:5000";
+  const socketUrl =
+    process.env.REACT_APP_API_URL || "http://localhost:5000";
 
-  console.log("🔄 Creating socket connection with token:", token.substring(0, 20) + "...");
+  console.log(
+    "🔄 Creating socket instance with token:",
+    token.substring(0, 20) + "..."
+  );
 
   socket = io(socketUrl, {
+    autoConnect: false, // 🔴 IMPORTANT
     transports: ["websocket", "polling"],
     auth: { token },
     reconnection: true,
@@ -39,70 +47,74 @@ export const initSocket = () => {
   return socket;
 };
 
-export const getSocket = () => {
-  if (!socket) {
-    return initSocket();
-  }
-  return socket;
+/* ---------------------------------------------------
+   CONNECT / DISCONNECT (EXPLICIT)
+--------------------------------------------------- */
+export const connectSocket = () => {
+  if (!socket) return;
+  if (socket.connected) return;
+
+  socket.connect();
 };
 
+export const disconnectSocket = () => {
+  if (!socket) return;
+
+  socket.removeAllListeners();
+  socket.disconnect();
+  socket = null;
+};
+
+/* ---------------------------------------------------
+   SAFE GETTER (NO SIDE EFFECTS)
+--------------------------------------------------- */
+export const getSocket = () => socket;
+
+/* ---------------------------------------------------
+   TEAM ROOMS
+--------------------------------------------------- */
 export const joinTeamRoom = (teamId) => {
-  const currentSocket = getSocket();
-  if (currentSocket && currentSocket.connected && teamId) {
+  if (socket && socket.connected && teamId) {
     console.log("Joining team room:", `team_${teamId}`);
-    currentSocket.emit("joinTeam", teamId);
-  } else {
-    console.warn("Cannot join team room: Socket not connected or missing teamId");
+    socket.emit("joinTeam", teamId);
   }
 };
 
 export const leaveTeamRoom = (teamId) => {
-  const currentSocket = getSocket();
-  if (currentSocket && currentSocket.connected && teamId) {
+  if (socket && socket.connected && teamId) {
     console.log("Leaving team room:", `team_${teamId}`);
-    currentSocket.emit("leaveTeam", teamId);
+    socket.emit("leaveTeam", teamId);
   }
 };
 
-// Generic event listener management
+/* ---------------------------------------------------
+   GENERIC HELPERS
+--------------------------------------------------- */
 export const addSocketListener = (event, callback) => {
-  const currentSocket = getSocket();
-  if (currentSocket) {
-    currentSocket.on(event, callback);
-  }
+  if (socket) socket.on(event, callback);
 };
 
 export const removeSocketListener = (event, callback) => {
-  const currentSocket = getSocket();
-  if (currentSocket) {
-    currentSocket.off(event, callback);
-  }
+  if (socket) socket.off(event, callback);
 };
 
-export const removeAllSocketListeners = (event) => {
-  const currentSocket = getSocket();
-  if (currentSocket) {
-    currentSocket.removeAllListeners(event);
-  }
-};
-
+/* ---------------------------------------------------
+   WEBRTC HELPERS
+--------------------------------------------------- */
 export const sendOffer = (to, offer) => {
-  const currentSocket = getSocket();
-  if (currentSocket && currentSocket.connected) {
-    currentSocket.emit("conference:offer", { to, offer });
+  if (socket && socket.connected) {
+    socket.emit("conference:offer", { to, offer });
   }
 };
 
 export const sendAnswer = (to, answer) => {
-  const currentSocket = getSocket();
-  if (currentSocket && currentSocket.connected) {
-    currentSocket.emit("conference:answer", { to, answer });
+  if (socket && socket.connected) {
+    socket.emit("conference:answer", { to, answer });
   }
 };
 
 export const sendIceCandidate = (to, candidate) => {
-  const currentSocket = getSocket();
-  if (currentSocket && currentSocket.connected) {
-    currentSocket.emit("conference:ice-candidate", { to, candidate });
+  if (socket && socket.connected) {
+    socket.emit("conference:ice-candidate", { to, candidate });
   }
 };
