@@ -352,28 +352,6 @@ export default function TeamDetails() {
       showSnack(`You are invited to a conference`, "info");
     };
 
-    // 🟢 FIX: Handle participants update with structural equality check
-const handleConferenceParticipants = ({ participants }) => {
-  if (!Array.isArray(participants)) return;
-
-  setConference(prev => {
-    if (!prev) return prev;
-
-    // Only update count, nothing else
-    if (prev.participantCount === participants.length) {
-      return prev;
-    }
-
-    const updated = {
-      ...prev,
-      participantCount: participants.length,
-    };
-
-    conferenceRef.current = updated;
-    return updated;
-  });
-};
-
 
     // 🔐 Request conference state via socket only
     const requestConferenceState = () => {
@@ -411,10 +389,9 @@ const handleConferenceParticipants = ({ participants }) => {
     socket.on("conference:ended", handleConferenceEnded);
     socket.on("conference:error", handleConferenceError);
     socket.on("conference:invited", handleConferenceInvited);
-    socket.on("conference:participants", handleConferenceParticipants);
     
     // Request conference state ONCE - with fixed flag logic
-    if (!hasRequestedInitialStateRef.current) {
+    if (!hasRequestedInitialStateRef.current && socket.connected) {
       hasRequestedInitialStateRef.current = true;
       setLoadingConference(true);
       requestConferenceState();
@@ -436,10 +413,10 @@ socket.on("connect", handleReconnect);
       socket.off("conference:ended", handleConferenceEnded);
       socket.off("conference:error", handleConferenceError);
       socket.off("conference:invited", handleConferenceInvited);
-      socket.off("conference:participants", handleConferenceParticipants);
-      
       // Clean up socket.io connection listeners
-      socket.io.off("reconnect", handleReconnect);
+      socket.off("connect", handleReconnect);
+      socket.off("disconnect", handleDisconnect);
+
     };
   }, [routeTeamId, navigate, showSnack]);
 
