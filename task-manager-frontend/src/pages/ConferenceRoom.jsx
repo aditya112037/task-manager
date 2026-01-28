@@ -76,7 +76,6 @@ export default function ConferenceRoom() {
   const [camOn, setCamOn] = useState(true);
   const [sharingScreen, setSharingScreen] = useState(false);
   const [localStream, setLocalStreamState] = useState(null);
-  const [isAdminOrManager] = useState(false);
   const [activeSpeaker, setActiveSpeaker] = useState(null);
   const [speakerModeEnabled, setSpeakerModeEnabled] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: "", severity: "info" });
@@ -84,6 +83,17 @@ export default function ConferenceRoom() {
   const [micLevel, setMicLevel] = useState(0);
   const conferenceStartedRef = useRef(false);
   const mountedRef = useRef(true);
+
+  // ✅ FIX 3: Derive role properly from participants (single source of truth)
+  const isAdminOrManager = useMemo(() => {
+    if (!currentUser?._id) return false;
+
+    const me = participants.find(
+      p => String(p.userId) === String(currentUser._id)
+    );
+
+    return me && (me.role === "admin" || me.role === "manager");
+  }, [participants, currentUser]);
 
   const showNotification = useCallback((message, severity = "info") => {
     setNotification({ open: true, message, severity });
@@ -184,16 +194,16 @@ export default function ConferenceRoom() {
     }
   }, [sharingScreen, showNotification]);
 
-const hasJoinedRef = useRef(false);
+  const hasJoinedRef = useRef(false);
 
-useEffect(() => {
-  if (!conferenceId) return;
-  if (!socket || !socket.connected) return;
-  if (hasJoinedRef.current) return;
+  useEffect(() => {
+    if (!conferenceId) return;
+    if (!socket || !socket.connected) return;
+    if (hasJoinedRef.current) return;
 
-  hasJoinedRef.current = true;
-  joinConference(conferenceId);
-}, [conferenceId, socket]);
+    hasJoinedRef.current = true;
+    joinConference(conferenceId);
+  }, [conferenceId, socket]);
 
   // Audio analyser for mic level
   useEffect(() => {
@@ -321,7 +331,6 @@ useEffect(() => {
     }
   }, [activeSpeaker]);
 
-  // ✅ FIX #2: Completely removed fetchConferenceData and REST calls
   useEffect(() => {
     if (conferenceStartedRef.current) return;
     conferenceStartedRef.current = true;
@@ -354,7 +363,6 @@ useEffect(() => {
           showNotification("Joining without camera/microphone", "warning");
         }
 
-        
         if (stream) {
           showNotification("Media initialized successfully", "success");
         } else {
@@ -365,17 +373,16 @@ useEffect(() => {
         console.error("Failed to initialize conference:", error);
         showNotification(`Conference initialization failed: ${error.message}`, "error");
         
-        // ✅ REMOVED REST fetch fallback - now socket-only
         showNotification("Could not join conference. Please try again.", "error");
       }
     };
 
     start();
 
-const handleParticipantsUpdate = ({ participants }) => {
-  if (!mounted()) return;
-  setParticipants(participants || []);
-};
+    const handleParticipantsUpdate = ({ participants }) => {
+      if (!mounted()) return;
+      setParticipants(participants || []);
+    };
 
     const handleHandsUpdated = ({ raisedHands }) => {
       if (!mounted()) return;
@@ -465,9 +472,6 @@ const handleParticipantsUpdate = ({ participants }) => {
       showNotification(`You are invited to conference ${invitedConfId}`, "info");
     };
 
-
-
-
     socket.on("conference:user-joined", handleUserJoined);
     socket.on("conference:offer", handleOffer);
     socket.on("conference:answer", handleAnswer);
@@ -489,8 +493,6 @@ const handleParticipantsUpdate = ({ participants }) => {
     
     socket.on("conference:invited", handleConferenceInvited);
     
-    
-
     return () => {
       mountedRef.current = false;      
       stopSpeakerDetection();
@@ -537,7 +539,6 @@ const handleParticipantsUpdate = ({ participants }) => {
     const cleanup = startSpeakerDetection((speaking) => {
       if (!speakerModeEnabled) return;
 
-      // ✅ FIXED: Removed activeSpeaker from payload
       socket.emit("conference:speaking", {
         conferenceId,
         speaking,
