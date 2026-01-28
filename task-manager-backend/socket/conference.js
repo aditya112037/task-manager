@@ -62,7 +62,8 @@ module.exports = function registerConferenceSocket(io, socket) {
      ✅ FIXED: State only, no participants
   --------------------------------------------------- */
   socket.on("conference:check", async ({ teamId }) => {
-    const conference = await getActiveConference(teamId);
+    const conference = getConferenceByTeamId(teamId);
+
 
     if (!conference) {
       socket.emit("conference:state", { active: false });
@@ -84,7 +85,7 @@ module.exports = function registerConferenceSocket(io, socket) {
         },
 
         // ✅ CLEAN COUNT (no participant list here)
-        participantCount: conference.participants?.length || 0,
+        participantCount: conference.participants?.size || 0,
       },
     });
   });

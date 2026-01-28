@@ -8,12 +8,7 @@ import React, {
   useCallback,
 } from "react";
 import { authAPI } from "../services/api";
-import {
-  initSocket,
-  connectSocket,
-  disconnectSocket,
-  getSocket,
-} from "../services/socket";
+import { initSocket, getSocket } from "../services/socket";
 
 const AuthContext = createContext(null);
 
@@ -34,71 +29,61 @@ export const AuthProvider = ({ children }) => {
   const socketInitializedRef = useRef(false);
 
   /* ---------------------------------------------------
-     SOCKET INITIALIZATION (STABLE)
-  --------------------------------------------------- */
-  const initializeSocket = useCallback(() => {
-    const token = localStorage.getItem("token");
-    const storedUser = localStorage.getItem("user");
-    const userData = storedUser ? JSON.parse(storedUser) : null;
-
-    if (!token || !userData?._id || socketInitializedRef.current) {
-      return;
-    }
-
-    try {
-      initSocket();
-      connectSocket();
-
-      socketInitializedRef.current = true;
-      setSocketConnected(true);
-    } catch (error) {
-      console.error("Socket init failed:", error);
-      socketInitializedRef.current = false;
-      setSocketConnected(false);
-    }
-  }, []);
-
-  /* ---------------------------------------------------
-     SOCKET CLEANUP
-  --------------------------------------------------- */
-  const cleanupSocket = useCallback(() => {
-    if (socketInitializedRef.current) {
-      disconnectSocket();
-      socketInitializedRef.current = false;
-      setSocketConnected(false);
-    }
-  }, []);
-
-  /* ---------------------------------------------------
-     LOGOUT
+     LOGOUT (ONLY PLACE SOCKET SHOULD BE DISCONNECTED)
   --------------------------------------------------- */
   const handleLogout = useCallback(() => {
-    cleanupSocket();
+    // ✅ Disconnect socket only if it was initialized
+    if (socketInitializedRef.current) {
+      const socket = getSocket();
+      socket?.disconnect();
+      socketInitializedRef.current = false;
+    }
 
+    // Clear localStorage
     localStorage.removeItem("token");
     localStorage.removeItem("user");
 
+    // Reset state
     setUser(null);
     setSocketConnected(false);
 
+    // Redirect to login
     window.location.href = "/login";
-  }, [cleanupSocket]);
+  }, []);
 
   /* ---------------------------------------------------
-     INIT SOCKET WHEN USER IS READY
+     SOCKET INITIALIZATION (RUNS ONCE WHEN USER IS READY)
   --------------------------------------------------- */
   useEffect(() => {
-    if (!user || !user._id) return;
+    if (!user?._id) return;
+    if (socketInitializedRef.current) return;
 
     const token = localStorage.getItem("token");
     if (!token) return;
 
-    initializeSocket();
+    // Initialize socket
+    const socket = initSocket();
+    if (!socket) return;
 
-    return () => {
-      cleanupSocket();
-    };
-  }, [user, initializeSocket, cleanupSocket]);
+    socketInitializedRef.current = true;
+
+    // Set up connection listeners
+    socket.on("connect", () => {
+      console.log("✅ AuthContext: Socket connected");
+      setSocketConnected(true);
+    });
+
+    socket.on("disconnect", () => {
+      console.log("⚠️ AuthContext: Socket disconnected");
+      setSocketConnected(false);
+    });
+
+    socket.on("connect_error", (err) => {
+      console.error("❌ AuthContext: Socket error:", err.message);
+      setSocketConnected(false);
+    });
+
+  }, [user]);
 
   /* ---------------------------------------------------
      INITIAL AUTH CHECK (HYDRATE + VERIFY)
@@ -176,17 +161,15 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   /* ---------------------------------------------------
-     HELPERS
+     HELPER
   --------------------------------------------------- */
   const isAuthenticated = useCallback(() => {
     return !!localStorage.getItem("token") && !!user;
   }, [user]);
 
-  const checkSocketConnected = useCallback(() => {
-    const socket = getSocket();
-    return !!socket?.connected;
-  }, []);
-
+  /* ---------------------------------------------------
+     CONTEXT VALUE
+  --------------------------------------------------- */
   const value = {
     user,
     setUser: updateUser,
@@ -194,11 +177,8 @@ export const AuthProvider = ({ children }) => {
     login,
     register,
     logout: handleLogout,
-    isAuthenticated,
     socketConnected,
-    checkSocketConnected,
-    initializeSocket,
-    cleanupSocket,
+    isAuthenticated,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
