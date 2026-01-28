@@ -1,3 +1,4 @@
+// socketHandlers/registerConferenceSocket.js
 const Team = require("../models/team");
 const verifyConferenceAdmin = require("./verifyConferenceAdmin");
 const { conferences, getConferenceByTeamId, deleteConference } = require("../utils/conferenceStore");
@@ -60,34 +61,33 @@ module.exports = function registerConferenceSocket(io, socket) {
      CONFERENCE CHECK ENDPOINT (FOR TEAMDETAILS.JSX)
      ✅ FIXED: State only, no participants
   --------------------------------------------------- */
- socket.on("conference:check", async ({ teamId }) => {
-  const conference = await getActiveConference(teamId);
+  socket.on("conference:check", async ({ teamId }) => {
+    const conference = await getActiveConference(teamId);
 
-  if (!conference) {
-    socket.emit("conference:state", { active: false });
-    return;
-  }
+    if (!conference) {
+      socket.emit("conference:state", { active: false });
+      return;
+    }
 
-  socket.emit("conference:state", {
-    active: true,
-    conference: {
-      conferenceId: conference.conferenceId,
-      teamId: conference.teamId,
-      startedAt: conference.startedAt,
+    socket.emit("conference:state", {
+      active: true,
+      conference: {
+        conferenceId: conference.conferenceId,
+        teamId: conference.teamId,
+        startedAt: conference.startedAt,
 
-      // ✅ REQUIRED FOR UI
-      createdBy: {
-        _id: conference.createdBy._id,
-        name: conference.createdBy.name,
-        role: conference.createdBy.role,
+        // ✅ REQUIRED FOR UI
+        createdBy: {
+          _id: conference.createdBy._id,
+          name: conference.createdBy.name,
+          role: conference.createdBy.role,
+        },
+
+        // ✅ CLEAN COUNT (no participant list here)
+        participantCount: conference.participants?.length || 0,
       },
-
-      // ✅ CLEAN COUNT (no participant list here)
-      participantCount: conference.participants?.length || 0,
-    },
+    });
   });
-});
-
 
   /* ---------------------------------------------------
      CREATE CONFERENCE
@@ -143,8 +143,11 @@ module.exports = function registerConferenceSocket(io, socket) {
         adminActions: new Map(),
       });
 
-      // Join the conference room
-      socket.join(getConferenceRoom(conferenceId));
+      // ✅ IDEMPOTENT JOIN: Check if already in conference before joining
+      if (socket.conferenceId !== conferenceId) {
+        socket.join(getConferenceRoom(conferenceId));
+        socket.conferenceId = conferenceId;
+      }
 
       // Add creator as first participant
       const conference = conferences.get(conferenceId);
@@ -199,10 +202,16 @@ module.exports = function registerConferenceSocket(io, socket) {
 
   /* ---------------------------------------------------
      JOIN CONFERENCE
-     ✅ FIXED: Minimal & clean payload structure
+     ✅ FIXED: IDEMPOTENT JOIN - Prevents duplicate joins
   --------------------------------------------------- */
   socket.on("conference:join", async ({ conferenceId }) => {
     try {
+      // ✅ IDEMPOTENT JOIN: Check if already in this conference
+      if (socket.conferenceId === conferenceId) {
+        console.log(`⚠️ Socket ${socket.id} already in conference ${conferenceId}, skipping join`);
+        return;
+      }
+
       const user = getUserFromSocket();
       if (!user) return;
 
@@ -232,13 +241,15 @@ module.exports = function registerConferenceSocket(io, socket) {
         });
       }
 
-      // Join the conference room
+      // ✅ IDEMPOTENT JOIN: Join room only if not already in it
       socket.join(getConferenceRoom(conferenceId));
+      socket.conferenceId = conferenceId;
 
+      // Check if already a participant (shouldn't happen but safe)
       if (conference.participants.has(socket.id)) {
-        return; // already joined
+        console.log(`⚠️ Socket ${socket.id} already a participant in conference ${conferenceId}`);
+        return;
       }
-
 
       // Add participant
       conference.participants.set(socket.id, {
@@ -332,7 +343,7 @@ module.exports = function registerConferenceSocket(io, socket) {
 
   /* ---------------------------------------------------
      LEAVE CONFERENCE
-     ✅ FIXED: Consistent payload structure
+     ✅ FIXED: Consistent payload structure + Clear conferenceId
   --------------------------------------------------- */
   socket.on("conference:leave", ({ conferenceId }) => {
     const conference = conferences.get(conferenceId);
@@ -357,6 +368,11 @@ module.exports = function registerConferenceSocket(io, socket) {
       io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
         socketId: null,
       });
+    }
+
+    // ✅ Clear socket's conferenceId reference
+    if (socket.conferenceId === conferenceId) {
+      socket.conferenceId = null;
     }
 
     // Leave room
@@ -672,6 +688,12 @@ module.exports = function registerConferenceSocket(io, socket) {
           conference.participants.delete(targetSocketId);
           conference.raisedHands.delete(targetSocketId);
           
+          // Clear target socket's conferenceId reference
+          const targetSocket = io.sockets.sockets.get(targetSocketId);
+          if (targetSocket && targetSocket.conferenceId === conferenceId) {
+            targetSocket.conferenceId = null;
+          }
+          
           if (conference.speakerMode.activeSpeaker === targetSocketId) {
             conference.speakerMode.activeSpeaker = null;
             clearSpeakerTimeout(conference, targetSocketId);
@@ -715,10 +737,16 @@ module.exports = function registerConferenceSocket(io, socket) {
 
   /* ---------------------------------------------------
      DISCONNECT HANDLER
-     ✅ FIXED: Consistent payload structure
+     ✅ FIXED: Consistent payload structure + Clear conferenceId
   --------------------------------------------------- */
   socket.on("disconnect", () => {
     console.log(`❌ Socket ${socket.id} disconnected`);
+
+    // ✅ Clear socket's conferenceId reference
+    const conferenceId = socket.conferenceId;
+    if (conferenceId) {
+      socket.conferenceId = null;
+    }
 
     for (const [conferenceId, conference] of conferences.entries()) {
       if (conference.participants.has(socket.id)) {
