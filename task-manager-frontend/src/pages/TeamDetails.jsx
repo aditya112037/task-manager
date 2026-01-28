@@ -429,7 +429,7 @@ socket.on("connect", handleReconnect);
     
     fetchTeamTasks();
     fetchPendingExtensions();
-  }, [myRole, team, fetchTeamTasks, fetchPendingExtensions]);
+  }, [myRole, fetchTeamTasks, fetchPendingExtensions]);
 
   /* ---------------------------------------------------
      INITIAL LOAD
