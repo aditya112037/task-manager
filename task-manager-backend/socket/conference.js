@@ -58,6 +58,35 @@ module.exports = function registerConferenceSocket(io, socket) {
   };
 
   /* ---------------------------------------------------
+     SHARED HELPER: safelyRemoveParticipant
+     ✅ ADDED: Idempotent participant removal
+  --------------------------------------------------- */
+  const safelyRemoveParticipant = (conferenceId, socketId) => {
+    const conference = conferences.get(conferenceId);
+    if (!conference) return false;
+
+    if (!conference.participants.has(socketId)) {
+      return false; // already removed
+    }
+
+    const participant = conference.participants.get(socketId);
+
+    conference.participants.delete(socketId);
+    conference.raisedHands.delete(socketId);
+
+    if (conference.speakerMode.activeSpeaker === socketId) {
+      conference.speakerMode.activeSpeaker = null;
+      clearSpeakerTimeout(conference, socketId);
+
+      io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
+        socketId: null,
+      });
+    }
+
+    return participant;
+  };
+
+  /* ---------------------------------------------------
      CONFERENCE CHECK ENDPOINT (FOR TEAMDETAILS.JSX)
      ✅ FIXED: State only, no participants
   --------------------------------------------------- */
@@ -75,7 +104,7 @@ module.exports = function registerConferenceSocket(io, socket) {
       conference: {
         conferenceId: conference.conferenceId,
         teamId: conference.teamId,
-        startedAt: conference.startedAt,
+        startedAt: conference.createdAt,
 
         // ✅ REQUIRED FOR UI
         createdBy: {
@@ -348,32 +377,17 @@ module.exports = function registerConferenceSocket(io, socket) {
 
   /* ---------------------------------------------------
      LEAVE CONFERENCE
-     ✅ FIXED: Consistent payload structure + Clear conferenceId
+     ✅ FIXED: Using shared helper for consistent removal
   --------------------------------------------------- */
   socket.on("conference:leave", ({ conferenceId }) => {
     const conference = conferences.get(conferenceId);
     if (!conference) return;
 
-    const participant = conference.participants.get(socket.id);
-    if (!participant) return;
+const removedParticipant = safelyRemoveParticipant(conferenceId, socket.id);
+if (!removedParticipant) return;
 
-    console.log(`🚪 User ${participant.name} leaving conference ${conferenceId}`);
+console.log(`🚪 User ${removedParticipant.name} leaving conference ${conferenceId}`);
 
-    // Remove from participants
-    conference.participants.delete(socket.id);
-    
-    // Remove from raised hands
-    conference.raisedHands.delete(socket.id);
-    
-    // Handle speaker mode
-    if (conference.speakerMode.activeSpeaker === socket.id) {
-      conference.speakerMode.activeSpeaker = null;
-      clearSpeakerTimeout(conference, socket.id);
-      
-      io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
-        socketId: null,
-      });
-    }
 
     // ✅ Clear socket's conferenceId reference
     if (socket.conferenceId === conferenceId) {
@@ -393,7 +407,7 @@ module.exports = function registerConferenceSocket(io, socket) {
     // Notify others
     socket.to(getConferenceRoom(conferenceId)).emit(
       "conference:user-left",
-      { socketId: socket.id, userId: participant.userId }
+      { socketId: socket.id, userId: removedParticipant.userId }
     );
 
     // Update raised hands
@@ -690,22 +704,14 @@ module.exports = function registerConferenceSocket(io, socket) {
           break;
         
         case "remove-from-conference":
-          conference.participants.delete(targetSocketId);
-          conference.raisedHands.delete(targetSocketId);
+          // Use the shared helper for consistent removal
+          const removedParticipant = safelyRemoveParticipant(conferenceId, targetSocketId);
+          if (!removedParticipant) break;
           
           // Clear target socket's conferenceId reference
           const targetSocket = io.sockets.sockets.get(targetSocketId);
           if (targetSocket && targetSocket.conferenceId === conferenceId) {
             targetSocket.conferenceId = null;
-          }
-          
-          if (conference.speakerMode.activeSpeaker === targetSocketId) {
-            conference.speakerMode.activeSpeaker = null;
-            clearSpeakerTimeout(conference, targetSocketId);
-
-            io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
-              socketId: null,
-            });
           }
           
           io.to(targetSocketId).emit("conference:removed-by-admin");
@@ -742,7 +748,7 @@ module.exports = function registerConferenceSocket(io, socket) {
 
   /* ---------------------------------------------------
      DISCONNECT HANDLER
-     ✅ FIXED: Consistent payload structure + Clear conferenceId
+     ✅ FIXED: Using shared helper for consistent removal
   --------------------------------------------------- */
   socket.on("disconnect", () => {
     console.log(`❌ Socket ${socket.id} disconnected`);
@@ -754,53 +760,39 @@ module.exports = function registerConferenceSocket(io, socket) {
     }
 
     for (const [conferenceId, conference] of conferences.entries()) {
-      if (conference.participants.has(socket.id)) {
-        const participant = conference.participants.get(socket.id);
-        
-        console.log(`🗑️ Removing ${participant?.name} from conference ${conferenceId}`);
-        
-        // Remove participant
-        conference.participants.delete(socket.id);
-        conference.raisedHands.delete(socket.id);
-        
-        // Handle speaker
-        if (conference.speakerMode.activeSpeaker === socket.id) {
-          conference.speakerMode.activeSpeaker = null;
-          clearSpeakerTimeout(conference, socket.id);
-          
-          io.to(getConferenceRoom(conferenceId)).emit("conference:active-speaker", {
-            socketId: null,
-          });
-        }
+      // ✅ REPLACED with shared helper
+      const removedParticipant = safelyRemoveParticipant(conferenceId, socket.id);
+      if (!removedParticipant) continue;
 
-        // ✅ FIXED: Update participant list
-        const participants = Array.from(conference.participants.values());
-        io.to(getConferenceRoom(conferenceId)).emit(
-          "conference:participants",
-          { participants }
-        );
+      console.log(`🗑️ Removing ${removedParticipant?.name} from conference ${conferenceId}`);
 
-        io.to(getConferenceRoom(conferenceId)).emit("conference:hands-updated", {
-          raisedHands: Array.from(conference.raisedHands),
+      // ✅ FIXED: Update participant list
+      const participants = Array.from(conference.participants.values());
+      io.to(getConferenceRoom(conferenceId)).emit(
+        "conference:participants",
+        { participants }
+      );
+
+      io.to(getConferenceRoom(conferenceId)).emit("conference:hands-updated", {
+        raisedHands: Array.from(conference.raisedHands),
+      });
+
+      io.to(getConferenceRoom(conferenceId)).emit(
+        "conference:user-left",
+        { socketId: socket.id }
+      );
+
+      // Auto-end if empty
+      if (conference.participants.size === 0) {
+        deleteConference(conferenceId);
+        io.to(`team_${conference.teamId}`).emit("conference:ended", {
+          conferenceId,
+          teamId: conference.teamId,
         });
-
-        io.to(getConferenceRoom(conferenceId)).emit(
-          "conference:user-left",
-          { socketId: socket.id }
-        );
-
-        // Auto-end if empty
-        if (conference.participants.size === 0) {
-          deleteConference(conferenceId);
-          io.to(`team_${conference.teamId}`).emit("conference:ended", {
-            conferenceId,
-            teamId: conference.teamId,
-          });
-          console.log(`🏁 Conference ${conferenceId} auto-ended on disconnect`);
-        }
-        
-        break; // Socket can only be in one conference at a time
+        console.log(`🏁 Conference ${conferenceId} auto-ended on disconnect`);
       }
+      
+      break; // Socket can only be in one conference at a time
     }
   });
 };
