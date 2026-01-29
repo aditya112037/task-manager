@@ -24,8 +24,8 @@ export const initSocket = () => {
   );
 
   socket = io(socketUrl, {
-    autoConnect: false, // 🔴 IMPORTANT
-    transports: ["websocket", "polling"],
+    autoConnect: false, // ✅ KEEP THIS
+    transports: ["websocket"],
     auth: { token },
     reconnection: true,
     reconnectionAttempts: 5,
@@ -54,19 +54,21 @@ export const connectSocket = () => {
   if (!socket) return;
   if (socket.connected) return;
 
+  console.log("🔌 Connecting socket...");
   socket.connect();
 };
 
 export const disconnectSocket = () => {
   if (!socket) return;
 
+  console.log("🔌 Disconnecting socket...");
   socket.removeAllListeners();
   socket.disconnect();
   socket = null;
 };
 
 /* ---------------------------------------------------
-   SAFE GETTER (NO SIDE EFFECTS)
+   SAFE GETTER
 --------------------------------------------------- */
 export const getSocket = () => socket;
 
@@ -85,17 +87,6 @@ export const leaveTeamRoom = (teamId) => {
     console.log("Leaving team room:", `team_${teamId}`);
     socket.emit("leaveTeam", teamId);
   }
-};
-
-/* ---------------------------------------------------
-   GENERIC HELPERS
---------------------------------------------------- */
-export const addSocketListener = (event, callback) => {
-  if (socket) socket.on(event, callback);
-};
-
-export const removeSocketListener = (event, callback) => {
-  if (socket) socket.off(event, callback);
 };
 
 /* ---------------------------------------------------

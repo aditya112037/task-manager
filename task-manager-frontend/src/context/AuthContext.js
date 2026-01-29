@@ -8,16 +8,18 @@ import React, {
   useCallback,
 } from "react";
 import { authAPI } from "../services/api";
-import { initSocket, getSocket } from "../services/socket";
+import {
+  initSocket,
+  connectSocket,
+  disconnectSocket,
+} from "../services/socket";
 
 const AuthContext = createContext(null);
 
 export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
+  return ctx;
 };
 
 export const AuthProvider = ({ children }) => {
@@ -25,49 +27,36 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [socketConnected, setSocketConnected] = useState(false);
 
-  // Prevent double socket initialization
   const socketInitializedRef = useRef(false);
 
   /* ---------------------------------------------------
-     LOGOUT (ONLY PLACE SOCKET SHOULD BE DISCONNECTED)
+     LOGOUT
   --------------------------------------------------- */
   const handleLogout = useCallback(() => {
-    // ✅ Disconnect socket only if it was initialized
-    if (socketInitializedRef.current) {
-      const socket = getSocket();
-      socket?.disconnect();
-      socketInitializedRef.current = false;
-    }
+    disconnectSocket();
+    socketInitializedRef.current = false;
 
-    // Clear localStorage
     localStorage.removeItem("token");
     localStorage.removeItem("user");
 
-    // Reset state
     setUser(null);
     setSocketConnected(false);
 
-    // Redirect to login
     window.location.href = "/login";
   }, []);
 
   /* ---------------------------------------------------
-     SOCKET INITIALIZATION (RUNS ONCE WHEN USER IS READY)
+     SOCKET INITIALIZATION (CRITICAL FIX)
   --------------------------------------------------- */
   useEffect(() => {
     if (!user?._id) return;
     if (socketInitializedRef.current) return;
 
-    const token = localStorage.getItem("token");
-    if (!token) return;
-
-    // Initialize socket
     const socket = initSocket();
     if (!socket) return;
 
     socketInitializedRef.current = true;
 
-    // Set up connection listeners
     socket.on("connect", () => {
       console.log("✅ AuthContext: Socket connected");
       setSocketConnected(true);
@@ -83,17 +72,18 @@ export const AuthProvider = ({ children }) => {
       setSocketConnected(false);
     });
 
+    // 🔥 THIS WAS MISSING
+    connectSocket();
   }, [user]);
 
   /* ---------------------------------------------------
-     INITIAL AUTH CHECK (HYDRATE + VERIFY)
+     INITIAL AUTH CHECK
   --------------------------------------------------- */
   useEffect(() => {
     const verifyAuth = async () => {
       const token = localStorage.getItem("token");
       const storedUser = localStorage.getItem("user");
 
-      // Fast hydration
       if (token && storedUser) {
         try {
           setUser(JSON.parse(storedUser));
@@ -102,7 +92,6 @@ export const AuthProvider = ({ children }) => {
         }
       }
 
-      // Verify with backend
       if (token) {
         try {
           const res = await authAPI.getProfile();
@@ -148,9 +137,6 @@ export const AuthProvider = ({ children }) => {
     return res.data;
   }, []);
 
-  /* ---------------------------------------------------
-     UPDATE USER
-  --------------------------------------------------- */
   const updateUser = useCallback((updates) => {
     setUser((prev) => {
       if (!prev) return prev;
@@ -160,26 +146,24 @@ export const AuthProvider = ({ children }) => {
     });
   }, []);
 
-  /* ---------------------------------------------------
-     HELPER
-  --------------------------------------------------- */
   const isAuthenticated = useCallback(() => {
     return !!localStorage.getItem("token") && !!user;
   }, [user]);
 
-  /* ---------------------------------------------------
-     CONTEXT VALUE
-  --------------------------------------------------- */
-  const value = {
-    user,
-    setUser: updateUser,
-    loading,
-    login,
-    register,
-    logout: handleLogout,
-    socketConnected,
-    isAuthenticated,
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        setUser: updateUser,
+        loading,
+        login,
+        register,
+        logout: handleLogout,
+        socketConnected,
+        isAuthenticated,
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
 };
