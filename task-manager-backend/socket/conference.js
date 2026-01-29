@@ -132,7 +132,11 @@ module.exports = function registerConferenceSocket(io, socket) {
       conferences.set(conferenceId, {
         conferenceId,
         teamId,
-        createdBy: user._id,
+        createdBy: {
+        _id: user._id,
+        name: user.name,
+        role: member.role,
+        },
         createdAt: new Date(),
         participants: new Map(),
         speakerMode: {
@@ -165,7 +169,7 @@ module.exports = function registerConferenceSocket(io, socket) {
       io.to(`team_${teamId}`).emit("conference:started", {
         conferenceId,
         teamId,
-        createdBy: user._id,
+        createdBy: conference.createdBy,
       });
 
       // ✅ FIXED: Authoritative participants list
@@ -188,7 +192,7 @@ module.exports = function registerConferenceSocket(io, socket) {
         conference: {
           conferenceId,
           teamId,
-          createdBy: user._id,
+          createdBy: conference.createdBy,
           startedAt: conference.createdAt,
           speakerMode: conference.speakerMode,
         },
