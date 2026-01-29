@@ -39,7 +39,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { teamsAPI, teamTasksAPI } from "../services/api";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import TeamTaskForm from "../components/Teams/TeamTaskForm";
-import { useAuth } from "../context/AuthContext";
+import { useAuth, socketConnected } from "../context/AuthContext";
 import TeamAnalytics from "../components/Teams/Overview/Analytics";
 import { joinTeamRoom, leaveTeamRoom, getSocket } from "../services/socket";
 import { requestConferenceCreation } from "../services/conferenceSocket";
@@ -88,7 +88,7 @@ export default function TeamDetails() {
   // Conference state - SOCKET-ONLY
   const [conference, setConference] = useState(null);
   const [loadingConference, setLoadingConference] = useState(false);
-  const [socketConnected, setSocketConnected] = useState(true);
+
 
   // 🟢 FIX 1: Refresh lock for conference refresh
   const refreshLockRef = useRef(false);
@@ -428,6 +428,9 @@ export default function TeamDetails() {
      CONFERENCE HANDLERS (PURE SOCKET-ONLY)
      🚨 CRITICAL FIX: No REST calls
   --------------------------------------------------- */
+
+const { socketConnected } = useAuth();
+
   const handleStartConference = () => {
     if (!socketConnected) {
       showSnack("Connection error. Please refresh the page.", "error");
