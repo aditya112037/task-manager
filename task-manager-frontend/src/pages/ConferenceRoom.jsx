@@ -26,7 +26,6 @@ import MicExternalOnIcon from "@mui/icons-material/MicExternalOn";
 import { 
   raiseHand, 
   lowerHand, 
-  initMedia, 
   cleanupConference,
   leaveConference,
   sendSpeakingStatus 
