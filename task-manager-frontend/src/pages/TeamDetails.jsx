@@ -39,7 +39,7 @@ import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { teamsAPI, teamTasksAPI } from "../services/api";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import TeamTaskForm from "../components/Teams/TeamTaskForm";
-import { useAuth, socketConnected } from "../context/AuthContext";
+import { useAuth } from "../context/AuthContext";
 import TeamAnalytics from "../components/Teams/Overview/Analytics";
 import { joinTeamRoom, leaveTeamRoom, getSocket } from "../services/socket";
 import { requestConferenceCreation } from "../services/conferenceSocket";
@@ -56,7 +56,7 @@ const resolveUserId = (u) => {
 
 export default function TeamDetails() {
   const { teamId: routeTeamId } = useParams();
-  const { user } = useAuth();
+  const { user, socketConnected } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -88,7 +88,6 @@ export default function TeamDetails() {
   // Conference state - SOCKET-ONLY
   const [conference, setConference] = useState(null);
   const [loadingConference, setLoadingConference] = useState(false);
-
 
   // 🟢 FIX 1: Refresh lock for conference refresh
   const refreshLockRef = useRef(false);
@@ -271,13 +270,10 @@ export default function TeamDetails() {
     const socket = getSocket();
     if (!socket) {
       console.error("Socket not available");
-      setSocketConnected(false);
       setLoadingConference(false);
       return;
     }
 
-    setSocketConnected(true);
-    
     console.log("Setting up conference listeners for team:", routeTeamId);
 
     // 🔐 FIXED: Handle conference state from server
@@ -428,12 +424,9 @@ export default function TeamDetails() {
      CONFERENCE HANDLERS (PURE SOCKET-ONLY)
      🚨 CRITICAL FIX: No REST calls
   --------------------------------------------------- */
-
-const { socketConnected } = useAuth();
-
   const handleStartConference = () => {
     if (!socketConnected) {
-      showSnack("Connection error. Please refresh the page.", "error");
+      showSnack("Please wait while connecting to server...", "warning");
       return;
     }
 
