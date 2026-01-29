@@ -41,7 +41,7 @@ import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import TeamTaskForm from "../components/Teams/TeamTaskForm";
 import { useAuth } from "../context/AuthContext";
 import TeamAnalytics from "../components/Teams/Overview/Analytics";
-import { joinTeamRoom, leaveTeamRoom, getSocket } from "../services/socket";
+import { joinTeamRoom, getSocket } from "../services/socket";
 import { requestConferenceCreation } from "../services/conferenceSocket";
 
 /* ---------------------------------------------------
@@ -415,7 +415,7 @@ export default function TeamDetails() {
     else socket.on("connect", join);
 
     return () => {
-      leaveTeamRoom(routeTeamId);
+      
       socket.off("connect", join);
     };
   }, [routeTeamId]);

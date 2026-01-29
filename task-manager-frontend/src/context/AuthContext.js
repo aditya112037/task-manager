@@ -55,6 +55,7 @@ export const AuthProvider = ({ children }) => {
     const socket = initSocket();
     if (!socket) return;
 
+    connectSocket();
     socketInitializedRef.current = true;
 
     socket.on("connect", () => {

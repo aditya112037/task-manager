@@ -356,7 +356,7 @@ export default function ConferenceRoom() {
         let stream = null;
         try {
           // ✅ FIX 1: Use locked media initialization instead of bypassing
-          stream = await initMedia();
+          
           setLocalStreamState(stream);
 
           if (localVideoRef.current && stream) {
