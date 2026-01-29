@@ -279,6 +279,8 @@ export default function TeamDetails() {
     // 🔐 FIXED: Handle conference state from server
     const handleConferenceState = ({ active, conference: conf }) => {
       console.log("🎥 Conference state received:", { active, conf });
+
+      
       
       // ✅ FIXED: ALWAYS clear loading state
       setLoadingConference(false);
@@ -344,6 +346,24 @@ export default function TeamDetails() {
       showSnack(`You are invited to a conference`, "info");
     };
 
+    // ✅ PHASE-2 FIX: Live participant count sync
+    const handleConferenceParticipants = ({ participants }) => {
+      console.log("👥 Conference participants update:", participants.length);
+
+      setConference((prev) => {
+        if (!prev) return prev;
+
+        const updated = {
+          ...prev,
+          participantCount: participants.length,
+        };
+
+        // keep ref in sync
+        conferenceRef.current = updated;
+        return updated;
+      });
+    };
+
     // 🔐 Request conference state via socket only
     const requestConferenceState = () => {
       const id = teamIdRef.current;
@@ -361,6 +381,8 @@ export default function TeamDetails() {
     socket.on("conference:ended", handleConferenceEnded);
     socket.on("conference:error", handleConferenceError);
     socket.on("conference:invited", handleConferenceInvited);
+    // ✅ ADDED: Participant count updates
+    socket.on("conference:participants", handleConferenceParticipants);
     
     // Request conference state ONCE - with fixed flag logic
     if (!hasRequestedInitialStateRef.current && socket.connected) {
@@ -381,6 +403,8 @@ export default function TeamDetails() {
       socket.off("conference:ended", handleConferenceEnded);
       socket.off("conference:error", handleConferenceError);
       socket.off("conference:invited", handleConferenceInvited);
+      // ✅ ADDED: Clean up participants listener
+      socket.off("conference:participants", handleConferenceParticipants);
     };
   }, [routeTeamId, showSnack]);
 
