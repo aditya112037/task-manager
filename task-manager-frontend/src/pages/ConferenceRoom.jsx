@@ -207,6 +207,28 @@ export default function ConferenceRoom() {
     joinConference(conferenceId);
   }, [conferenceId, socket]);
 
+  // 🔹 PHASE 4.1: Bootstrap self as participant if alone
+useEffect(() => {
+  if (!currentUser?._id) return;
+  if (!socket?.id) return;
+
+  setParticipants(prev => {
+    // If already have participants, do nothing
+    if (prev.length > 0) return prev;
+
+    // Inject self
+    return [{
+      userId: currentUser._id,
+      name: currentUser.name,
+      role: "admin", // TEMP — real role will come from backend update
+      socketId: socket.id,
+      micOn: micOn,
+      camOn: camOn,
+    }];
+  });
+}, [currentUser, socket?.id]);
+
+
   // Audio analyser for mic level
   useEffect(() => {
     if (!localStream) {
