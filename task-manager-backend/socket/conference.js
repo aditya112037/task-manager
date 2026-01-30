@@ -19,10 +19,6 @@ module.exports = function registerConferenceSocket(io, socket) {
     return conference.participants.get(socketId);
   };
 
-  const isConferenceAdmin = (conferenceId, socketId) => {
-    const participant = getParticipant(conferenceId, socketId);
-    return participant && ["admin", "manager"].includes(participant.role);
-  };
 
   const clearSpeakerTimeout = (conference, socketId) => {
     if (!conference.speakerMode || !conference.speakerMode.speakerTimeouts) return;
@@ -57,6 +53,8 @@ module.exports = function registerConferenceSocket(io, socket) {
     conference.speakerMode.speakerTimeouts.set(socketId, timeout);
   };
 
+  
+
   /* ---------------------------------------------------
      SHARED HELPER: safelyRemoveParticipant
      ✅ ADDED: Idempotent participant removal
@@ -85,6 +83,64 @@ module.exports = function registerConferenceSocket(io, socket) {
 
     return participant;
   };
+
+  /* ---------------------------------------------------
+   PHASE-3: Unified Participant Exit Handler
+   Single source of truth for leave / disconnect / admin-remove
+--------------------------------------------------- */
+const handleParticipantExit = ({ socket, reason }) => {
+  const conferenceId = socket.conferenceId;
+  if (!conferenceId) return;
+
+  const conference = conferences.get(conferenceId);
+  if (!conference) {
+    socket.conferenceId = null;
+    return;
+  }
+
+  const removedParticipant = safelyRemoveParticipant(conferenceId, socket.id);
+  if (!removedParticipant) {
+    socket.conferenceId = null;
+    return;
+  }
+
+  // Leave room safely
+  socket.leave(getConferenceRoom(conferenceId));
+  socket.conferenceId = null;
+
+  // 🔐 Authoritative participant list
+  const participants = Array.from(conference.participants.values());
+  io.to(getConferenceRoom(conferenceId)).emit(
+    "conference:participants",
+    { participants }
+  );
+
+  // Raised hands sync
+  io.to(getConferenceRoom(conferenceId)).emit("conference:hands-updated", {
+    raisedHands: Array.from(conference.raisedHands),
+  });
+
+  // Notify others
+  socket.to(getConferenceRoom(conferenceId)).emit(
+    "conference:user-left",
+    {
+      socketId: socket.id,
+      userId: removedParticipant.userId,
+      reason,
+    }
+  );
+
+  // Auto-end conference if empty
+  if (conference.participants.size === 0) {
+    deleteConference(conferenceId);
+    io.to(`team_${conference.teamId}`).emit("conference:ended", {
+      conferenceId,
+      teamId: conference.teamId,
+    });
+    console.log(`🏁 Conference ${conferenceId} ended (${reason})`);
+  }
+};
+
 
   /* ---------------------------------------------------
      CONFERENCE CHECK ENDPOINT (FOR TEAMDETAILS.JSX)
@@ -379,54 +435,14 @@ module.exports = function registerConferenceSocket(io, socket) {
      LEAVE CONFERENCE
      ✅ FIXED: Using shared helper for consistent removal
   --------------------------------------------------- */
-  socket.on("conference:leave", ({ conferenceId }) => {
-    const conference = conferences.get(conferenceId);
-    if (!conference) return;
-
-const removedParticipant = safelyRemoveParticipant(conferenceId, socket.id);
-if (!removedParticipant) return;
-
-console.log(`🚪 User ${removedParticipant.name} leaving conference ${conferenceId}`);
+socket.on("conference:leave", () => {
+  console.log(`🚪 conference:leave from ${socket.id}`);
+  handleParticipantExit({ socket, reason: "leave" });
+});
 
 
-    // ✅ Clear socket's conferenceId reference
-    if (socket.conferenceId === conferenceId) {
-      socket.conferenceId = null;
-    }
 
-    // Leave room
-    socket.leave(getConferenceRoom(conferenceId));
 
-    // ✅ FIXED: Update participant list
-    const participants = Array.from(conference.participants.values());
-    io.to(getConferenceRoom(conferenceId)).emit(
-      "conference:participants",
-      { participants }
-    );
-
-    // Notify others
-    socket.to(getConferenceRoom(conferenceId)).emit(
-      "conference:user-left",
-      { socketId: socket.id, userId: removedParticipant.userId }
-    );
-
-    // Update raised hands
-    io.to(getConferenceRoom(conferenceId)).emit("conference:hands-updated", {
-      raisedHands: Array.from(conference.raisedHands),
-    });
-
-    // Auto-end if empty
-    if (conference.participants.size === 0) {
-      deleteConference(conferenceId);
-      io.to(`team_${conference.teamId}`).emit("conference:ended", {
-        conferenceId,
-        teamId: conference.teamId,
-      });
-      console.log(`🏁 Conference ${conferenceId} ended (empty)`);
-    }
-
-    console.log(`✅ User left, ${conference.participants.size} remaining`);
-  });
 
   /* ---------------------------------------------------
      WEBRTC SIGNALING
@@ -703,30 +719,18 @@ console.log(`🚪 User ${removedParticipant.name} leaving conference ${conferenc
           });
           break;
         
-        case "remove-from-conference":
-          // Use the shared helper for consistent removal
-          const removedParticipant = safelyRemoveParticipant(conferenceId, targetSocketId);
-          if (!removedParticipant) break;
-          
-          // Clear target socket's conferenceId reference
-          const targetSocket = io.sockets.sockets.get(targetSocketId);
-          if (targetSocket && targetSocket.conferenceId === conferenceId) {
-            targetSocket.conferenceId = null;
-          }
-          
-          io.to(targetSocketId).emit("conference:removed-by-admin");
-          
-          // ✅ FIXED: Consistent participants payload
-          const participants = Array.from(conference.participants.values());
-          io.to(getConferenceRoom(conferenceId)).emit(
-            "conference:participants",
-            { participants }
-          );
-          
-          io.to(getConferenceRoom(conferenceId)).emit("conference:hands-updated", {
-            raisedHands: Array.from(conference.raisedHands),
-          });
-          break;
+case "remove-from-conference": {
+  const targetSocket = io.sockets.sockets.get(targetSocketId);
+  if (targetSocket) {
+    handleParticipantExit({
+      socket: targetSocket,
+      reason: "admin-remove",
+    });
+    io.to(targetSocketId).emit("conference:removed-by-admin");
+  }
+  break;
+}
+
         
         case "clear-hands":
           conference.raisedHands.clear();
@@ -750,49 +754,9 @@ console.log(`🚪 User ${removedParticipant.name} leaving conference ${conferenc
      DISCONNECT HANDLER
      ✅ FIXED: Using shared helper for consistent removal
   --------------------------------------------------- */
-  socket.on("disconnect", () => {
-    console.log(`❌ Socket ${socket.id} disconnected`);
+socket.on("disconnect", () => {
+  console.log(`❌ Socket ${socket.id} disconnected`);
+  handleParticipantExit({ socket, reason: "disconnect" });
+});
 
-    // ✅ Clear socket's conferenceId reference
-    const conferenceId = socket.conferenceId;
-    if (conferenceId) {
-      socket.conferenceId = null;
-    }
-
-    for (const [conferenceId, conference] of conferences.entries()) {
-      // ✅ REPLACED with shared helper
-      const removedParticipant = safelyRemoveParticipant(conferenceId, socket.id);
-      if (!removedParticipant) continue;
-
-      console.log(`🗑️ Removing ${removedParticipant?.name} from conference ${conferenceId}`);
-
-      // ✅ FIXED: Update participant list
-      const participants = Array.from(conference.participants.values());
-      io.to(getConferenceRoom(conferenceId)).emit(
-        "conference:participants",
-        { participants }
-      );
-
-      io.to(getConferenceRoom(conferenceId)).emit("conference:hands-updated", {
-        raisedHands: Array.from(conference.raisedHands),
-      });
-
-      io.to(getConferenceRoom(conferenceId)).emit(
-        "conference:user-left",
-        { socketId: socket.id }
-      );
-
-      // Auto-end if empty
-      if (conference.participants.size === 0) {
-        deleteConference(conferenceId);
-        io.to(`team_${conference.teamId}`).emit("conference:ended", {
-          conferenceId,
-          teamId: conference.teamId,
-        });
-        console.log(`🏁 Conference ${conferenceId} auto-ended on disconnect`);
-      }
-      
-      break; // Socket can only be in one conference at a time
-    }
-  });
 };
