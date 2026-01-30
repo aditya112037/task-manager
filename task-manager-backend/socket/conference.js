@@ -148,6 +148,10 @@ if (conference.participants.size === 0) {
 
   // 🔴 1. Notify ALL team members
   io.to(teamRoom).emit("conference:ended", payload);
+  io.to(teamRoom).emit("conference:refresh", {
+  teamId: conference.teamId,
+});
+
 
   // 🔴 2. Notify ALL conference sockets (safety)
   io.to(conferenceRoom).emit("conference:ended", payload);
