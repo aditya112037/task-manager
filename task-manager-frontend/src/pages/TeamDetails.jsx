@@ -276,17 +276,19 @@ export default function TeamDetails() {
 
     console.log("Setting up conference listeners for team:", routeTeamId);
 
-    // 🔐 FIXED: Handle conference state from server
-    const handleConferenceState = ({ active, conference: conf }) => {
-      console.log("🎥 Conference state received:", { active, conf });
-
-      // 🔴 CRITICAL: Server-forced refresh (authoritative)
-const handleConferenceRefresh = ({ teamId }) => {
+    const handleConferenceRefresh = ({ teamId }) => {
   if (String(teamId) !== String(teamIdRef.current)) return;
 
   console.log("🔄 Forced conference refresh from server");
   socket.emit("conference:check", { teamId });
 };
+
+    // 🔐 FIXED: Handle conference state from server
+    const handleConferenceState = ({ active, conference: conf }) => {
+      console.log("🎥 Conference state received:", { active, conf });
+
+      // 🔴 CRITICAL: Server-forced refresh (authoritative)
+
 
       
       // ✅ FIXED: ALWAYS clear loading state
