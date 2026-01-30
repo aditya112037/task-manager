@@ -130,13 +130,12 @@ const handleParticipantExit = ({ socket, reason }) => {
     }
   );
 
-  // Auto-end conference if empty
+// Auto-end conference if empty (AUTHORITATIVE)
 // Auto-end conference if empty (AUTHORITATIVE)
 if (conference.participants.size === 0) {
   const teamRoom = `team_${conference.teamId}`;
   const conferenceRoom = getConferenceRoom(conferenceId);
 
-  // Delete once
   const endedConference = deleteConference(conferenceId);
   if (!endedConference) return;
 
@@ -146,18 +145,16 @@ if (conference.participants.size === 0) {
     reason,
   };
 
-  // 🔴 1. Notify ALL team members
+  // 🔴 Team members
   io.to(teamRoom).emit("conference:ended", payload);
-  io.to(teamRoom).emit("conference:refresh", {
-  teamId: conference.teamId,
-});
+  io.to(teamRoom).emit("conference:refresh", { teamId: conference.teamId });
 
-
-  // 🔴 2. Notify ALL conference sockets (safety)
+  // 🔴 Conference room safety
   io.to(conferenceRoom).emit("conference:ended", payload);
 
-  // 🔴 3. Notify the leaving socket itself (CRITICAL)
+  // 🔴 CRITICAL: the leaving socket
   socket.emit("conference:ended", payload);
+  socket.emit("conference:refresh", { teamId: conference.teamId });
 
   console.log(`🏁 Conference ${conferenceId} ended (authoritative)`);
 }

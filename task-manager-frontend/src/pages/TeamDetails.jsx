@@ -280,7 +280,14 @@ export default function TeamDetails() {
     const handleConferenceState = ({ active, conference: conf }) => {
       console.log("🎥 Conference state received:", { active, conf });
 
-      
+      // 🔴 CRITICAL: Server-forced refresh (authoritative)
+const handleConferenceRefresh = ({ teamId }) => {
+  if (String(teamId) !== String(teamIdRef.current)) return;
+
+  console.log("🔄 Forced conference refresh from server");
+  socket.emit("conference:check", { teamId });
+};
+
       
       // ✅ FIXED: ALWAYS clear loading state
       setLoadingConference(false);
@@ -381,6 +388,8 @@ export default function TeamDetails() {
     socket.on("conference:ended", handleConferenceEnded);
     socket.on("conference:error", handleConferenceError);
     socket.on("conference:invited", handleConferenceInvited);
+    socket.on("conference:refresh", handleConferenceRefresh);
+
     // ✅ ADDED: Participant count updates
     socket.on("conference:participants", handleConferenceParticipants);
     
@@ -401,6 +410,7 @@ export default function TeamDetails() {
       socket.off("conference:state", handleConferenceState);
       socket.off("conference:started", handleConferenceStarted);
       socket.off("conference:ended", handleConferenceEnded);
+      socket.off("conference:refresh", handleConferenceRefresh);
       socket.off("conference:error", handleConferenceError);
       socket.off("conference:invited", handleConferenceInvited);
       // ✅ ADDED: Clean up participants listener
