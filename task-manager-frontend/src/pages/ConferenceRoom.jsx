@@ -67,6 +67,8 @@ export default function ConferenceRoom() {
   const { user: currentUser } = useAuth();
 
   const localVideoRef = useRef(null);
+  const micOnRef = useRef(micOn);
+  const camOnRef = useRef(camOn);
   const [adminMenuAnchor, setAdminMenuAnchor] = useState(null);
   const [selectedParticipantId, setSelectedParticipantId] = useState(null);
   const [participantsPanelOpen, setParticipantsPanelOpen] = useState(true);
@@ -207,6 +209,12 @@ export default function ConferenceRoom() {
     joinConference(conferenceId);
   }, [conferenceId, socket]);
 
+  useEffect(() => {
+  micOnRef.current = micOn;
+  camOnRef.current = camOn;
+}, [micOn, camOn]);
+
+
   // 🔹 PHASE 4.1: Bootstrap self as participant if alone
 useEffect(() => {
   if (!currentUser?._id) return;
@@ -222,8 +230,8 @@ useEffect(() => {
       name: currentUser.name,
       role: "admin", // TEMP — real role will come from backend update
       socketId: socket.id,
-      micOn: micOn,
-      camOn: camOn,
+      micOn: micOnRef.current,
+      camOn: camOnRef.current,
     }];
   });
 }, [currentUser, socket?.id]);
