@@ -306,9 +306,7 @@ export default function TeamDetails() {
         };
         
         // 🚨 CRITICAL FIX: Compare before updating
-        const currentConf = conferenceRef.current;
-        const isSameConference = currentConf && 
-          currentConf.conferenceId === newConference.conferenceId;
+
         
 if (!active) {
   console.log("🧹 Clearing conference state (authoritative)");
@@ -329,6 +327,7 @@ if (!currentConf || currentConf.conferenceId !== newConference.conferenceId) {
         setConference(null);
         conferenceRef.current = null;
       }
+
     };
 
     // ✅ FIX 2: Handle conference started - REQUEST STATE INSTEAD OF CREATING PARTIAL STATE
