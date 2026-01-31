@@ -31,7 +31,7 @@ import {
   sendSpeakingStatus,
   joinConference,
   initMedia,
-  isInConference
+  
 } from "../services/conferenceSocket";
 import RaiseHandIndicator from "../components/Conference/RaiseHandIndicator";
 import ParticipantsPanel from "../components/Conference/ParticipantsPanel";
@@ -52,7 +52,7 @@ import {
   stopScreenShare,
   startSpeakerDetection,
   stopSpeakerDetection,
-  getLocalStream
+  
 } from "../services/webrtc";
 import VideoTile from "../components/Conference/VideoTile";
 import { useAuth } from "../context/AuthContext";
