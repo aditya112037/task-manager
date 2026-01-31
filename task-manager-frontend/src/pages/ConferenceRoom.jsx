@@ -50,7 +50,7 @@ import {
   startSpeakerDetection,
   stopSpeakerDetection,
 } from "../services/webrtc";
-import { joinConference } from "../services/conferenceSocket";
+import { joinConference, initMedia } from "../services/conferenceSocket";
 import VideoTile from "../components/Conference/VideoTile";
 import { useAuth } from "../context/AuthContext";
 
@@ -107,26 +107,7 @@ export default function ConferenceRoom() {
     setNotification({ open: true, message, severity });
   }, []);
 
-  // ✅ FIX 3: Proper media initialization
-  const initLocalMedia = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true,
-        video: true,
-      });
 
-      setLocalStreamState(stream);
-
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-      }
-
-      return stream;
-    } catch (error) {
-      console.warn("Media initialization failed:", error);
-      return null;
-    }
-  }, []);
 
   // ✅ FIX 2: Split leave vs end responsibilities
   const leaveAndCleanupLocal = useCallback(() => {
@@ -385,19 +366,21 @@ export default function ConferenceRoom() {
         }
 
         // ✅ FIX 3: Proper media initialization
-        const stream = await initLocalMedia();
+// ✅ OPTION A: Media lifecycle owned by conferenceSocket
+const stream = await initMedia();
 
-        if (stream) {
-          setLocalStreamState(stream);
+if (stream) {
+  setLocalStreamState(stream);
 
-          if (localVideoRef.current) {
-            localVideoRef.current.srcObject = stream;
-          }
+  if (localVideoRef.current) {
+    localVideoRef.current.srcObject = stream;
+  }
 
-          showNotification("Media initialized successfully", "success");
-        } else {
-          showNotification("Joined conference without camera/microphone", "info");
-        }
+  showNotification("Media initialized successfully", "success");
+} else {
+  showNotification("Joined conference without camera/microphone", "info");
+}
+
         
       } catch (error) {
         console.error("Failed to initialize conference:", error);
@@ -561,7 +544,7 @@ export default function ConferenceRoom() {
     handleAnswer, 
     handleIceCandidate, 
     handleUserLeft,
-    initLocalMedia
+    initMedia
   ]);
   
   // ✅ Use sendSpeakingStatus instead of raw socket emit (optional but cleaner)
