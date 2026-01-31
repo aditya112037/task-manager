@@ -509,15 +509,6 @@ export default function ConferenceRoom() {
       );
     };
 
-    // ✅ NEW: Handle tracks added when localStream becomes available
-    const handleLocalStreamAvailable = () => {
-      if (!mounted() || !localStream) return;
-      
-      console.log("Local stream available, adding tracks to existing peers");
-      // The WebRTC service should handle re-adding tracks to existing peers
-      // This is managed by createPeer function which adds tracks when available
-    };
-
     // Setup socket listeners
     socket.on("conference:user-joined", handleUserJoined);
     socket.on("conference:offer", handleOffer);
