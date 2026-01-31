@@ -172,14 +172,11 @@ const handleParticipantExit = ({ socket, reason }) => {
 socket.on("conference:check", async ({ teamId }) => {
   const conference = getConferenceByTeamId(teamId);
 
-  // 🔴 HARD GUARD: empty conference = DEAD
+  // 🔴 HARD AUTHORITY: empty conference is DEAD
   if (!conference || conference.participants.size === 0) {
     if (conference) {
       deleteConference(conference.conferenceId);
-      console.log(
-        "🧹 Deleted stale empty conference during check:",
-        conference.conferenceId
-      );
+      console.log("🧹 Removed stale conference during check:", conference.conferenceId);
     }
 
     socket.emit("conference:state", { active: false });
@@ -192,11 +189,7 @@ socket.on("conference:check", async ({ teamId }) => {
       conferenceId: conference.conferenceId,
       teamId: conference.teamId,
       startedAt: conference.createdAt,
-      createdBy: {
-        _id: conference.createdBy._id,
-        name: conference.createdBy.name,
-        role: conference.createdBy.role,
-      },
+      createdBy: conference.createdBy,
       participantCount: conference.participants.size,
     },
   });

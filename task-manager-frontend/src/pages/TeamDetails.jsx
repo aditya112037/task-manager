@@ -310,13 +310,19 @@ export default function TeamDetails() {
         const isSameConference = currentConf && 
           currentConf.conferenceId === newConference.conferenceId;
         
-        if (!isSameConference) {
-          console.log("🔄 Updating conference state (changed)");
-          setConference(newConference);
-          conferenceRef.current = newConference;
-        } else {
-          console.log("⏸️ Conference state unchanged, skipping update");
-        }
+if (!active) {
+  console.log("🧹 Clearing conference state (authoritative)");
+  setConference(null);
+  conferenceRef.current = null;
+  return;
+}
+
+if (!currentConf || currentConf.conferenceId !== newConference.conferenceId) {
+  console.log("🔄 Updating conference state");
+  setConference(newConference);
+  conferenceRef.current = newConference;
+}
+
       } else {
         // ✅ FIXED: ALWAYS update React state, even if ref is already null
         console.log("📭 No active conference - updating state");
