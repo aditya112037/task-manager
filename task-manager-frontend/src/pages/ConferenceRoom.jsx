@@ -28,7 +28,10 @@ import {
   lowerHand, 
   cleanupConference,
   leaveConference,
-  sendSpeakingStatus 
+  sendSpeakingStatus,
+  joinConference,
+  initMedia,
+  isInConference
 } from "../services/conferenceSocket";
 import RaiseHandIndicator from "../components/Conference/RaiseHandIndicator";
 import ParticipantsPanel from "../components/Conference/ParticipantsPanel";
@@ -49,8 +52,8 @@ import {
   stopScreenShare,
   startSpeakerDetection,
   stopSpeakerDetection,
+  getLocalStream
 } from "../services/webrtc";
-import { joinConference, initMedia } from "../services/conferenceSocket";
 import VideoTile from "../components/Conference/VideoTile";
 import { useAuth } from "../context/AuthContext";
 
@@ -89,8 +92,9 @@ export default function ConferenceRoom() {
   const [notification, setNotification] = useState({ open: false, message: "", severity: "info" });
 
   const [micLevel, setMicLevel] = useState(0);
-  const conferenceStartedRef = useRef(false);
   const mountedRef = useRef(true);
+  const hasJoinedRef = useRef(false);
+  const conferenceEndedRef = useRef(false);
 
   // ✅ FIX 3: Derive role properly from participants (single source of truth)
   const isAdminOrManager = useMemo(() => {
@@ -107,8 +111,6 @@ export default function ConferenceRoom() {
     setNotification({ open: true, message, severity });
   }, []);
 
-
-
   // ✅ FIX 2: Split leave vs end responsibilities
   const leaveAndCleanupLocal = useCallback(() => {
     stopSpeakerDetection();
@@ -120,12 +122,15 @@ export default function ConferenceRoom() {
 
   // ✅ FIX 2: Separate handler for conference ended
   const handleConferenceEnded = useCallback(() => {
-    conferenceStartedRef.current = false;
+    if (conferenceEndedRef.current) return; // Prevent duplicate handling
+    
+    conferenceEndedRef.current = true;
     stopSpeakerDetection();
     cleanupConference();     // NO leave emit
     setRemoteStreams({});
+    showNotification("Conference has ended", "info");
     navigate("/teams");      // or safe route
-  }, [navigate]);
+  }, [navigate, showNotification]);
 
   const handleToggleMic = useCallback(() => {
     if (speakerModeEnabled && activeSpeaker !== socket.id && !isAdminOrManager) {
@@ -204,16 +209,62 @@ export default function ConferenceRoom() {
     }
   }, [sharingScreen, showNotification]);
 
-  const hasJoinedRef = useRef(false);
-
+  // ✅ FIX: Initialize and join conference
   useEffect(() => {
-    if (!conferenceId) return;
-    if (!socket || !socket.connected) return;
-    if (hasJoinedRef.current) return;
+    if (!conferenceId) {
+      showNotification("No conference ID provided", "error");
+      navigate("/teams");
+      return;
+    }
 
-    hasJoinedRef.current = true;
-    joinConference(conferenceId);
-  }, [conferenceId, socket]);
+    if (!socket || !socket.connected) {
+      showNotification("Connecting to server...", "warning");
+      return;
+    }
+
+    if (hasJoinedRef.current) {
+      console.log("Already joined conference, skipping");
+      return;
+    }
+
+    const initializeConference = async () => {
+      try {
+        // Step 1: Initialize media
+        const stream = await initMedia();
+        if (stream) {
+          setLocalStreamState(stream);
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = stream;
+          }
+          showNotification("Media initialized successfully", "success");
+        } else {
+          showNotification("Joined conference without camera/microphone", "info");
+        }
+
+        // Step 2: Join conference
+        hasJoinedRef.current = true;
+        const joinSuccess = joinConference(conferenceId);
+        if (!joinSuccess) {
+          showNotification("Failed to join conference", "error");
+        }
+      } catch (error) {
+        console.error("Conference initialization error:", error);
+        showNotification(`Failed to join: ${error.message}`, "error");
+        navigate("/teams");
+      }
+    };
+
+    initializeConference();
+
+    return () => {
+      // Cleanup on unmount
+      if (hasJoinedRef.current && !conferenceEndedRef.current) {
+        console.log("Component unmounting, leaving conference");
+        leaveConference();
+        cleanupConference();
+      }
+    };
+  }, [conferenceId, socket, navigate, showNotification]);
 
   useEffect(() => {
     micOnRef.current = micOn;
@@ -347,50 +398,8 @@ export default function ConferenceRoom() {
   }, [activeSpeaker]);
 
   useEffect(() => {
-    if (conferenceStartedRef.current) return;
-    conferenceStartedRef.current = true;
-    
     mountedRef.current = true;
     const mounted = () => mountedRef.current;
-
-    const start = async () => {
-      try {
-        if (!socket || !socket.connected) {
-          console.warn("Socket not connected, waiting...");
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          
-          if (!socket || !socket.connected) {
-            showNotification("Connection issue. Please refresh.", "error");
-            return;
-          }
-        }
-
-        // ✅ FIX 3: Proper media initialization
-// ✅ OPTION A: Media lifecycle owned by conferenceSocket
-const stream = await initMedia();
-
-if (stream) {
-  setLocalStreamState(stream);
-
-  if (localVideoRef.current) {
-    localVideoRef.current.srcObject = stream;
-  }
-
-  showNotification("Media initialized successfully", "success");
-} else {
-  showNotification("Joined conference without camera/microphone", "info");
-}
-
-        
-      } catch (error) {
-        console.error("Failed to initialize conference:", error);
-        showNotification(`Conference initialization failed: ${error.message}`, "error");
-        
-        showNotification("Could not join conference. Please try again.", "error");
-      }
-    };
-
-    start();
 
     const handleParticipantsUpdate = ({ participants }) => {
       if (!mounted()) return;
@@ -400,12 +409,6 @@ if (stream) {
     const handleHandsUpdated = ({ raisedHands }) => {
       if (!mounted()) return;
       setRaisedHands(raisedHands);
-    };
-
-    // ✅ FIX 2: Use the separated conference ended handler
-    const handleConferenceEndedEvent = () => {
-      if (!mounted()) return;
-      handleConferenceEnded();
     };
 
     const handleActiveSpeakerUpdate = ({ socketId }) => {
@@ -481,11 +484,7 @@ if (stream) {
       );
     };
 
-    const handleConferenceInvited = ({ conferenceId: invitedConfId }) => {
-      if (!mounted()) return;
-      showNotification(`You are invited to conference ${invitedConfId}`, "info");
-    };
-
+    // Setup socket listeners
     socket.on("conference:user-joined", handleUserJoined);
     socket.on("conference:offer", handleOffer);
     socket.on("conference:answer", handleAnswer);
@@ -493,19 +492,14 @@ if (stream) {
     socket.on("conference:user-left", handleUserLeft);
     socket.on("conference:participants", handleParticipantsUpdate);
     socket.on("conference:hands-updated", handleHandsUpdated);
-    socket.on("conference:ended", handleConferenceEndedEvent);
-    
+    socket.on("conference:ended", handleConferenceEnded);
     socket.on("conference:active-speaker", handleActiveSpeakerUpdate);
     socket.on("conference:speaker-mode-toggled", handleSpeakerModeToggled);
     socket.on("conference:speaker-assigned", handleSpeakerAssigned);
-    
     socket.on("conference:force-mute", handleForceMute);
     socket.on("conference:force-camera-off", handleForceCameraOff);
     socket.on("conference:removed-by-admin", handleRemovedByAdmin);
-    
     socket.on("conference:media-update", handleMediaUpdate);
-    
-    socket.on("conference:invited", handleConferenceInvited);
     
     return () => {
       mountedRef.current = false;      
@@ -518,19 +512,14 @@ if (stream) {
       socket.off("conference:user-left", handleUserLeft);
       socket.off("conference:participants", handleParticipantsUpdate);
       socket.off("conference:hands-updated", handleHandsUpdated);
-      socket.off("conference:ended", handleConferenceEndedEvent);
-      
+      socket.off("conference:ended", handleConferenceEnded);
       socket.off("conference:active-speaker", handleActiveSpeakerUpdate);
       socket.off("conference:speaker-mode-toggled", handleSpeakerModeToggled);
       socket.off("conference:speaker-assigned", handleSpeakerAssigned);
-      
       socket.off("conference:force-mute", handleForceMute);
       socket.off("conference:force-camera-off", handleForceCameraOff);
       socket.off("conference:removed-by-admin", handleRemovedByAdmin);
-      
       socket.off("conference:media-update", handleMediaUpdate);
-      
-      socket.off("conference:invited", handleConferenceInvited);
     };
   }, [
     conferenceId, 
@@ -1192,10 +1181,15 @@ if (stream) {
               </Tooltip>
             </>
           )}
-
-          <Tooltip title="Leave Conference">
+          <Tooltip title={isAdminOrManager ? "End Conference" : "Leave Conference"}>
             <IconButton
-              onClick={leaveAndCleanupLocal}
+              onClick={() => {
+                if (isAdminOrManager) {
+                  socket.emit("conference:end", { conferenceId });
+                } else {
+                  leaveAndCleanupLocal();
+                }
+              }}
               sx={{
                 background: "#d32f2f",
                 color: "white",

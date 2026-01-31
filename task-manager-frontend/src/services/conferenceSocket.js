@@ -1,4 +1,4 @@
-// services/conferenceSocket.js - LOCKED VERSION (Demo-Safe)
+// services/conferenceSocket.js - UPDATED VERSION
 import { getSocket } from "./socket";
 import { getLocalStream, cleanup as cleanupWebRTC } from "./webrtc";
 
@@ -276,12 +276,12 @@ export const setupConferenceCreationListeners = (handlers) => {
 
   const { onCreated, onCreateError } = handlers;
 
-  if (onCreated) socket.on("conference:created", onCreated);
+  // ✅ FIX: Backend emits "conference:started" not "conference:created"
+  if (onCreated) socket.on("conference:started", onCreated);
   if (onCreateError) socket.on("conference:error", onCreateError);
 
   return () => {
-    if (onCreated) socket.off("conference:created", onCreated);
-    // ✅ FIX 1: Fixed listener mismatch - detach same event name
+    if (onCreated) socket.off("conference:started", onCreated);
     if (onCreateError) socket.off("conference:error", onCreateError);
   };
 };
