@@ -6,7 +6,8 @@ const {
   getConferenceByTeamId, 
   getConference,
   endConference,
-  destroyConference
+  destroyConference,
+  createConference  // ✅ ADDED: Import createConference
 } = require("../utils/conferenceStore");
 
 module.exports = function registerConferenceSocket(io, socket) {
@@ -15,12 +16,12 @@ module.exports = function registerConferenceSocket(io, socket) {
   --------------------------------------------------- */
 
   const getUserFromSocket = () => socket.user;
-
+  const EMPTY_END_DELAY = 30000; // 30 seconds
   const getConferenceRoom = (conferenceId) =>
     `conference_${conferenceId}`;
 
   const getParticipant = (conferenceId, socketId) => {
-    const conference = getConference(conferenceId); // ✅ FIXED: Use getConference
+    const conference = getConference(conferenceId);
     if (!conference) return null;
     return conference.participants.get(socketId);
   };
@@ -60,10 +61,9 @@ module.exports = function registerConferenceSocket(io, socket) {
 
   /* ---------------------------------------------------
      SHARED HELPER: safelyRemoveParticipant
-     ✅ FIXED: Use getConference from store
   --------------------------------------------------- */
   const safelyRemoveParticipant = (conferenceId, socketId) => {
-    const conference = getConference(conferenceId); // ✅ FIXED: Use getConference
+    const conference = getConference(conferenceId);
     if (!conference) return false;
 
     if (!conference.participants.has(socketId)) {
@@ -120,7 +120,7 @@ module.exports = function registerConferenceSocket(io, socket) {
     const conferenceId = socket.conferenceId;
 
     // 🔴 HARD GUARD: find conference even if socket lost state
-    const conference = conferenceId ? getConference(conferenceId) : null; // ✅ FIXED: Use getConference
+    const conference = conferenceId ? getConference(conferenceId) : null;
 
     // If socket lost conferenceId but conference still exists → find it
     const resolvedConference = conference || Array.from(conferences.values()).find(c => 
@@ -164,21 +164,30 @@ module.exports = function registerConferenceSocket(io, socket) {
       }
     );
 
-    // ✅ FIXED: Use authoritative end function
+    // ✅ FIXED: Delayed end-on-empty with timeout management
     if (resolvedConference.participants.size === 0) {
-      endConferenceAuthoritative(resolvedConference, "empty");
+      if (!resolvedConference.emptyTimeout) {
+        console.log("⏳ Conference empty, scheduling auto-end:", resolvedConference.conferenceId);
+
+        resolvedConference.emptyTimeout = setTimeout(() => {
+          const fresh = getConference(resolvedConference.conferenceId);
+          if (fresh && fresh.participants.size === 0) {
+            endConferenceAuthoritative(fresh, "empty");
+          }
+        }, EMPTY_END_DELAY);
+      }
     }
   };
 
   /* ---------------------------------------------------
      CONFERENCE CHECK ENDPOINT (FOR TEAMDETAILS.JSX)
-     ✅ FIXED: Use store's getConferenceByTeamId
+     ✅ FIXED: Simplified check (store already filters ended conferences)
   --------------------------------------------------- */
   socket.on("conference:check", ({ teamId }) => {
     const conference = getConferenceByTeamId(teamId);
 
-    // ✅ FIXED: Check conference.status instead of conference.ended
-    if (!conference || conference.status === "ended") {
+    // ✅ FIXED: getConferenceByTeamId already returns only active conferences
+    if (!conference) {
       socket.emit("conference:state", { active: false });
       return;
     }
@@ -197,7 +206,7 @@ module.exports = function registerConferenceSocket(io, socket) {
 
   /* ---------------------------------------------------
      CREATE CONFERENCE
-     ✅ FIXED: Removed ended flag (store handles status)
+     ✅ FIXED: Use createConference from store for proper lifecycle
   --------------------------------------------------- */
   socket.on("conference:create", async ({ teamId }) => {
     try {
@@ -233,26 +242,27 @@ module.exports = function registerConferenceSocket(io, socket) {
 
       const conferenceId = `${teamId}-${Date.now()}`;
 
-      // Initialize conference - store will set initial status
-      conferences.set(conferenceId, {
+      // ✅ FIXED: Use store's createConference for proper initialization
+      const conference = createConference(
         conferenceId,
-        teamId,
-        createdBy: {
-          _id: user._id,
-          name: user.name,
-          role: member.role,
-        },
-        createdAt: new Date(),
-        participants: new Map(),
-        speakerMode: {
-          enabled: false,
-          activeSpeaker: null,
-          speakerTimeouts: new Map(),
-        },
-        raisedHands: new Set(),
-        adminActions: new Map(),
-        // ❌ REMOVED: ended: false (store handles status)
-      });
+        {
+          teamId,
+          createdBy: {
+            _id: user._id,
+            name: user.name,
+            role: member.role,
+          },
+          participants: new Map(),
+          speakerMode: {
+            enabled: false,
+            activeSpeaker: null,
+            speakerTimeouts: new Map(),
+          },
+          raisedHands: new Set(),
+          adminActions: new Map(),
+          emptyTimeout: null
+        }
+      );
 
       // ✅ IDEMPOTENT JOIN: Check if already in conference before joining
       if (socket.conferenceId !== conferenceId) {
@@ -261,7 +271,6 @@ module.exports = function registerConferenceSocket(io, socket) {
       }
 
       // Add creator as first participant
-      const conference = getConference(conferenceId); // ✅ FIXED: Use getConference
       conference.participants.set(socket.id, {
         userId: user._id,
         role: member.role,
@@ -270,6 +279,13 @@ module.exports = function registerConferenceSocket(io, socket) {
         micOn: true,
         camOn: true,
       });
+
+      // ✅ FIXED: Cancel any pending empty timeout (should be none, but safe)
+      if (conference.emptyTimeout) {
+        clearTimeout(conference.emptyTimeout);
+        conference.emptyTimeout = null;
+        console.log("🛑 Cancelled auto-end (conference created)");
+      }
 
       // Notify team room
       io.to(`team_${teamId}`).emit("conference:started", {
@@ -313,7 +329,7 @@ module.exports = function registerConferenceSocket(io, socket) {
 
   /* ---------------------------------------------------
      JOIN CONFERENCE
-     ✅ FIXED: Check conference.status instead of conference.ended
+     ✅ FIXED: Cancel empty timeout on ALL joins (including reconnects)
   --------------------------------------------------- */
   socket.on("conference:join", async ({ conferenceId }) => {
     try {
@@ -328,11 +344,18 @@ module.exports = function registerConferenceSocket(io, socket) {
 
       console.log("🎥 conference:join requested:", conferenceId);
 
-      const conference = getConference(conferenceId); // ✅ FIXED: Use getConference
+      const conference = getConference(conferenceId);
       if (!conference) {
         return socket.emit("conference:error", {
           message: "Conference not found",
         });
+      }
+
+      // ✅ FIXED: Clear empty timeout immediately on ANY join
+      if (conference.emptyTimeout) {
+        clearTimeout(conference.emptyTimeout);
+        conference.emptyTimeout = null;
+        console.log("🛑 Cancelled auto-end (participant joined/rejoined)");
       }
 
       // ✅ FIXED: Check conference.status instead of conference.ended
@@ -434,10 +457,9 @@ module.exports = function registerConferenceSocket(io, socket) {
 
   /* ---------------------------------------------------
      MEDIA STATE UPDATES
-     ✅ FIXED: Use getConference from store
   --------------------------------------------------- */
   socket.on("conference:media-update", ({ conferenceId, micOn, camOn }) => {
-    const conference = getConference(conferenceId); // ✅ FIXED: Use getConference
+    const conference = getConference(conferenceId);
     if (!conference) return;
 
     const participant = conference.participants.get(socket.id);
@@ -462,7 +484,6 @@ module.exports = function registerConferenceSocket(io, socket) {
 
   /* ---------------------------------------------------
      LEAVE CONFERENCE
-     ✅ FIXED: Using shared helper for consistent removal
   --------------------------------------------------- */
   socket.on("conference:leave", () => {
     console.log(`🚪 conference:leave from ${socket.id}`);
@@ -495,10 +516,9 @@ module.exports = function registerConferenceSocket(io, socket) {
 
   /* ---------------------------------------------------
      RAISE HAND FEATURE
-     ✅ FIXED: Use getConference from store
   --------------------------------------------------- */
   socket.on("conference:raise-hand", ({ conferenceId }) => {
-    const conference = getConference(conferenceId); // ✅ FIXED: Use getConference
+    const conference = getConference(conferenceId);
     if (!conference) return;
 
     const participant = conference.participants.get(socket.id);
@@ -514,7 +534,7 @@ module.exports = function registerConferenceSocket(io, socket) {
   });
 
   socket.on("conference:lower-hand", ({ conferenceId }) => {
-    const conference = getConference(conferenceId); // ✅ FIXED: Use getConference
+    const conference = getConference(conferenceId);
     if (!conference) return;
 
     conference.raisedHands.delete(socket.id);
@@ -528,11 +548,10 @@ module.exports = function registerConferenceSocket(io, socket) {
 
   /* ---------------------------------------------------
      SPEAKER MODE FUNCTIONALITY
-     ✅ FIXED: Use getConference from store
   --------------------------------------------------- */
   socket.on("conference:toggle-speaker-mode", async ({ conferenceId, enabled }) => {
     try {
-      const conference = getConference(conferenceId); // ✅ FIXED: Use getConference
+      const conference = getConference(conferenceId);
       if (!conference) return;
 
       const user = getUserFromSocket();
@@ -576,7 +595,7 @@ module.exports = function registerConferenceSocket(io, socket) {
   });
 
   socket.on("conference:speaking", ({ conferenceId, speaking }) => {
-    const conference = getConference(conferenceId); // ✅ FIXED: Use getConference
+    const conference = getConference(conferenceId);
     if (!conference || !conference.speakerMode.enabled) return;
 
     const participant = conference.participants.get(socket.id);
@@ -608,7 +627,7 @@ module.exports = function registerConferenceSocket(io, socket) {
 
   socket.on("conference:set-speaker", async ({ conferenceId, targetSocketId }) => {
     try {
-      const conference = getConference(conferenceId); // ✅ FIXED: Use getConference
+      const conference = getConference(conferenceId);
       if (!conference) return;
 
       const user = getUserFromSocket();
@@ -653,7 +672,7 @@ module.exports = function registerConferenceSocket(io, socket) {
 
   socket.on("conference:clear-speaker", async ({ conferenceId }) => {
     try {
-      const conference = getConference(conferenceId); // ✅ FIXED: Use getConference
+      const conference = getConference(conferenceId);
       if (!conference) return;
 
       const user = getUserFromSocket();
@@ -690,11 +709,10 @@ module.exports = function registerConferenceSocket(io, socket) {
 
   /* ---------------------------------------------------
      ADMIN ACTIONS
-     ✅ FIXED: Use getConference from store
   --------------------------------------------------- */
   socket.on("conference:admin-action", async ({ conferenceId, action, targetSocketId }) => {
     try {
-      const conference = getConference(conferenceId); // ✅ FIXED: Use getConference
+      const conference = getConference(conferenceId);
       if (!conference) return;
 
       const adminUser = getUserFromSocket();
@@ -778,11 +796,11 @@ module.exports = function registerConferenceSocket(io, socket) {
 
   /* ---------------------------------------------------
    🧱 PHASE 4.3 — HOST END CONFERENCE (Zoom-style)
-   ✅ FIXED: Use getConference from store
+   ✅ FIXED: Cancel emptyTimeout when host ends conference
   --------------------------------------------------- */
   socket.on("conference:end", async ({ conferenceId }) => {
     try {
-      const conference = getConference(conferenceId); // ✅ FIXED: Use getConference
+      const conference = getConference(conferenceId);
       if (!conference) return;
 
       const user = getUserFromSocket();
@@ -802,6 +820,13 @@ module.exports = function registerConferenceSocket(io, socket) {
 
       console.log(`🛑 Host ended conference ${conferenceId}`);
 
+      // ✅ FIXED: Cancel pending empty timeout if exists
+      if (conference.emptyTimeout) {
+        clearTimeout(conference.emptyTimeout);
+        conference.emptyTimeout = null;
+        console.log("🛑 Cancelled pending auto-end (host ended)");
+      }
+
       // 🚨 AUTHORITATIVE END (no leave logic)
       endConferenceAuthoritative(conference, "host-ended");
 
@@ -813,7 +838,6 @@ module.exports = function registerConferenceSocket(io, socket) {
 
   /* ---------------------------------------------------
      DISCONNECT HANDLER
-     ✅ FIXED: Using shared helper for consistent removal
   --------------------------------------------------- */
   socket.on("disconnect", () => {
     console.log(`❌ Socket ${socket.id} disconnected`);
