@@ -534,6 +534,7 @@ if (stream) {
     };
   }, [
     conferenceId, 
+    localStream,
     currentUser, 
     socket, 
     showNotification, 
