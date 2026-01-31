@@ -1,6 +1,10 @@
 /* ----------------------------------------------------
    GLOBAL STATE - STABLE ARCHITECTURE
 ---------------------------------------------------- */
+export const __setLocalStream = (stream) => {
+  cameraStream = stream;
+  mediaInitialized = !!stream;
+};
 
 let cameraStream = null;      // Camera + mic (persistent)
 let screenStream = null;      // Screen share only

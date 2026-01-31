@@ -1,6 +1,6 @@
 // services/conferenceSocket.js - UPDATED VERSION
 import { getSocket } from "./socket";
-import { getLocalStream, cleanup as cleanupWebRTC } from "./webrtc";
+import { getLocalStream, cleanup as cleanupWebRTC, __setLocalStream } from "./webrtc";
 
 /* ----------------------------------------------------
    ATOMIC LOCKS - Module-level, single source of truth
@@ -113,8 +113,11 @@ export const initMedia = async () => {
       }
     });
 
-    console.log("Media initialized successfully");
+    // ✅ FIX: Set the local stream in webrtc module after successful getUserMedia
+    __setLocalStream(stream);
     locks.media.initialized = true;
+    
+    console.log("Media initialized successfully");
     return stream;
 
   } catch (error) {
