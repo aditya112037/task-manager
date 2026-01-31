@@ -107,19 +107,43 @@ export default function ConferenceRoom() {
     setNotification({ open: true, message, severity });
   }, []);
 
-  // ✅ FIX 2 & 4: Use centralized cleanup and leaveConference
-  const handleLeave = useCallback(() => {
-    conferenceStartedRef.current = false;
-    
+  // ✅ FIX 3: Proper media initialization
+  const initLocalMedia = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: true,
+      });
+
+      setLocalStreamState(stream);
+
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+      }
+
+      return stream;
+    } catch (error) {
+      console.warn("Media initialization failed:", error);
+      return null;
+    }
+  }, []);
+
+  // ✅ FIX 2: Split leave vs end responsibilities
+  const leaveAndCleanupLocal = useCallback(() => {
     stopSpeakerDetection();
-    
-    // ✅ Use centralized cleanup instead of manual track stopping
-    leaveConference();
-    cleanupConference();
-    
+    leaveConference();       // emits leave event
+    cleanupConference();     // webrtc cleanup
     setRemoteStreams({});
-    
     navigate(-1);
+  }, [navigate]);
+
+  // ✅ FIX 2: Separate handler for conference ended
+  const handleConferenceEnded = useCallback(() => {
+    conferenceStartedRef.current = false;
+    stopSpeakerDetection();
+    cleanupConference();     // NO leave emit
+    setRemoteStreams({});
+    navigate("/teams");      // or safe route
   }, [navigate]);
 
   const handleToggleMic = useCallback(() => {
@@ -211,32 +235,9 @@ export default function ConferenceRoom() {
   }, [conferenceId, socket]);
 
   useEffect(() => {
-  micOnRef.current = micOn;
-  camOnRef.current = camOn;
-}, [micOn, camOn]);
-
-
-  // 🔹 PHASE 4.1: Bootstrap self as participant if alone
-useEffect(() => {
-  if (!currentUser?._id) return;
-  if (!socket?.id) return;
-
-  setParticipants(prev => {
-    // If already have participants, do nothing
-    if (prev.length > 0) return prev;
-
-    // Inject self
-    return [{
-      userId: currentUser._id,
-      name: currentUser.name,
-      role: "admin", // TEMP — real role will come from backend update
-      socketId: socket.id,
-      micOn: micOnRef.current,
-      camOn: camOnRef.current,
-    }];
-  });
-}, [currentUser, socket?.id]);
-
+    micOnRef.current = micOn;
+    camOnRef.current = camOn;
+  }, [micOn, camOn]);
 
   // Audio analyser for mic level
   useEffect(() => {
@@ -383,21 +384,16 @@ useEffect(() => {
           }
         }
 
-        let stream = null;
-        try {
-          // ✅ FIX 1: Use locked media initialization instead of bypassing
-          
-          setLocalStreamState(stream);
-
-          if (localVideoRef.current && stream) {
-            localVideoRef.current.srcObject = stream;
-          }
-        } catch (mediaError) {
-          console.warn("Media initialization failed, joining without camera:", mediaError);
-          showNotification("Joining without camera/microphone", "warning");
-        }
+        // ✅ FIX 3: Proper media initialization
+        const stream = await initLocalMedia();
 
         if (stream) {
+          setLocalStreamState(stream);
+
+          if (localVideoRef.current) {
+            localVideoRef.current.srcObject = stream;
+          }
+
           showNotification("Media initialized successfully", "success");
         } else {
           showNotification("Joined conference without camera/microphone", "info");
@@ -423,9 +419,10 @@ useEffect(() => {
       setRaisedHands(raisedHands);
     };
 
-    const handleConferenceEnded = () => {
+    // ✅ FIX 2: Use the separated conference ended handler
+    const handleConferenceEndedEvent = () => {
       if (!mounted()) return;
-      handleLeave();
+      handleConferenceEnded();
     };
 
     const handleActiveSpeakerUpdate = ({ socketId }) => {
@@ -483,7 +480,7 @@ useEffect(() => {
     const handleRemovedByAdmin = () => {
       if (!mounted()) return;
       console.log("Removed by admin");
-      handleLeave();
+      leaveAndCleanupLocal();
       showNotification("You have been removed from the conference by the admin", "error");
     };
 
@@ -513,7 +510,7 @@ useEffect(() => {
     socket.on("conference:user-left", handleUserLeft);
     socket.on("conference:participants", handleParticipantsUpdate);
     socket.on("conference:hands-updated", handleHandsUpdated);
-    socket.on("conference:ended", handleConferenceEnded);
+    socket.on("conference:ended", handleConferenceEndedEvent);
     
     socket.on("conference:active-speaker", handleActiveSpeakerUpdate);
     socket.on("conference:speaker-mode-toggled", handleSpeakerModeToggled);
@@ -538,7 +535,7 @@ useEffect(() => {
       socket.off("conference:user-left", handleUserLeft);
       socket.off("conference:participants", handleParticipantsUpdate);
       socket.off("conference:hands-updated", handleHandsUpdated);
-      socket.off("conference:ended", handleConferenceEnded);
+      socket.off("conference:ended", handleConferenceEndedEvent);
       
       socket.off("conference:active-speaker", handleActiveSpeakerUpdate);
       socket.off("conference:speaker-mode-toggled", handleSpeakerModeToggled);
@@ -557,13 +554,14 @@ useEffect(() => {
     currentUser, 
     socket, 
     showNotification, 
-    handleLeave, 
+    leaveAndCleanupLocal, 
+    handleConferenceEnded,
     handleUserJoined, 
     handleOffer, 
     handleAnswer, 
     handleIceCandidate, 
     handleUserLeft,
-    localStream
+    initLocalMedia
   ]);
   
   // ✅ Use sendSpeakingStatus instead of raw socket emit (optional but cleaner)
@@ -592,12 +590,13 @@ useEffect(() => {
     
     const shouldSpeak = activeSpeaker === socket.id || isAdminOrManager;
     
+    // ✅ FIX: Safer auto-mute logic (only if mic is ON)
     audioTracks.forEach(track => {
       if (shouldSpeak && !track.enabled) {
         track.enabled = true;
         setMicOn(true);
         console.log("Admin override: Unmuting because I'm the speaker");
-      } else if (!shouldSpeak && track.enabled) {
+      } else if (!shouldSpeak && micOnRef.current && track.enabled) {
         track.enabled = false;
         setMicOn(false);
         console.log("Admin override: Muting because I'm not the speaker");
@@ -695,6 +694,9 @@ useEffect(() => {
   const activeSpeakerName = activeSpeakerParticipant?.userName || 
     (activeSpeaker === socket.id ? "You" : `User ${activeSpeaker?.slice(0, 4)}`);
 
+  // ✅ FIX: Guard admin UI until participants are loaded
+  const participantsLoaded = participants.length > 0;
+
   return (
     <Box sx={{ display: "flex", height: "100vh", background: "#000" }}>
       <Box sx={{ 
@@ -706,7 +708,7 @@ useEffect(() => {
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
           <Typography color="white" fontWeight={600}>
             Conference Room: {conferenceId}
-            {isAdminOrManager && (
+            {participantsLoaded && isAdminOrManager && (
               <Typography component="span" color="#4caf50" fontSize="0.8rem" ml={1}>
                 (Admin)
               </Typography>
@@ -740,22 +742,24 @@ useEffect(() => {
               </IconButton>
             </Tooltip>
             
-            <Tooltip title={speakerModeEnabled ? "Disable Speaker Mode" : "Enable Speaker Mode"}>
-              <IconButton
-                onClick={toggleSpeakerMode}
-                sx={{
-                  background: speakerModeEnabled ? "#00e676" : "#424242",
-                  color: speakerModeEnabled ? "#000" : "white",
-                  "&:hover": {
-                    background: speakerModeEnabled ? "#00c853" : "#303030",
-                  },
-                }}
-              >
-                <VolumeUpIcon />
-              </IconButton>
-            </Tooltip>
+            {participantsLoaded && (
+              <Tooltip title={speakerModeEnabled ? "Disable Speaker Mode" : "Enable Speaker Mode"}>
+                <IconButton
+                  onClick={toggleSpeakerMode}
+                  sx={{
+                    background: speakerModeEnabled ? "#00e676" : "#424242",
+                    color: speakerModeEnabled ? "#000" : "white",
+                    "&:hover": {
+                      background: speakerModeEnabled ? "#00c853" : "#303030",
+                    },
+                  }}
+                >
+                  <VolumeUpIcon />
+                </IconButton>
+              </Tooltip>
+            )}
             
-            {isAdminOrManager && raisedHands.length > 0 && (
+            {participantsLoaded && isAdminOrManager && raisedHands.length > 0 && (
               <Tooltip title="Clear All Raised Hands">
                 <IconButton
                   onClick={handleClearAllHands}
@@ -817,7 +821,7 @@ useEffect(() => {
                     fontWeight: "bold" 
                   }}
                 />
-                {isAdminOrManager && (
+                {participantsLoaded && isAdminOrManager && (
                   <IconButton 
                     size="small" 
                     onClick={clearSpeaker}
@@ -861,7 +865,7 @@ useEffect(() => {
                       small
                       isActiveSpeaker={speakerModeEnabled && activeSpeaker === socketId}
                     />
-                    {isAdminOrManager && socketId !== socket.id && (
+                    {participantsLoaded && isAdminOrManager && socketId !== socket.id && (
                       <IconButton
                         size="small"
                         onClick={(e) => handleOpenAdminMenu(e, socketId)}
@@ -948,7 +952,7 @@ useEffect(() => {
                         isActiveSpeaker={false}
                       />
                       
-                      {isAdminOrManager && socketId !== socket.id && (
+                      {participantsLoaded && isAdminOrManager && socketId !== socket.id && (
                         <IconButton
                           size="small"
                           onClick={(e) => handleOpenAdminMenu(e, socketId)}
@@ -1003,7 +1007,7 @@ useEffect(() => {
                     {isHandRaised && <RaiseHandIndicator label="Hand Raised" />}
                   </VideoTile>
                   
-                  {isAdminOrManager && socketId !== socket.id && (
+                  {participantsLoaded && isAdminOrManager && socketId !== socket.id && (
                     <>
                       <IconButton
                         size="small"
@@ -1171,7 +1175,7 @@ useEffect(() => {
             </IconButton>
           </Tooltip>
 
-          {isAdminOrManager && speakerModeEnabled && (
+          {participantsLoaded && isAdminOrManager && speakerModeEnabled && (
             <>
               <Tooltip title="Clear Speaker">
                 <IconButton
@@ -1208,7 +1212,7 @@ useEffect(() => {
 
           <Tooltip title="Leave Conference">
             <IconButton
-              onClick={handleLeave}
+              onClick={leaveAndCleanupLocal}
               sx={{
                 background: "#d32f2f",
                 color: "white",
@@ -1232,7 +1236,7 @@ useEffect(() => {
               • Speaker Mode
             </Typography>
           )}
-          {isAdminOrManager && (
+          {participantsLoaded && isAdminOrManager && (
             <Typography color="#4caf50" variant="caption" ml={1}>
               • Admin Mode
             </Typography>
@@ -1249,7 +1253,7 @@ useEffect(() => {
         <ParticipantsPanel
           participants={participants}
           raisedHands={raisedHands}
-          isAdminOrManager={isAdminOrManager}
+          isAdminOrManager={participantsLoaded && isAdminOrManager}
           onAdminAction={handleAdminAction}
           currentUserId={currentUser?._id}
           onClose={() => setParticipantsPanelOpen(false)}
