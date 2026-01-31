@@ -24,43 +24,7 @@ let audioDetectionEnabled = false;
 
 // 🚨 FIX 1: REMOVED FROM PUBLIC API - Media lifecycle belongs to conferenceSocket.js
 // This function is kept internally but should NOT be called from UI
-const _initializeMedia = async (
-  constraints = { audio: true, video: true }
-) => {
-  if (
-    mediaInitialized &&
-    cameraStream &&
-    cameraStream.getTracks().every(t => t.readyState === "live")
-  ) {
-    return cameraStream;
-  }
 
-  const optimizedConstraints = {
-    audio: constraints.audio,
-    video: constraints.video === true
-      ? {
-          width: { ideal: 1280, max: 1920 },
-          height: { ideal: 720, max: 1080 },
-          frameRate: { ideal: 30, max: 60 },
-          facingMode: "user",
-        }
-      : constraints.video,
-  };
-
-  try {
-    cameraStream = await navigator.mediaDevices.getUserMedia(optimizedConstraints);
-    mediaInitialized = true;
-    return cameraStream;
-  } catch (err) {
-    console.error("Camera init failed, trying audio-only", err);
-    cameraStream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: false,
-    });
-    mediaInitialized = true;
-    return cameraStream;
-  }
-};
 
 export const getLocalStream = () => cameraStream;
 export const isMediaInitialized = () =>
