@@ -544,8 +544,7 @@ if (stream) {
     handleOffer, 
     handleAnswer, 
     handleIceCandidate, 
-    handleUserLeft,
-    initMedia
+    handleUserLeft
   ]);
   
   // ✅ Use sendSpeakingStatus instead of raw socket emit (optional but cleaner)
