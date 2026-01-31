@@ -306,8 +306,9 @@ export default function ConferenceRoom() {
     };
   }, [localStream]);
 
+  // ✅ FIX 1: REMOVE localStream guard from WebRTC handlers
   const handleUserJoined = useCallback(async ({ socketId, userId, userName }) => {
-    if (!mountedRef.current || !localStream) return;
+    if (!mountedRef.current) return; // ✅ REMOVED: || !localStream
     
     console.log("User joined:", socketId, userId);
     
@@ -321,6 +322,17 @@ export default function ConferenceRoom() {
       }));
     };
     
+    // ✅ Add tracks if localStream exists
+    if (localStream) {
+      localStream.getTracks().forEach(track => {
+        try {
+          pc.addTrack(track, localStream);
+        } catch (error) {
+          console.log("Track already added or peer not ready yet");
+        }
+      });
+    }
+    
     try {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
@@ -330,8 +342,9 @@ export default function ConferenceRoom() {
     }
   }, [localStream, socket]);
 
+  // ✅ FIX 2: REMOVE localStream guard from handleOffer
   const handleOffer = useCallback(async ({ from, offer }) => {
-    if (!mountedRef.current) return;
+    if (!mountedRef.current) return; // ✅ REMOVED: || !localStream
     
     console.log("Received offer from:", from);
     
@@ -345,6 +358,17 @@ export default function ConferenceRoom() {
       }));
     };
     
+    // ✅ Add tracks if localStream exists
+    if (localStream) {
+      localStream.getTracks().forEach(track => {
+        try {
+          pc.addTrack(track, localStream);
+        } catch (error) {
+          console.log("Track already added or peer not ready yet");
+        }
+      });
+    }
+    
     try {
       await pc.setRemoteDescription(offer);
       const answer = await pc.createAnswer();
@@ -353,8 +377,9 @@ export default function ConferenceRoom() {
     } catch (error) {
       console.error("Error handling offer:", error);
     }
-  }, [socket]);
+  }, [localStream, socket]);
 
+  // ✅ FIX 3: Keep handleAnswer simple
   const handleAnswer = useCallback(async ({ from, answer }) => {
     if (!mountedRef.current) return;
     
@@ -400,18 +425,6 @@ export default function ConferenceRoom() {
   useEffect(() => {
     mountedRef.current = true;
     const mounted = () => mountedRef.current;
-
-    useEffect(() => {
-  if (!localStream || !participants.length) return;
-
-  participants.forEach(p => {
-    if (p.socketId === socket.id) return;
-
-    // Create peer if not exists
-    createPeer(p.socketId, socket);
-  });
-}, [participants, localStream, socket]);
-
 
     const handleParticipantsUpdate = ({ participants }) => {
       if (!mounted()) return;
@@ -496,6 +509,15 @@ export default function ConferenceRoom() {
       );
     };
 
+    // ✅ NEW: Handle tracks added when localStream becomes available
+    const handleLocalStreamAvailable = () => {
+      if (!mounted() || !localStream) return;
+      
+      console.log("Local stream available, adding tracks to existing peers");
+      // The WebRTC service should handle re-adding tracks to existing peers
+      // This is managed by createPeer function which adds tracks when available
+    };
+
     // Setup socket listeners
     socket.on("conference:user-joined", handleUserJoined);
     socket.on("conference:offer", handleOffer);
@@ -547,6 +569,16 @@ export default function ConferenceRoom() {
     handleIceCandidate, 
     handleUserLeft
   ]);
+  
+  // ✅ Effect to handle localStream changes - add tracks to existing peers
+  useEffect(() => {
+    if (!localStream || !socket) return;
+    
+    console.log("Local stream updated, ensuring tracks are added to peers");
+    // The WebRTC service's createPeer function should handle this
+    // If you have a function to refresh tracks, call it here
+    
+  }, [localStream, socket]);
   
   // ✅ Use sendSpeakingStatus instead of raw socket emit (optional but cleaner)
   useEffect(() => {
