@@ -401,6 +401,18 @@ export default function ConferenceRoom() {
     mountedRef.current = true;
     const mounted = () => mountedRef.current;
 
+    useEffect(() => {
+  if (!localStream || !participants.length) return;
+
+  participants.forEach(p => {
+    if (p.socketId === socket.id) return;
+
+    // Create peer if not exists
+    createPeer(p.socketId, socket);
+  });
+}, [participants, localStream, socket]);
+
+
     const handleParticipantsUpdate = ({ participants }) => {
       if (!mounted()) return;
       setParticipants(participants || []);

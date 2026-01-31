@@ -326,11 +326,11 @@ export default function TeamDetails() {
     };
 
     // ✅ FIX 2: Handle conference started - REQUEST STATE INSTEAD OF CREATING PARTIAL STATE
-    const handleConferenceStarted = ({ teamId: startedTeamId }) => {
-      console.log("🎥 Conference started event for team:", startedTeamId);
-      if (String(startedTeamId) !== String(teamIdRef.current)) return;
-      showSnack("Conference started", "success");
-    };
+const handleConferenceStarted = ({ teamId }) => {
+  if (String(teamId) !== String(teamIdRef.current)) return;
+  showSnack("Conference started", "success");
+  socket.emit("conference:check", { teamId });
+};
 
     // Listen for conference ended in this team
     const handleConferenceEnded = ({ conferenceId, teamId: endedTeamId }) => {

@@ -183,8 +183,8 @@ export const joinConference = (conferenceId) => {
   socket.emit("conference:join", { conferenceId });
 
   // Event-based lock management
-  const handleJoined = () => {
-    locks.conference.joined = true;
+  const handleJoined = ({ participants }) => {
+    locks.conference.joined = true; 
     locks.conference.joinInProgress = false;
     socket.off("conference:joined", handleJoined);
     socket.off("conference:error", handleError);
