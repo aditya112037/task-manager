@@ -19,10 +19,12 @@ let isSpeaking = false;
 let audioDetectionEnabled = false;
 
 /* ----------------------------------------------------
-   MEDIA INITIALIZATION
+   MEDIA INITIALIZATION - INTERNAL USE ONLY
 ---------------------------------------------------- */
 
-export const initializeMedia = async (
+// 🚨 FIX 1: REMOVED FROM PUBLIC API - Media lifecycle belongs to conferenceSocket.js
+// This function is kept internally but should NOT be called from UI
+const _initializeMedia = async (
   constraints = { audio: true, video: true }
 ) => {
   if (
@@ -69,17 +71,21 @@ export const isMediaInitialized = () =>
 ---------------------------------------------------- */
 
 /**
- * 🔧 FIX 2 — Peer identity MUST be socketId (critical)
- * Right now: createPeer(userId, socket) - That is broken.
- * ✅ Change everywhere: peerId = socketId
+ * 🔧 FIX 2 — PREVENT DUPLICATE TRACK ADDITION
+ * Peer creation = signaling only, NO track addition
+ * Track attachment happens later via addTracksToAllPeers()
  */
 export const createPeer = (socketId, socket) => {
+  // ✅ FIX 7: Don't throw if cameraStream is null
   if (!cameraStream) {
-    throw new Error("initializeMedia() must be called first");
+    console.warn("Peer created before media:", socketId);
   }
 
-  // 🔧 FIX 2 — Check if peer already exists for this socketId
-  if (peers[socketId]) return peers[socketId];
+  // ✅ FIX: Check if peer already exists for this socketId
+  if (peers[socketId]) {
+    console.log(`Peer already exists for socketId: ${socketId}`);
+    return peers[socketId];
+  }
 
   const pc = new RTCPeerConnection({
     iceServers: [
@@ -89,21 +95,9 @@ export const createPeer = (socketId, socket) => {
     ],
   });
 
-  // Add camera tracks (or screen track if sharing)
-  const videoTrack = isScreenSharing && screenStream 
-    ? screenStream.getVideoTracks()[0] 
-    : cameraStream.getVideoTracks()[0];
-  
-  const audioTrack = cameraStream.getAudioTracks()[0];
-
-  if (audioTrack) {
-    pc.addTrack(audioTrack, cameraStream);
-  }
-  
-  if (videoTrack) {
-    const videoSender = pc.addTrack(videoTrack, cameraStream);
-    pc.__videoSender = videoSender; // Store reference for track replacement
-  }
+  // ✅ FIX 2: REMOVED track addition from here
+  // Tracks will be added later via addTracksToAllPeers()
+  // This prevents duplicate track addition and follows single-source-of-truth principle
 
   // Ice candidate handling
   pc.onicecandidate = e => {
@@ -124,10 +118,14 @@ export const createPeer = (socketId, socket) => {
     );
   };
 
+  // ✅ FIX 3: Handle disconnected state as well
   pc.onconnectionstatechange = () => {
     console.log(`Peer ${socketId} connection state:`, pc.connectionState);
-    if (pc.connectionState === "failed") {
-      console.log(`Removing failed peer: ${socketId}`);
+    if (
+      pc.connectionState === "failed" ||
+      pc.connectionState === "disconnected"
+    ) {
+      console.log(`Removing failed/disconnected peer: ${socketId}`);
       removePeer(socketId);
     }
   };
@@ -141,6 +139,53 @@ export const createPeer = (socketId, socket) => {
   console.log(`Created peer for socketId: ${socketId}, total peers:`, Object.keys(peers).length);
   
   return pc;
+};
+
+/**
+ * 🔧 FIX 8 — Function to attach tracks to existing peers
+ * MANDATORY: Call this when media becomes available
+ */
+export const addTracksToAllPeers = (stream) => {
+  if (!stream) {
+    console.warn("No stream provided to addTracksToAllPeers");
+    return;
+  }
+
+  console.log("Adding tracks to all existing peers");
+  
+  Object.entries(peers).forEach(([socketId, pc]) => {
+    if (!pc || pc.connectionState === "closed") {
+      console.log(`Skipping closed peer: ${socketId}`);
+      return;
+    }
+    
+    const existingSenders = pc.getSenders();
+    const existingAudio = existingSenders.some(s => s.track?.kind === "audio");
+    const existingVideo = existingSenders.some(s => s.track?.kind === "video");
+    
+    // Add audio track if not already added
+    const audioTrack = stream.getAudioTracks()[0];
+    if (audioTrack && !existingAudio) {
+      try {
+        pc.addTrack(audioTrack, stream);
+        console.log(`Added audio track to peer ${socketId}`);
+      } catch (error) {
+        console.warn(`Failed to add audio track to peer ${socketId}:`, error);
+      }
+    }
+    
+    // Add video track if not already added
+    const videoTrack = stream.getVideoTracks()[0];
+    if (videoTrack && !existingVideo) {
+      try {
+        const videoSender = pc.addTrack(videoTrack, stream);
+        pc.__videoSender = videoSender; // Store for screen sharing
+        console.log(`Added video track to peer ${socketId}`);
+      } catch (error) {
+        console.warn(`Failed to add video track to peer ${socketId}:`, error);
+      }
+    }
+  });
 };
 
 /**
@@ -482,11 +527,11 @@ export const hasTrackForPeer = (socketId, kind) => {
 };
 
 /* ----------------------------------------------------
-   EXPORT SERVICE
+   EXPORT SERVICE - FIX 1: Remove initializeMedia from public API
 ---------------------------------------------------- */
 
 const WebRTCService = {
-  initializeMedia,
+  // 🚨 FIX 1: REMOVED initializeMedia - Media lifecycle belongs to conferenceSocket.js
   getLocalStream,
   isMediaInitialized,
 
@@ -495,6 +540,7 @@ const WebRTCService = {
   getPeer,
   getAllPeers,
   closeAllPeers,
+  addTracksToAllPeers,
   updatePeersTrack,
   
   toggleAudio,

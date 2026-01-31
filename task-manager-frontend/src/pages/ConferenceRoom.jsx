@@ -27,12 +27,11 @@ import {
   raiseHand, 
   lowerHand, 
   cleanupConference,
-  leaveConference,
   sendSpeakingStatus,
   joinConference,
   initMedia,
   
-} from "../services/conferenceSocket";
+} from "../services/conferenceSocket"; // ✅ FIX 5: Removed leaveConference import
 import RaiseHandIndicator from "../components/Conference/RaiseHandIndicator";
 import ParticipantsPanel from "../components/Conference/ParticipantsPanel";
 import CallEndIcon from "@mui/icons-material/CallEnd";
@@ -52,7 +51,7 @@ import {
   stopScreenShare,
   startSpeakerDetection,
   stopSpeakerDetection,
-  
+  addTracksToAllPeers,
 } from "../services/webrtc";
 import VideoTile from "../components/Conference/VideoTile";
 import { useAuth } from "../context/AuthContext";
@@ -114,8 +113,7 @@ export default function ConferenceRoom() {
   // ✅ FIX 2: Split leave vs end responsibilities
   const leaveAndCleanupLocal = useCallback(() => {
     stopSpeakerDetection();
-    leaveConference();       // emits leave event
-    cleanupConference();     // webrtc cleanup
+    cleanupConference(); // ✅ FIX 1: Only cleanupConference (not leaveConference)
     setRemoteStreams({});
     navigate(-1);
   }, [navigate]);
@@ -125,11 +123,12 @@ export default function ConferenceRoom() {
     if (conferenceEndedRef.current) return; // Prevent duplicate handling
     
     conferenceEndedRef.current = true;
+    hasJoinedRef.current = false; // ✅ FIX 5: Reset join state
     stopSpeakerDetection();
-    cleanupConference();     // NO leave emit
+    cleanupConference(); // ✅ FIX 1: Only cleanupConference
     setRemoteStreams({});
     showNotification("Conference has ended", "info");
-    navigate("/teams");      // or safe route
+    navigate("/teams");
   }, [navigate, showNotification]);
 
   const handleToggleMic = useCallback(() => {
@@ -217,17 +216,48 @@ export default function ConferenceRoom() {
       return;
     }
 
-    if (!socket || !socket.connected) {
-      showNotification("Connecting to server...", "warning");
-      return;
-    }
-
     if (hasJoinedRef.current) {
       console.log("Already joined conference, skipping");
       return;
     }
 
+    // ✅ FIX 2: Handle socket connection gracefully
     const initializeConference = async () => {
+      if (!socket || !socket.connected) {
+        showNotification("Waiting for socket connection...", "info");
+        
+        // ✅ FIX 6: Socket wait promise with guard to prevent double resolution
+        let resolved = false;
+        
+        const waitForSocket = () => new Promise(resolve => {
+          if (socket && socket.connected) {
+            resolved = true;
+            resolve();
+            return;
+          }
+          
+          const onConnect = () => {
+            if (resolved) return;
+            resolved = true;
+            socket.off("connect", onConnect);
+            resolve();
+          };
+          
+          socket.on("connect", onConnect);
+          
+          // Timeout after 5 seconds
+          setTimeout(() => {
+            if (resolved) return;
+            resolved = true;
+            socket.off("connect", onConnect);
+            showNotification("Failed to connect to server", "error");
+            navigate("/teams");
+          }, 5000);
+        });
+        
+        await waitForSocket();
+      }
+
       try {
         // Step 1: Initialize media
         const stream = await initMedia();
@@ -259,9 +289,8 @@ export default function ConferenceRoom() {
     return () => {
       // Cleanup on unmount
       if (hasJoinedRef.current && !conferenceEndedRef.current) {
-        console.log("Component unmounting, leaving conference");
-        leaveConference();
-        cleanupConference();
+        console.log("Component unmounting, cleaning up conference");
+        cleanupConference(); // ✅ FIX 1: Only cleanupConference
       }
     };
   }, [conferenceId, socket, navigate, showNotification]);
@@ -306,9 +335,9 @@ export default function ConferenceRoom() {
     };
   }, [localStream]);
 
-  // ✅ FIX 1: REMOVE localStream guard from WebRTC handlers
+  // ✅ FIX 1 & 3 & 4: REMOVE localStream guard and manual track addition
   const handleUserJoined = useCallback(async ({ socketId, userId, userName }) => {
-    if (!mountedRef.current) return; // ✅ REMOVED: || !localStream
+    if (!mountedRef.current) return;
     
     console.log("User joined:", socketId, userId);
     
@@ -322,29 +351,23 @@ export default function ConferenceRoom() {
       }));
     };
     
-    // ✅ Add tracks if localStream exists
-    if (localStream) {
-      localStream.getTracks().forEach(track => {
-        try {
-          pc.addTrack(track, localStream);
-        } catch (error) {
-          console.log("Track already added or peer not ready yet");
-        }
-      });
-    }
+    // ✅ FIX 4: REMOVED manual track addition
+    // Tracks will be added via addTracksToAllPeers when localStream is available
     
     try {
+      // ✅ FIX 7: IMPORTANT RULE - Only existing participants create offers
+      // New joiners wait for offers from existing participants
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       socket.emit("conference:offer", { to: socketId, offer });
     } catch (error) {
       console.error("Error creating offer:", error);
     }
-  }, [localStream, socket]);
+  }, [socket]);
 
-  // ✅ FIX 2: REMOVE localStream guard from handleOffer
+  // ✅ FIX 1 & 3 & 4: REMOVE localStream guard and manual track addition
   const handleOffer = useCallback(async ({ from, offer }) => {
-    if (!mountedRef.current) return; // ✅ REMOVED: || !localStream
+    if (!mountedRef.current) return;
     
     console.log("Received offer from:", from);
     
@@ -358,16 +381,8 @@ export default function ConferenceRoom() {
       }));
     };
     
-    // ✅ Add tracks if localStream exists
-    if (localStream) {
-      localStream.getTracks().forEach(track => {
-        try {
-          pc.addTrack(track, localStream);
-        } catch (error) {
-          console.log("Track already added or peer not ready yet");
-        }
-      });
-    }
+    // ✅ FIX 4: REMOVED manual track addition
+    // Tracks will be added via addTracksToAllPeers when localStream is available
     
     try {
       await pc.setRemoteDescription(offer);
@@ -377,7 +392,7 @@ export default function ConferenceRoom() {
     } catch (error) {
       console.error("Error handling offer:", error);
     }
-  }, [localStream, socket]);
+  }, [socket]);
 
   // ✅ FIX 3: Keep handleAnswer simple
   const handleAnswer = useCallback(async ({ from, answer }) => {
@@ -561,15 +576,14 @@ export default function ConferenceRoom() {
     handleUserLeft
   ]);
   
-  // ✅ Effect to handle localStream changes - add tracks to existing peers
+  // ✅ FIX 4: Handle localStream changes - add tracks to existing peers
   useEffect(() => {
-    if (!localStream || !socket) return;
+    if (!localStream) return;
     
-    console.log("Local stream updated, ensuring tracks are added to peers");
-    // The WebRTC service's createPeer function should handle this
-    // If you have a function to refresh tracks, call it here
+    console.log("Local stream available, adding tracks to existing peers");
+    addTracksToAllPeers(localStream);
     
-  }, [localStream, socket]);
+  }, [localStream]);
   
   // ✅ Use sendSpeakingStatus instead of raw socket emit (optional but cleaner)
   useEffect(() => {
