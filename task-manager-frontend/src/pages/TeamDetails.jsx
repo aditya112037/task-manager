@@ -239,8 +239,7 @@ export default function TeamDetails() {
     const onCommentsInvalidate = ({ detail }) => {
       if (!detail?.taskId) return;
       // Check if this task belongs to current team
-        fetchTeamTasks();
-      
+      fetchTeamTasks();
     };
 
     window.addEventListener("invalidate:tasks", onTasksInvalidate);
@@ -259,7 +258,6 @@ export default function TeamDetails() {
     fetchTeamTasks, 
     fetchPendingExtensions, 
     fetchTeam,
-    // 🚨 REMOVED: teamTasks from dependencies to prevent loops
   ]);
 
   /* ---------------------------------------------------
@@ -277,19 +275,14 @@ export default function TeamDetails() {
     console.log("Setting up conference listeners for team:", routeTeamId);
 
     const handleConferenceRefresh = ({ teamId }) => {
-  if (String(teamId) !== String(teamIdRef.current)) return;
-
-  console.log("🔄 Forced conference refresh from server");
-  socket.emit("conference:check", { teamId });
-};
+      if (String(teamId) !== String(teamIdRef.current)) return;
+      console.log("🔄 Forced conference refresh from server");
+      socket.emit("conference:check", { teamId });
+    };
 
     // 🔐 FIXED: Handle conference state from server
     const handleConferenceState = ({ active, conference: conf }) => {
       console.log("🎥 Conference state received:", { active, conf });
-
-      // 🔴 CRITICAL: Server-forced refresh (authoritative)
-
-
       
       // ✅ FIXED: ALWAYS clear loading state
       setLoadingConference(false);
@@ -305,32 +298,34 @@ export default function TeamDetails() {
           participantCount: conf.participantCount ?? 0,
         };
         
-        // 🚨 CRITICAL FIX: Compare before updating
-        const currentConf = conferenceRef.current;
-        const isSameConference = currentConf && 
-          currentConf.conferenceId === newConference.conferenceId;
-        
-        if (!isSameConference) {
-          console.log("🔄 Updating conference state (changed)");
-          setConference(newConference);
-          conferenceRef.current = newConference;
-        } else {
-          console.log("⏸️ Conference state unchanged, skipping update");
-        }
+        // ✅ FIX 4: Remove "same conference" comparison during creation
+        // Server state is authoritative - always update
+        console.log("🔄 Updating conference state (server authoritative)");
+        setConference(newConference);
+        conferenceRef.current = newConference;
       } else {
-        // ✅ FIXED: ALWAYS update React state, even if ref is already null
-        console.log("📭 No active conference - updating state");
+        // ✅ FIX 1: DO NOT clear immediately – wait for confirmation
+        if (conferenceRef.current) {
+          console.log("⏸️ Ignoring inactive state while conference exists");
+          return;
+        }
+
         setConference(null);
         conferenceRef.current = null;
       }
     };
 
     // ✅ FIX 2: Handle conference started - REQUEST STATE INSTEAD OF CREATING PARTIAL STATE
-const handleConferenceStarted = ({ teamId }) => {
-  if (String(teamId) !== String(teamIdRef.current)) return;
-  showSnack("Conference started", "success");
-  socket.emit("conference:check", { teamId });
-};
+    const handleConferenceStarted = ({ teamId }) => {
+      if (String(teamId) !== String(teamIdRef.current)) return;
+      
+      console.log("🚀 Conference started (authoritative)");
+      showSnack("Conference started", "success");
+      setLoadingConference(true);
+      
+      // ✅ FIX 2: Force state refresh (authoritative)
+      socket.emit("conference:check", { teamId });
+    };
 
     // Listen for conference ended in this team
     const handleConferenceEnded = ({ conferenceId, teamId: endedTeamId }) => {
@@ -451,7 +446,6 @@ const handleConferenceStarted = ({ teamId }) => {
     else socket.on("connect", join);
 
     return () => {
-      
       socket.off("connect", join);
     };
   }, [routeTeamId]);
@@ -480,6 +474,9 @@ const handleConferenceStarted = ({ teamId }) => {
     console.log("Starting conference for team:", routeTeamId);
     
     try {
+      // ✅ FIX 3: Reset hasRequestedInitialStateRef when starting conference
+      hasRequestedInitialStateRef.current = false;
+      
       requestConferenceCreation(routeTeamId);
       
       // The loading will be cleared by conference:error or conference:state events
