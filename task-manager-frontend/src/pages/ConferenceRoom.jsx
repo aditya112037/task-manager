@@ -112,11 +112,16 @@ export default function ConferenceRoom() {
 
   // ✅ FIX 2: Split leave vs end responsibilities
   const leaveAndCleanupLocal = useCallback(() => {
-    stopSpeakerDetection();
-    cleanupConference(); // ✅ FIX 1: Only cleanupConference (not leaveConference)
-    setRemoteStreams({});
-    navigate(-1);
-  }, [navigate]);
+  stopSpeakerDetection();
+
+  // 🔥 THIS IS THE MISSING PIECE
+  socket.emit("conference:leave");
+
+  cleanupConference();
+  setRemoteStreams({});
+  navigate(-1);
+}, [socket, navigate]);
+
 
   // ✅ FIX 2: Separate handler for conference ended
   const handleConferenceEnded = useCallback(() => {
