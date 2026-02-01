@@ -716,7 +716,9 @@ export default function ConferenceRoom() {
     (activeSpeaker === socket.id ? "You" : `User ${activeSpeaker?.slice(0, 4)}`);
 
   // ✅ FIX: Guard admin UI until participants are loaded
-  const participantsLoaded = participants.length > 0;
+  const inConference = Boolean(conferenceId);
+  const participantsLoaded = participants.length > 0; // keep for counts only
+
 
   return (
     <Box sx={{ display: "flex", height: "100vh", background: "#000" }}>
@@ -729,7 +731,7 @@ export default function ConferenceRoom() {
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
           <Typography color="white" fontWeight={600}>
             Conference Room: {conferenceId}
-            {participantsLoaded && isAdminOrManager && (
+            {inConference && isAdminOrManager && (
               <Typography component="span" color="#4caf50" fontSize="0.8rem" ml={1}>
                 (Admin)
               </Typography>
@@ -780,7 +782,7 @@ export default function ConferenceRoom() {
               </Tooltip>
             )}
             
-            {participantsLoaded && isAdminOrManager && raisedHands.length > 0 && (
+            {inConference && isAdminOrManager && raisedHands.length > 0 && (
               <Tooltip title="Clear All Raised Hands">
                 <IconButton
                   onClick={handleClearAllHands}
@@ -842,7 +844,7 @@ export default function ConferenceRoom() {
                     fontWeight: "bold" 
                   }}
                 />
-                {participantsLoaded && isAdminOrManager && (
+                {inConference && isAdminOrManager && (
                   <IconButton 
                     size="small" 
                     onClick={clearSpeaker}
@@ -886,7 +888,7 @@ export default function ConferenceRoom() {
                       small
                       isActiveSpeaker={speakerModeEnabled && activeSpeaker === socketId}
                     />
-                    {participantsLoaded && isAdminOrManager && socketId !== socket.id && (
+                    {inConference && isAdminOrManager && socketId !== socket.id && (
                       <IconButton
                         size="small"
                         onClick={(e) => handleOpenAdminMenu(e, socketId)}
@@ -973,7 +975,7 @@ export default function ConferenceRoom() {
                         isActiveSpeaker={false}
                       />
                       
-                      {participantsLoaded && isAdminOrManager && socketId !== socket.id && (
+                      {inConference && isAdminOrManager && socketId !== socket.id && (
                         <IconButton
                           size="small"
                           onClick={(e) => handleOpenAdminMenu(e, socketId)}
@@ -1028,7 +1030,7 @@ export default function ConferenceRoom() {
                     {isHandRaised && <RaiseHandIndicator label="Hand Raised" />}
                   </VideoTile>
                   
-                  {participantsLoaded && isAdminOrManager && socketId !== socket.id && (
+                  {inConference && isAdminOrManager && socketId !== socket.id && (
                     <>
                       <IconButton
                         size="small"
@@ -1196,7 +1198,7 @@ export default function ConferenceRoom() {
             </IconButton>
           </Tooltip>
 
-          {participantsLoaded && isAdminOrManager && speakerModeEnabled && (
+          {inConference && isAdminOrManager && speakerModeEnabled && (
             <>
               <Tooltip title="Clear Speaker">
                 <IconButton
@@ -1262,7 +1264,7 @@ export default function ConferenceRoom() {
               • Speaker Mode
             </Typography>
           )}
-          {participantsLoaded && isAdminOrManager && (
+          {inConference && isAdminOrManager && (
             <Typography color="#4caf50" variant="caption" ml={1}>
               • Admin Mode
             </Typography>
