@@ -829,6 +829,15 @@ export default function ConferenceRoom() {
                 Speaker Mode Active
               </Typography>
             </Box>
+
+            {!activeSpeaker && (
+  <VideoTile
+    videoRef={localVideoRef}
+    label="You"
+    large
+  />
+)}
+
             
             {activeSpeaker && (
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
