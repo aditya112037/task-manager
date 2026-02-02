@@ -209,8 +209,6 @@ export default function ConferenceRoom() {
     }
   }, [sharingScreen, showNotification]);
 
-
-
   // ✅ FIX 6: Force audio on sanity check
   useEffect(() => {
     if (!localStream) return;
@@ -296,11 +294,10 @@ export default function ConferenceRoom() {
     initializeConference();
 
     return () => {
-      const peersSet = peersWithTracksRef.current;
       if (hasJoinedRef.current && !conferenceEndedRef.current) {
         console.log("Component unmounting, cleaning up conference");
         cleanupConference();
-        peersSet.clear();
+        peersWithTracksRef.current.clear();
       }
     };
   }, [conferenceId, socket, navigate, showNotification]);
@@ -383,17 +380,16 @@ export default function ConferenceRoom() {
 
       console.log("User joined, creating offer for:", socketId);
 
-      if (!localStream) {
-            // 🚫 DO NOT offer to yourself
+      // 🚫 DO NOT offer to yourself
       if (socketId === socket.id) return;
 
-    // ✅ Only if I was already in the room
+      // ✅ Only if I was already in the room
       if (!hasJoinedRef.current) return;
+
+      if (!localStream) {
         console.warn("Local stream not ready, skipping offer");
         return;
       }
-
-      
 
       // 1️⃣ Create peer
       const pc = createPeer(socketId, socket);
@@ -638,8 +634,6 @@ export default function ConferenceRoom() {
     addTracksToPeer
   ]);
   
-  // ✅ REMOVED: The problematic useEffect that was adding tracks to all peers
-
   // Use sendSpeakingStatus instead of raw socket emit
   useEffect(() => {
     if (!localStream || !speakerModeEnabled) return;
