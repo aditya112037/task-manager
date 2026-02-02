@@ -16,7 +16,7 @@ module.exports = function registerConferenceSocket(io, socket) {
   --------------------------------------------------- */
 
   const getUserFromSocket = () => socket.user;
-  const EMPTY_END_DELAY = 300; // 30 seconds
+  const EMPTY_END_DELAY = 5; // 30 seconds
   const getConferenceRoom = (conferenceId) =>
     `conference_${conferenceId}`;
 
