@@ -221,6 +221,7 @@ export default function ConferenceRoom() {
 
   // Initialize and join conference
   useEffect(() => {
+    const peersSet = peersWithTracksRef.current;
     if (!conferenceId) {
       showNotification("No conference ID provided", "error");
       navigate("/teams");
@@ -297,7 +298,7 @@ export default function ConferenceRoom() {
       if (hasJoinedRef.current && !conferenceEndedRef.current) {
         console.log("Component unmounting, cleaning up conference");
         cleanupConference();
-        peersWithTracksRef.current.clear();
+        peersSet.clear();
       }
     };
   }, [conferenceId, socket, navigate, showNotification]);
