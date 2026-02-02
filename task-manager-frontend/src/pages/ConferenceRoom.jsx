@@ -343,6 +343,19 @@ export default function ConferenceRoom() {
     };
   }, [localStream]);
 
+  useEffect(() => {
+  const handler = (e) => {
+    const { socketId, stream } = e.detail;
+    setRemoteStreams(prev => ({
+      ...prev,
+      [socketId]: stream
+    }));
+  };
+
+  window.addEventListener("webrtc:remote-stream", handler);
+  return () => window.removeEventListener("webrtc:remote-stream", handler);
+}, []);
+
   // ✅ FIXED: Add tracks to peer ONCE only
   const addTracksToPeer = useCallback((peer, socketId) => {
     if (!peer || !localStream) return;
@@ -396,16 +409,10 @@ export default function ConferenceRoom() {
       const pc = createPeer(socketId, socket);
 
       // ✅ FIX: Add tracks to THIS peer only
-      addTracksToPeer(pc, socketId);
+      addTracksToPeer(socketId);
 
       // 3️⃣ Receive remote tracks
-      pc.ontrack = (e) => {
-        if (!mountedRef.current) return;
-        setRemoteStreams((prev) => ({
-          ...prev,
-          [socketId]: e.streams[0],
-        }));
-      };
+
 
       // 4️⃣ Create offer
       try {
@@ -438,15 +445,9 @@ export default function ConferenceRoom() {
       const pc = createPeer(from, socket);
 
       // ✅ FIX: Add tracks to THIS peer only
-      addTracksToPeer(pc, from);
+      addTracksToPeer(from);
 
-      pc.ontrack = (e) => {
-        if (!mountedRef.current) return;
-        setRemoteStreams((prev) => ({
-          ...prev,
-          [from]: e.streams[0],
-        }));
-      };
+
 
       try {
         await pc.setRemoteDescription(offer);

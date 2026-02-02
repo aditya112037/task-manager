@@ -41,7 +41,7 @@ export const isMediaInitialized = () =>
 /**
  * 🔧 FIX 2 — PREVENT DUPLICATE TRACK ADDITION
  * Peer creation = signaling only, NO track addition
- * Track attachment happens later via addTracksToAllPeers()
+
  */
 export const createPeer = (socketId, socket) => {
   // ✅ FIX 7: Don't throw if cameraStream is null
@@ -62,9 +62,19 @@ export const createPeer = (socketId, socket) => {
       { urls: "stun:stun2.l.google.com:19302" },
     ],
   });
+  
+
+  const handleRemoteTrack = (socketId, stream) => {
+  window.dispatchEvent(
+    new CustomEvent("webrtc:remote-stream", {
+      detail: { socketId, stream },
+    })
+  );
+};
+
 
   // ✅ FIX 2: REMOVED track addition from here
-  // Tracks will be added later via addTracksToAllPeers()
+ 
   // This prevents duplicate track addition and follows single-source-of-truth principle
 
   // Ice candidate handling
@@ -77,14 +87,10 @@ export const createPeer = (socketId, socket) => {
     }
   };
 
-  pc.ontrack = e => {
-    console.log(`Received track from ${socketId}:`, e.track.kind);
-    window.dispatchEvent(
-      new CustomEvent("webrtc:track", {
-        detail: { socketId, stream: e.streams[0], track: e.track },
-      })
-    );
-  };
+pc.ontrack = (e) => {
+  if (!e.streams || !e.streams[0]) return;
+  handleRemoteTrack(socketId, e.streams[0]);
+};
 
   // ✅ FIX 3: Handle disconnected state as well
   pc.onconnectionstatechange = () => {
@@ -109,56 +115,33 @@ export const createPeer = (socketId, socket) => {
   return pc;
 };
 
-/**
- * 🔧 FIX 8 — Function to attach tracks to existing peers
- * MANDATORY: Call this when media becomes available
- */
-export const addTracksToAllPeers = (stream) => {
-  if (!stream) {
-    console.warn("No stream provided to addTracksToAllPeers");
+export const addTracksToPeer = (socketId) => {
+  if (!cameraStream) {
+    console.warn("No local media to attach");
     return;
   }
 
-  console.log("Adding tracks to all existing peers");
-  
-  Object.entries(peers).forEach(([socketId, pc]) => {
-    if (!pc || pc.connectionState === "closed") {
-      console.log(`Skipping closed peer: ${socketId}`);
-      return;
-    }
-    
-    const existingSenders = pc.getSenders();
-    const existingAudio = existingSenders.some(s => s.track?.kind === "audio");
-    const existingVideo = existingSenders.some(s => s.track?.kind === "video");
-    
-    // Add audio track if not already added
-    const audioTrack = stream.getAudioTracks()[0];
-    if (audioTrack && !existingAudio) {
-      try {
-        pc.addTrack(audioTrack, stream);
-        console.log(`Added audio track to peer ${socketId}`);
-      } catch (error) {
-        console.warn(`Failed to add audio track to peer ${socketId}:`, error);
-      }
-    }
-    
-    // Add video track if not already added
-    const videoTrack = stream.getVideoTracks()[0];
-    if (videoTrack && !existingVideo) {
-      try {
-        const videoSender = pc.addTrack(videoTrack, stream);
-        pc.__videoSender = videoSender; // Store for screen sharing
-        console.log(`Added video track to peer ${socketId}`);
-      } catch (error) {
-        console.warn(`Failed to add video track to peer ${socketId}:`, error);
-      }
-    }
-  });
+  const pc = peers[socketId];
+  if (!pc) return;
+
+  const senders = pc.getSenders();
+  const hasAudio = senders.some(s => s.track?.kind === "audio");
+  const hasVideo = senders.some(s => s.track?.kind === "video");
+
+  const audioTrack = cameraStream.getAudioTracks()[0];
+  const videoTrack = cameraStream.getVideoTracks()[0];
+
+  if (audioTrack && !hasAudio) {
+    pc.addTrack(audioTrack, cameraStream);
+  }
+
+  if (videoTrack && !hasVideo) {
+    const sender = pc.addTrack(videoTrack, cameraStream);
+    pc.__videoSender = sender;
+  }
 };
 
-/**
- * 🔧 FIX 2 — Remove peer by socketId
- */
+
 export const removePeer = (socketId) => {
   console.log(`Removing peer for socketId: ${socketId}`);
   if (peers[socketId]) {
@@ -508,7 +491,7 @@ const WebRTCService = {
   getPeer,
   getAllPeers,
   closeAllPeers,
-  addTracksToAllPeers,
+
   updatePeersTrack,
   
   toggleAudio,
