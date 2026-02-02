@@ -210,15 +210,7 @@ export default function ConferenceRoom() {
     }
   }, [sharingScreen, showNotification]);
 
-  // ✅ FIX 1: Initialize local video element ONCE
-  useEffect(() => {
-    return () => {
-      if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
-      }
-      peersWithTracksRef.current.clear();
-    };
-  }, []);
+
 
   // ✅ FIX 6: Force audio on sanity check
   useEffect(() => {
@@ -392,9 +384,16 @@ export default function ConferenceRoom() {
       console.log("User joined, creating offer for:", socketId);
 
       if (!localStream) {
+            // 🚫 DO NOT offer to yourself
+      if (socketId === socket.id) return;
+
+    // ✅ Only if I was already in the room
+      if (!hasJoinedRef.current) return;
         console.warn("Local stream not ready, skipping offer");
         return;
       }
+
+      
 
       // 1️⃣ Create peer
       const pc = createPeer(socketId, socket);
@@ -1321,7 +1320,7 @@ export default function ConferenceRoom() {
         <Box sx={{ mt: 1, display: "flex", justifyContent: "center", alignItems: "center", gap: 1 }}>
           {/* ✅ FIX 4: Show correct participant count */}
           <Typography color="#aaa" variant="caption">
-            Participants: {participants.length || 1}
+            Participants: {Math.max(participants.length, 1)}
           </Typography>
           <Typography color="#aaa" variant="caption">
             • Hands Raised: {raisedHands.length}
