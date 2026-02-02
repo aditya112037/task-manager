@@ -50,7 +50,6 @@ import {
   stopScreenShare,
   startSpeakerDetection,
   stopSpeakerDetection,
-  addTracksToAllPeers, // We'll replace this
 } from "../services/webrtc";
 import VideoTile from "../components/Conference/VideoTile";
 import { useAuth } from "../context/AuthContext";
@@ -297,10 +296,11 @@ export default function ConferenceRoom() {
     initializeConference();
 
     return () => {
+      const peersSet = peersWithTracksRef.current;
       if (hasJoinedRef.current && !conferenceEndedRef.current) {
         console.log("Component unmounting, cleaning up conference");
         cleanupConference();
-        peersWithTracksRef.current.clear();
+        peersSet.clear();
       }
     };
   }, [conferenceId, socket, navigate, showNotification]);

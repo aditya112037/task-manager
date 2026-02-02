@@ -16,16 +16,17 @@ export default function VideoTile({
   const internalRef = useRef(null);
   const ref = videoRef || internalRef;
 
-  // ✅ FIX 2: VideoTile MUST attach stream every render
-  useEffect(() => {
-    if (!ref.current || !stream) return;
 
-    // ⚠️ CRITICAL: Always attach stream, NO conditional checks
-    ref.current.srcObject = stream;
+  useEffect(() => {
+
+
+    const videoEl = ref.current;
+    if (!videoEl || !stream) return;
+    videoEl.srcObject = stream;
 
     const play = async () => {
       try {
-        await ref.current.play();
+        await videoEl.play()
       } catch (error) {
         // Silent catch for autoplay restrictions
         console.debug("Video play failed (likely autoplay restriction):", error);
@@ -37,9 +38,9 @@ export default function VideoTile({
     // Cleanup: Don't nullify srcObject, let React handle it
     return () => {
       // Only clean up if this is an internal ref
-      if (ref === internalRef && ref.current) {
-        ref.current.srcObject = null;
-      }
+    if (ref === internalRef && videoEl) {
+      videoEl.srcObject = null;
+    }
     };
   }, [stream, ref]); // Re-run whenever stream changes
 
