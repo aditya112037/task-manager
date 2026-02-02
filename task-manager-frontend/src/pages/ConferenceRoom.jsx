@@ -340,64 +340,95 @@ export default function ConferenceRoom() {
     };
   }, [localStream]);
 
-  // ✅ FIX 1 & 3 & 4: REMOVE localStream guard and manual track addition
-  const handleUserJoined = useCallback(async ({ socketId, userId, userName }) => {
+  const handleUserJoined = useCallback(
+  async ({ socketId }) => {
     if (!mountedRef.current) return;
-    
-    console.log("User joined:", socketId, userId);
-    
+
+    console.log("User joined, creating offer for:", socketId);
+
+    // 🛑 SAFETY: must have local media before offering
+    if (!localStream) {
+      console.warn("Local stream not ready, skipping offer");
+      return;
+    }
+
+    // 1️⃣ Create peer
     const pc = createPeer(socketId, socket);
-    
+
+    // 2️⃣ Attach tracks FIRST
+    addTracksToAllPeers(localStream);
+
+    // 3️⃣ Receive remote tracks
     pc.ontrack = (e) => {
       if (!mountedRef.current) return;
-      setRemoteStreams(prev => ({
+      setRemoteStreams((prev) => ({
         ...prev,
         [socketId]: e.streams[0],
       }));
     };
-    
-    // ✅ FIX 4: REMOVED manual track addition
-    // Tracks will be added via addTracksToAllPeers when localStream is available
-    
-    try {
-      // ✅ FIX 7: IMPORTANT RULE - Only existing participants create offers
-      // New joiners wait for offers from existing participants
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      socket.emit("conference:offer", { to: socketId, offer });
-    } catch (error) {
-      console.error("Error creating offer:", error);
-    }
-  }, [socket]);
 
-  // ✅ FIX 1 & 3 & 4: REMOVE localStream guard and manual track addition
-  const handleOffer = useCallback(async ({ from, offer }) => {
+    // 4️⃣ Create offer
+    try {
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true,
+      });
+
+      await pc.setLocalDescription(offer);
+
+      socket.emit("conference:offer", {
+        to: socketId,
+        offer,
+      });
+
+      console.log("Offer sent to:", socketId);
+    } catch (err) {
+      console.error("Offer creation failed:", err);
+    }
+  },
+  [socket, localStream]
+);
+
+
+const handleOffer = useCallback(
+  async ({ from, offer }) => {
     if (!mountedRef.current) return;
-    
+
     console.log("Received offer from:", from);
-    
+
     const pc = createPeer(from, socket);
-    
+
+    // 🛑 Ensure local tracks exist
+    if (localStream) {
+      addTracksToAllPeers(localStream);
+    }
+
     pc.ontrack = (e) => {
       if (!mountedRef.current) return;
-      setRemoteStreams(prev => ({
+      setRemoteStreams((prev) => ({
         ...prev,
         [from]: e.streams[0],
       }));
     };
-    
-    // ✅ FIX 4: REMOVED manual track addition
-    // Tracks will be added via addTracksToAllPeers when localStream is available
-    
+
     try {
       await pc.setRemoteDescription(offer);
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      socket.emit("conference:answer", { to: from, answer });
-    } catch (error) {
-      console.error("Error handling offer:", error);
+
+      socket.emit("conference:answer", {
+        to: from,
+        answer,
+      });
+
+      console.log("Answer sent to:", from);
+    } catch (err) {
+      console.error("Error handling offer:", err);
     }
-  }, [socket]);
+  },
+  [socket, localStream]
+);
+
 
   // ✅ FIX 3: Keep handleAnswer simple
   const handleAnswer = useCallback(async ({ from, answer }) => {
