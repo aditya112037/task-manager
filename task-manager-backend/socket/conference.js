@@ -109,7 +109,7 @@ module.exports = function registerConferenceSocket(io, socket) {
     setTimeout(() => {
       destroyConference(conferenceId);
       console.log(`🧹 Conference ${conferenceId} destroyed`);
-    }, 3000);
+    }, 5);
   };
 
   /* ---------------------------------------------------
