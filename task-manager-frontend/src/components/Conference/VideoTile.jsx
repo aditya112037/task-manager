@@ -16,22 +16,32 @@ export default function VideoTile({
   const internalRef = useRef(null);
   const ref = videoRef || internalRef;
 
+  // ✅ FIX 2: VideoTile MUST attach stream every render
   useEffect(() => {
-    if (!ref.current) return;
-    if (!stream) return;
+    if (!ref.current || !stream) return;
 
-    if (ref.current.srcObject !== stream) {
-      ref.current.srcObject = stream;
-    }
+    // ⚠️ CRITICAL: Always attach stream, NO conditional checks
+    ref.current.srcObject = stream;
 
-    const playSafe = async () => {
+    const play = async () => {
       try {
         await ref.current.play();
-      } catch (_) {}
+      } catch (error) {
+        // Silent catch for autoplay restrictions
+        console.debug("Video play failed (likely autoplay restriction):", error);
+      }
     };
 
-    playSafe();
-  }, [stream, ref]);
+    play();
+
+    // Cleanup: Don't nullify srcObject, let React handle it
+    return () => {
+      // Only clean up if this is an internal ref
+      if (ref === internalRef && ref.current) {
+        ref.current.srcObject = null;
+      }
+    };
+  }, [stream, ref]); // Re-run whenever stream changes
 
   const sizeStyles = large
     ? { height: "100%", minHeight: 400 }
@@ -63,8 +73,33 @@ export default function VideoTile({
         autoPlay
         playsInline
         muted={isLocal}
-        style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        style={{ 
+          width: "100%", 
+          height: "100%", 
+          objectFit: "cover",
+          backgroundColor: "#000",
+          // Ensure video is visible even if stream is null
+          display: stream ? "block" : "none"
+        }}
       />
+
+      {/* Show placeholder if no stream */}
+      {!stream && (
+        <Box
+          sx={{
+            width: "100%",
+            height: "100%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            backgroundColor: "#111",
+          }}
+        >
+          <Typography color="#666" variant="body2">
+            {isLocal ? "Camera Off" : "No Video"}
+          </Typography>
+        </Box>
+      )}
 
       {isActiveSpeaker && (
         <Box
@@ -79,10 +114,11 @@ export default function VideoTile({
             display: "flex",
             alignItems: "center",
             gap: 0.5,
+            zIndex: 2,
           }}
         >
           <VolumeUpIcon sx={{ fontSize: 14 }} />
-          <Typography fontSize="0.7rem" fontWeight="bold">
+          <Typography fontSize="0.7rem" fontWeight="bold" color="#000">
             SPEAKING
           </Typography>
         </Box>
@@ -96,6 +132,7 @@ export default function VideoTile({
           right: 0,
           p: 1,
           background: "linear-gradient(transparent, rgba(0,0,0,0.8))",
+          zIndex: 1,
         }}
       >
         <Typography
@@ -113,13 +150,24 @@ export default function VideoTile({
           <Chip
             label="Screen"
             size="small"
-            sx={{ ml: 1, background: "#9c27b0", color: "#fff" }}
+            sx={{ 
+              ml: 1, 
+              background: "#9c27b0", 
+              color: "#fff",
+              fontSize: "0.7rem",
+              height: 20
+            }}
           />
         )}
       </Box>
 
       {children && (
-        <Box sx={{ position: "absolute", top: 8, left: 8 }}>
+        <Box sx={{ 
+          position: "absolute", 
+          top: 8, 
+          left: 8,
+          zIndex: 2 
+        }}>
           {children}
         </Box>
       )}

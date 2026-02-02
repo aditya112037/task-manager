@@ -30,8 +30,7 @@ import {
   sendSpeakingStatus,
   joinConference,
   initMedia,
-  
-} from "../services/conferenceSocket"; // ✅ FIX 5: Removed leaveConference import
+} from "../services/conferenceSocket";
 import RaiseHandIndicator from "../components/Conference/RaiseHandIndicator";
 import ParticipantsPanel from "../components/Conference/ParticipantsPanel";
 import CallEndIcon from "@mui/icons-material/CallEnd";
@@ -51,7 +50,7 @@ import {
   stopScreenShare,
   startSpeakerDetection,
   stopSpeakerDetection,
-  addTracksToAllPeers,
+  addTracksToAllPeers, // We'll replace this
 } from "../services/webrtc";
 import VideoTile from "../components/Conference/VideoTile";
 import { useAuth } from "../context/AuthContext";
@@ -69,6 +68,7 @@ export default function ConferenceRoom() {
   const { user: currentUser } = useAuth();
 
   const localVideoRef = useRef(null);
+  const [localStream, setLocalStreamState] = useState(null);
 
   const [adminMenuAnchor, setAdminMenuAnchor] = useState(null);
   const [selectedParticipantId, setSelectedParticipantId] = useState(null);
@@ -85,7 +85,6 @@ export default function ConferenceRoom() {
   const micOnRef = useRef(micOn);
   const camOnRef = useRef(camOn);
   const [sharingScreen, setSharingScreen] = useState(false);
-  const [localStream, setLocalStreamState] = useState(null);
   const [activeSpeaker, setActiveSpeaker] = useState(null);
   const [speakerModeEnabled, setSpeakerModeEnabled] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: "", severity: "info" });
@@ -95,43 +94,44 @@ export default function ConferenceRoom() {
   const hasJoinedRef = useRef(false);
   const conferenceEndedRef = useRef(false);
 
-  // ✅ FIX 3: Derive role properly from participants (single source of truth)
-  const isAdminOrManager = useMemo(() => {
-    if (!currentUser?._id) return false;
+  // Track which peers already have tracks added
+  const peersWithTracksRef = useRef(new Set());
 
-    const me = participants.find(
+  // ✅ FIX 3: Proper role detection with memoization
+  const myParticipant = useMemo(() => {
+    if (!currentUser?._id || !participants.length) return null;
+    return participants.find(
       p => String(p.userId) === String(currentUser._id)
     );
+  }, [participants, currentUser?._id]);
 
-    return me && (me.role === "admin" || me.role === "manager");
-  }, [participants, currentUser]);
+  const isAdminOrManager = useMemo(() => {
+    if (!myParticipant) return false;
+    return myParticipant.role === "admin" || myParticipant.role === "manager";
+  }, [myParticipant]);
 
   const showNotification = useCallback((message, severity = "info") => {
     setNotification({ open: true, message, severity });
   }, []);
 
-  // ✅ FIX 2: Split leave vs end responsibilities
   const leaveAndCleanupLocal = useCallback(() => {
-  stopSpeakerDetection();
+    stopSpeakerDetection();
+    socket.emit("conference:leave");
+    cleanupConference();
+    setRemoteStreams({});
+    peersWithTracksRef.current.clear();
+    navigate(-1);
+  }, [socket, navigate]);
 
-  // 🔥 THIS IS THE MISSING PIECE
-  socket.emit("conference:leave");
-
-  cleanupConference();
-  setRemoteStreams({});
-  navigate(-1);
-}, [socket, navigate]);
-
-
-  // ✅ FIX 2: Separate handler for conference ended
   const handleConferenceEnded = useCallback(() => {
-    if (conferenceEndedRef.current) return; // Prevent duplicate handling
+    if (conferenceEndedRef.current) return;
     
     conferenceEndedRef.current = true;
-    hasJoinedRef.current = false; // ✅ FIX 5: Reset join state
+    hasJoinedRef.current = false;
     stopSpeakerDetection();
-    cleanupConference(); // ✅ FIX 1: Only cleanupConference
+    cleanupConference();
     setRemoteStreams({});
+    peersWithTracksRef.current.clear();
     showNotification("Conference has ended", "info");
     navigate("/teams");
   }, [navigate, showNotification]);
@@ -156,7 +156,6 @@ export default function ConferenceRoom() {
       micOn: newMicState,
       camOn,
     });
-    
   }, [speakerModeEnabled, activeSpeaker, socket, isAdminOrManager, localStream, micOn, camOn, conferenceId, showNotification]);
 
   const handleToggleCam = useCallback(() => {
@@ -166,7 +165,6 @@ export default function ConferenceRoom() {
     }
 
     const videoTrack = localStream.getVideoTracks()[0];
-
     if (!videoTrack || videoTrack.readyState !== "live") {
       showNotification("Camera not available. Please refresh.", "error");
       setCamOn(false);
@@ -184,7 +182,6 @@ export default function ConferenceRoom() {
     });
   }, [localStream, micOn, conferenceId, socket, showNotification]);
 
-  // ✅ FIX #1: Fixed raiseHand/lowerHand call
   const handleRaiseHand = useCallback(() => {
     if (!handRaised) {
       raiseHand();
@@ -213,7 +210,27 @@ export default function ConferenceRoom() {
     }
   }, [sharingScreen, showNotification]);
 
-  // ✅ FIX: Initialize and join conference
+  // ✅ FIX 1: Initialize local video element ONCE
+  useEffect(() => {
+    return () => {
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+      }
+      peersWithTracksRef.current.clear();
+    };
+  }, []);
+
+  // ✅ FIX 6: Force audio on sanity check
+  useEffect(() => {
+    if (!localStream) return;
+    localStream.getAudioTracks().forEach(track => {
+      if (!track.enabled) {
+        track.enabled = true;
+      }
+    });
+  }, [localStream]);
+
+  // Initialize and join conference
   useEffect(() => {
     if (!conferenceId) {
       showNotification("No conference ID provided", "error");
@@ -226,14 +243,11 @@ export default function ConferenceRoom() {
       return;
     }
 
-    // ✅ FIX 2: Handle socket connection gracefully
     const initializeConference = async () => {
       if (!socket || !socket.connected) {
         showNotification("Waiting for socket connection...", "info");
         
-        // ✅ FIX 6: Socket wait promise with guard to prevent double resolution
         let resolved = false;
-        
         const waitForSocket = () => new Promise(resolve => {
           if (socket && socket.connected) {
             resolved = true;
@@ -250,7 +264,6 @@ export default function ConferenceRoom() {
           
           socket.on("connect", onConnect);
           
-          // Timeout after 5 seconds
           setTimeout(() => {
             if (resolved) return;
             resolved = true;
@@ -292,10 +305,10 @@ export default function ConferenceRoom() {
     initializeConference();
 
     return () => {
-      // Cleanup on unmount
       if (hasJoinedRef.current && !conferenceEndedRef.current) {
         console.log("Component unmounting, cleaning up conference");
-        cleanupConference(); // ✅ FIX 1: Only cleanupConference
+        cleanupConference();
+        peersWithTracksRef.current.clear();
       }
     };
   }, [conferenceId, socket, navigate, showNotification]);
@@ -340,97 +353,123 @@ export default function ConferenceRoom() {
     };
   }, [localStream]);
 
-  const handleUserJoined = useCallback(
-  async ({ socketId }) => {
-    if (!mountedRef.current) return;
-
-    console.log("User joined, creating offer for:", socketId);
-
-    // 🛑 SAFETY: must have local media before offering
-    if (!localStream) {
-      console.warn("Local stream not ready, skipping offer");
+  // ✅ FIXED: Add tracks to peer ONCE only
+  const addTracksToPeer = useCallback((peer, socketId) => {
+    if (!peer || !localStream) return;
+    
+    // Check if tracks were already added to this peer
+    if (peersWithTracksRef.current.has(socketId)) {
+      console.log(`Tracks already added to peer ${socketId}, skipping`);
       return;
     }
-
-    // 1️⃣ Create peer
-    const pc = createPeer(socketId, socket);
-
-    // 2️⃣ Attach tracks FIRST
-    addTracksToAllPeers(localStream);
-
-    // 3️⃣ Receive remote tracks
-    pc.ontrack = (e) => {
-      if (!mountedRef.current) return;
-      setRemoteStreams((prev) => ({
-        ...prev,
-        [socketId]: e.streams[0],
-      }));
-    };
-
-    // 4️⃣ Create offer
+    
     try {
-      const offer = await pc.createOffer({
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: true,
+      // Add all tracks from local stream
+      localStream.getTracks().forEach(track => {
+        // Check if this track is already being sent
+        const existingSenders = peer.getSenders();
+        const alreadySending = existingSenders.some(
+          sender => sender.track && sender.track.kind === track.kind
+        );
+        
+        if (!alreadySending) {
+          peer.addTrack(track, localStream);
+          console.log(`Added ${track.kind} track to peer ${socketId}`);
+        }
       });
-
-      await pc.setLocalDescription(offer);
-
-      socket.emit("conference:offer", {
-        to: socketId,
-        offer,
-      });
-
-      console.log("Offer sent to:", socketId);
-    } catch (err) {
-      console.error("Offer creation failed:", err);
+      
+      // Mark this peer as having tracks added
+      peersWithTracksRef.current.add(socketId);
+    } catch (error) {
+      console.error(`Error adding tracks to peer ${socketId}:`, error);
     }
-  },
-  [socket, localStream]
-);
+  }, [localStream]);
 
-
-const handleOffer = useCallback(
-  async ({ from, offer }) => {
-    if (!mountedRef.current) return;
-
-    console.log("Received offer from:", from);
-
-    const pc = createPeer(from, socket);
-
-    // 🛑 Ensure local tracks exist
-    if (localStream) {
-      addTracksToAllPeers(localStream);
-    }
-
-    pc.ontrack = (e) => {
+  const handleUserJoined = useCallback(
+    async ({ socketId }) => {
       if (!mountedRef.current) return;
-      setRemoteStreams((prev) => ({
-        ...prev,
-        [from]: e.streams[0],
-      }));
-    };
 
-    try {
-      await pc.setRemoteDescription(offer);
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
+      console.log("User joined, creating offer for:", socketId);
 
-      socket.emit("conference:answer", {
-        to: from,
-        answer,
-      });
+      if (!localStream) {
+        console.warn("Local stream not ready, skipping offer");
+        return;
+      }
 
-      console.log("Answer sent to:", from);
-    } catch (err) {
-      console.error("Error handling offer:", err);
-    }
-  },
-  [socket, localStream]
-);
+      // 1️⃣ Create peer
+      const pc = createPeer(socketId, socket);
 
+      // ✅ FIX: Add tracks to THIS peer only
+      addTracksToPeer(pc, socketId);
 
-  // ✅ FIX 3: Keep handleAnswer simple
+      // 3️⃣ Receive remote tracks
+      pc.ontrack = (e) => {
+        if (!mountedRef.current) return;
+        setRemoteStreams((prev) => ({
+          ...prev,
+          [socketId]: e.streams[0],
+        }));
+      };
+
+      // 4️⃣ Create offer
+      try {
+        const offer = await pc.createOffer({
+          offerToReceiveAudio: true,
+          offerToReceiveVideo: true,
+        });
+
+        await pc.setLocalDescription(offer);
+
+        socket.emit("conference:offer", {
+          to: socketId,
+          offer,
+        });
+
+        console.log("Offer sent to:", socketId);
+      } catch (err) {
+        console.error("Offer creation failed:", err);
+      }
+    },
+    [socket, localStream, addTracksToPeer]
+  );
+
+  const handleOffer = useCallback(
+    async ({ from, offer }) => {
+      if (!mountedRef.current) return;
+
+      console.log("Received offer from:", from);
+
+      const pc = createPeer(from, socket);
+
+      // ✅ FIX: Add tracks to THIS peer only
+      addTracksToPeer(pc, from);
+
+      pc.ontrack = (e) => {
+        if (!mountedRef.current) return;
+        setRemoteStreams((prev) => ({
+          ...prev,
+          [from]: e.streams[0],
+        }));
+      };
+
+      try {
+        await pc.setRemoteDescription(offer);
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        socket.emit("conference:answer", {
+          to: from,
+          answer,
+        });
+
+        console.log("Answer sent to:", from);
+      } catch (err) {
+        console.error("Error handling offer:", err);
+      }
+    },
+    [socket, addTracksToPeer]
+  );
+
   const handleAnswer = useCallback(async ({ from, answer }) => {
     if (!mountedRef.current) return;
     
@@ -461,6 +500,7 @@ const handleOffer = useCallback(
     console.log("User left:", socketId);
     
     removePeer(socketId);
+    peersWithTracksRef.current.delete(socketId);
     setRemoteStreams(prev => {
       const copy = { ...prev };
       delete copy[socketId];
@@ -477,8 +517,10 @@ const handleOffer = useCallback(
     mountedRef.current = true;
     const mounted = () => mountedRef.current;
 
+    // ✅ FIX 4: Handle participants update from server ONLY
     const handleParticipantsUpdate = ({ participants }) => {
       if (!mounted()) return;
+      // Server is the single source of truth
       setParticipants(participants || []);
     };
 
@@ -546,20 +588,6 @@ const handleOffer = useCallback(
       showNotification("You have been removed from the conference by the admin", "error");
     };
 
-    const handleMediaUpdate = ({ socketId, micOn, camOn }) => {
-      if (!mounted()) return;
-
-      if (socketId === socket.id) return;
-
-      setParticipants(prev =>
-        prev.map(p =>
-          p.socketId === socketId
-            ? { ...p, micOn, camOn }
-            : p
-        )
-      );
-    };
-
     // Setup socket listeners
     socket.on("conference:user-joined", handleUserJoined);
     socket.on("conference:offer", handleOffer);
@@ -575,7 +603,6 @@ const handleOffer = useCallback(
     socket.on("conference:force-mute", handleForceMute);
     socket.on("conference:force-camera-off", handleForceCameraOff);
     socket.on("conference:removed-by-admin", handleRemovedByAdmin);
-    socket.on("conference:media-update", handleMediaUpdate);
     
     return () => {
       mountedRef.current = false;      
@@ -595,7 +622,6 @@ const handleOffer = useCallback(
       socket.off("conference:force-mute", handleForceMute);
       socket.off("conference:force-camera-off", handleForceCameraOff);
       socket.off("conference:removed-by-admin", handleRemovedByAdmin);
-      socket.off("conference:media-update", handleMediaUpdate);
     };
   }, [
     conferenceId, 
@@ -609,34 +635,23 @@ const handleOffer = useCallback(
     handleOffer, 
     handleAnswer, 
     handleIceCandidate, 
-    handleUserLeft
+    handleUserLeft,
+    addTracksToPeer
   ]);
   
-  // ✅ FIX 4: Handle localStream changes - add tracks to existing peers
-  useEffect(() => {
-    if (!localStream) return;
-    
-    console.log("Local stream available, adding tracks to existing peers");
-    addTracksToAllPeers(localStream);
-    
-  }, [localStream]);
-  
-  // ✅ Use sendSpeakingStatus instead of raw socket emit (optional but cleaner)
+  // ✅ REMOVED: The problematic useEffect that was adding tracks to all peers
+
+  // Use sendSpeakingStatus instead of raw socket emit
   useEffect(() => {
     if (!localStream || !speakerModeEnabled) return;
 
     const cleanup = startSpeakerDetection((speaking) => {
       if (!speakerModeEnabled) return;
-
-      // ✅ Optional: Use the service function instead of raw emit
       sendSpeakingStatus(speaking);
     });
 
     return cleanup;
-  }, [
-    localStream,
-    speakerModeEnabled,
-  ]);
+  }, [localStream, speakerModeEnabled]);
 
   // Admin override effect for speaker mode
   useEffect(() => {
@@ -647,7 +662,6 @@ const handleOffer = useCallback(
     
     const shouldSpeak = activeSpeaker === socket.id || isAdminOrManager;
     
-    // ✅ FIX: Safer auto-mute logic (only if mic is ON)
     audioTracks.forEach(track => {
       if (shouldSpeak && !track.enabled) {
         track.enabled = true;
@@ -751,13 +765,22 @@ const handleOffer = useCallback(
   const activeSpeakerName = activeSpeakerParticipant?.userName || 
     (activeSpeaker === socket.id ? "You" : `User ${activeSpeaker?.slice(0, 4)}`);
 
-  // ✅ FIX: Guard admin UI until participants are loaded
+  // ✅ FIX 4: Proper participants count logic
+  const participantsLoaded = Array.isArray(participants);
   const inConference = Boolean(conferenceId);
-  const participantsLoaded = participants.length > 0; // keep for counts only
-
 
   return (
     <Box sx={{ display: "flex", height: "100vh", background: "#000" }}>
+      {/* ✅ FIX 1: Hidden local video element that NEVER unmounts */}
+      <Box sx={{ display: "none" }}>
+        <video
+          ref={localVideoRef}
+          autoPlay
+          muted
+          playsInline
+        />
+      </Box>
+
       <Box sx={{ 
         flex: 1, 
         display: "flex", 
@@ -801,7 +824,7 @@ const handleOffer = useCallback(
               </IconButton>
             </Tooltip>
             
-            {participantsLoaded && (
+            {participantsLoaded && participants.length > 0 && (
               <Tooltip title={speakerModeEnabled ? "Disable Speaker Mode" : "Enable Speaker Mode"}>
                 <IconButton
                   onClick={toggleSpeakerMode}
@@ -865,15 +888,6 @@ const handleOffer = useCallback(
                 Speaker Mode Active
               </Typography>
             </Box>
-
-            {!activeSpeaker && (
-  <VideoTile
-    videoRef={localVideoRef}
-    label="You"
-    large
-  />
-)}
-
             
             {activeSpeaker && (
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -912,10 +926,12 @@ const handleOffer = useCallback(
         {layout === LAYOUT.PRESENTATION ? (
           <>
             <Box sx={{ flex: 1, mb: 2 }}>
+              {/* ✅ FIX 1: Use stream prop instead of videoRef for local video */}
               <VideoTile
-                videoRef={localVideoRef}
+                stream={localStream}
                 label={screenSharer === "me" ? "You (Presenting)" : "Presenter"}
                 isScreen
+                isLocal
                 isActiveSpeaker={speakerModeEnabled && activeSpeaker === socket.id}
               />
             </Box>
@@ -959,9 +975,11 @@ const handleOffer = useCallback(
             {activeSpeaker && (
               <Box sx={{ flex: 2, minHeight: "60%" }}>
                 {activeSpeaker === socket.id ? (
+                  // ✅ FIX 1: Use stream prop for local video
                   <VideoTile 
-                    videoRef={localVideoRef} 
+                    stream={localStream}
                     label="You (Speaking)"
+                    isLocal
                     isActiveSpeaker={true}
                     large
                   >
@@ -996,9 +1014,11 @@ const handleOffer = useCallback(
             }}>
               {activeSpeaker !== socket.id && (
                 <Box sx={{ position: "relative" }}>
+                  {/* ✅ FIX 1: Use stream prop for local video */}
                   <VideoTile 
-                    videoRef={localVideoRef} 
+                    stream={localStream}
                     label="You"
+                    isLocal
                     small
                     isActiveSpeaker={false}
                   />
@@ -1050,8 +1070,9 @@ const handleOffer = useCallback(
             overflow: "auto",
           }}>
             <Box sx={{ position: "relative" }}>
+              {/* ✅ FIX 1: Use stream prop for local video */}
               <VideoTile 
-                videoRef={localVideoRef} 
+                stream={localStream}
                 label="You"
                 isLocal
                 isActiveSpeaker={speakerModeEnabled && activeSpeaker === socket.id}
@@ -1298,8 +1319,9 @@ const handleOffer = useCallback(
         </Box>
 
         <Box sx={{ mt: 1, display: "flex", justifyContent: "center", alignItems: "center", gap: 1 }}>
+          {/* ✅ FIX 4: Show correct participant count */}
           <Typography color="#aaa" variant="caption">
-            Participants: {participants.length}
+            Participants: {participants.length || 1}
           </Typography>
           <Typography color="#aaa" variant="caption">
             • Hands Raised: {raisedHands.length}
