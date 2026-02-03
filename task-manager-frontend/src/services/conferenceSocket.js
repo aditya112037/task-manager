@@ -42,15 +42,24 @@ const safeGetUserMedia = async (constraints) => {
     return await navigator.mediaDevices.getUserMedia(constraints);
   } catch (error) {
     console.error("getUserMedia failed:", error.name, error.message);
-    
-    // Stop all tracks if partially initialized
-    if (error.name === 'NotReadableError') {
-      console.warn("Camera/mic already in use - stopping attempts");
+
+    // ✅ HANDLE CAMERA BUSY (Zoom-style)
+    if (error.name === "NotReadableError") {
+      console.warn("Camera busy. Retrying after delay...");
+
+      await new Promise(res => setTimeout(res, 800));
+
+      try {
+        return await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (retryError) {
+        console.error("Retry failed:", retryError.name);
+      }
     }
-    
-    throw error;
+
+    return null; // Do NOT throw
   }
 };
+
 
 /* ----------------------------------------------------
    MEDIA INITIALIZATION - ATOMICALLY LOCKED
@@ -92,9 +101,7 @@ export const initMedia = async () => {
     return null;
   }
 
-  // SET LOCKS
-  locks.media.initAttempted = true;
-  locks.media.initInProgress = true;
+
 
   try {
     console.log("Initializing media (one-time attempt)...");
@@ -180,6 +187,9 @@ export const joinConference = (conferenceId) => {
   // SET LOCKS
   locks.conference.joinInProgress = true;
   locks.conference.currentConferenceId = conferenceId;
+    // SET LOCKS
+  locks.media.initAttempted = true;
+  locks.media.initInProgress = true;
 
   console.log("Joining conference (atomic):", conferenceId);
   
