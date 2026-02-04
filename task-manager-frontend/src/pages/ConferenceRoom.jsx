@@ -452,7 +452,7 @@ useEffect(() => {
       camOn,
     }];
   });
-}, [currentUser, socket?.id]);
+}, [currentUser, socket?.id, camOn, micOn]);
 
   const handleOffer = useCallback(
     async ({ from, offer }) => {
