@@ -170,11 +170,16 @@ module.exports = function registerConferenceSocket(io, socket) {
         console.log("⏳ Conference empty, scheduling auto-end:", resolvedConference.conferenceId);
 
         resolvedConference.emptyTimeout = setTimeout(() => {
-          const fresh = getConference(resolvedConference.conferenceId);
-          if (fresh && fresh.participants.size === 0) {
-            endConferenceAuthoritative(fresh, "empty");
-          }
-        }, EMPTY_END_DELAY);
+  const fresh = conferences.get(resolvedConference.conferenceId);
+
+  if (
+    fresh &&
+    fresh.status === "active" &&
+    fresh.participants.size === 0
+  ) {
+    endConferenceAuthoritative(fresh, "empty");
+  }
+}, EMPTY_END_DELAY);
       }
     }
   };
@@ -187,7 +192,7 @@ module.exports = function registerConferenceSocket(io, socket) {
     const conference = getConferenceByTeamId(teamId);
 
     // ✅ FIXED: getConferenceByTeamId already returns only active conferences
-    if (!conference) {
+    if (!conference || conference.emptyTimeout) {
       socket.emit("conference:state", { active: false });
       return;
     }
@@ -298,7 +303,7 @@ module.exports = function registerConferenceSocket(io, socket) {
       const participants = Array.from(conference.participants.values());
 
       // 🔐 Authoritative participants list
-      io.to(getConferenceRoom(conferenceId)).emit(
+      socket.to(getConferenceRoom(conferenceId)).emit(
         "conference:participants",
         { participants }
       );
@@ -414,7 +419,7 @@ module.exports = function registerConferenceSocket(io, socket) {
 
       // 🔐 Single source of truth
       const participants = Array.from(conference.participants.values());
-      io.to(getConferenceRoom(conferenceId)).emit(
+      socket.to(getConferenceRoom(conferenceId)).emit(
         "conference:participants",
         { participants }
       );
@@ -572,10 +577,12 @@ module.exports = function registerConferenceSocket(io, socket) {
       
       if (!enabled) {
         conference.speakerMode.activeSpeaker = null;
-        if (conference.speakerMode.speakerTimeouts) {
-          conference.speakerMode.speakerTimeouts.forEach(timeout => clearTimeout(timeout));
-          conference.speakerMode.speakerTimeouts.clear();
-        }
+       if (conference.speakerMode?.speakerTimeouts) {
+  conference.speakerMode.speakerTimeouts.forEach(clearTimeout);
+  conference.speakerMode.speakerTimeouts.clear();
+}
+conference.speakerMode.activeSpeaker = null;
+
       }
 
       io.to(getConferenceRoom(conferenceId)).emit("conference:speaker-mode-toggled", {
@@ -596,7 +603,19 @@ module.exports = function registerConferenceSocket(io, socket) {
 
   socket.on("conference:speaking", ({ conferenceId, speaking }) => {
     const conference = getConference(conferenceId);
-    if (!conference || !conference.speakerMode.enabled) return;
+    if (!conference) return;
+
+if (!conference.speakerMode.enabled) {
+  if (conference.speakerMode.activeSpeaker) {
+    conference.speakerMode.activeSpeaker = null;
+    io.to(getConferenceRoom(conferenceId)).emit(
+      "conference:active-speaker",
+      { socketId: null }
+    );
+  }
+  return;
+}
+
 
     const participant = conference.participants.get(socket.id);
     if (!participant) return;
