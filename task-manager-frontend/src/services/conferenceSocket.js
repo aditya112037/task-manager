@@ -188,8 +188,7 @@ export const joinConference = (conferenceId) => {
   locks.conference.joinInProgress = true;
   locks.conference.currentConferenceId = conferenceId;
     // SET LOCKS
-  locks.media.initAttempted = true;
-  locks.media.initInProgress = true;
+
 
   console.log("Joining conference (atomic):", conferenceId);
   
