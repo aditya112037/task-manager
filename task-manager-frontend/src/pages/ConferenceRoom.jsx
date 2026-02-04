@@ -436,6 +436,24 @@ export default function ConferenceRoom() {
     [socket, localStream, addTracksToPeer]
   );
 
+useEffect(() => {
+  if (!currentUser || !socket?.id) return;
+
+  // Inject local participant immediately (UI truth)
+  setParticipants(prev => {
+    if (prev.some(p => p.socketId === socket.id)) return prev;
+
+    return [{
+      userId: currentUser._id,
+      socketId: socket.id,
+      name: currentUser.name,
+      role: "participant", // will be corrected by server
+      micOn,
+      camOn,
+    }];
+  });
+}, [currentUser, socket?.id]);
+
   const handleOffer = useCallback(
     async ({ from, offer }) => {
       if (!mountedRef.current) return;
@@ -1316,7 +1334,7 @@ export default function ConferenceRoom() {
         <Box sx={{ mt: 1, display: "flex", justifyContent: "center", alignItems: "center", gap: 1 }}>
           {/* ✅ FIX 4: Show correct participant count */}
           <Typography color="#aaa" variant="caption">
-            Participants: {Math.max(participants.length, 1)}
+            Participants: {participants.length}
           </Typography>
           <Typography color="#aaa" variant="caption">
             • Hands Raised: {raisedHands.length}
