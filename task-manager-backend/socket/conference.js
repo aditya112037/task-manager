@@ -303,7 +303,7 @@ module.exports = function registerConferenceSocket(io, socket) {
       const participants = Array.from(conference.participants.values());
 
       // 🔐 Authoritative participants list
-      socket.to(getConferenceRoom(conferenceId)).emit(
+      io.to(getConferenceRoom(conferenceId)).emit(
         "conference:participants",
         { participants }
       );
@@ -419,7 +419,7 @@ module.exports = function registerConferenceSocket(io, socket) {
 
       // 🔐 Single source of truth
       const participants = Array.from(conference.participants.values());
-      socket.to(getConferenceRoom(conferenceId)).emit(
+      io.to(getConferenceRoom(conferenceId)).emit(
         "conference:participants",
         { participants }
       );
