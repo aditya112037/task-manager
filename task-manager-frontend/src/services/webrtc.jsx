@@ -193,6 +193,8 @@ export const getLocalState = () => ({
   peers: Object.keys(peers).length,
 });
 
+export const getPeerIds = () => Object.keys(peers);
+
 export const getPeers = () => peers;
 
 /* -----------------------------

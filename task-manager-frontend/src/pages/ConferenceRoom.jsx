@@ -27,7 +27,6 @@ import {
   raiseHand, 
   lowerHand, 
   cleanupConference,
-  sendSpeakingStatus,
   joinConference,
 } from "../services/conferenceSocket";
 import RaiseHandIndicator from "../components/Conference/RaiseHandIndicator";
