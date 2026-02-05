@@ -1,6 +1,6 @@
 // services/conferenceSocket.js - UPDATED VERSION
 import { getSocket } from "./socket";
-import { getLocalStream, cleanup as cleanupWebRTC, __setLocalStream } from "./webrtc";
+import { getLocalStream, cleanup as cleanupWebRTC } from "./webrtc";
 
 /* ----------------------------------------------------
    ATOMIC LOCKS - Module-level, single source of truth
