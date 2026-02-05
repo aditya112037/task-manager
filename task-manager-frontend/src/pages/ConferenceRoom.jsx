@@ -50,13 +50,9 @@ import {
   startScreen,
   stopScreen,
   syncPeerTracks,
-  startSpeakerDetection,
-  stopSpeakerDetection,
   getCameraStream,
   getScreenStream,
   getPeerIds,
-  setAudioEnabled,
-  setCameraEnabled,
   getAudioStream,
 } from "../services/webrtc";
 import VideoTile from "../components/Conference/VideoTile";
@@ -117,7 +113,6 @@ export default function ConferenceRoom() {
   }, []);
 
   const leaveAndCleanupLocal = useCallback(() => {
-    stopSpeakerDetection();
     stopCamera();
     stopAudio();
     if (sharingScreen) {
@@ -134,7 +129,6 @@ export default function ConferenceRoom() {
     
     conferenceEndedRef.current = true;
     hasJoinedRef.current = false;
-    stopSpeakerDetection();
     cleanupConference();
     setRemoteStreams({});
     showNotification("Conference has ended", "info");
@@ -617,7 +611,6 @@ export default function ConferenceRoom() {
     
     return () => {
       mountedRef.current = false;      
-      stopSpeakerDetection();
       
       socket.off("conference:user-joined", handleUserJoined);
       socket.off("conference:offer", handleOffer);
@@ -654,12 +647,10 @@ export default function ConferenceRoom() {
   useEffect(() => {
     if (!speakerModeEnabled || !micOn) return;
 
-    const cleanup = startSpeakerDetection((speaking) => {
-      if (!speakerModeEnabled) return;
-      sendSpeakingStatus(speaking);
-    });
+  //matte kudasai
+  //nigga
 
-    return cleanup;
+    return () => {};
   }, [speakerModeEnabled, micOn]);
 
   // Admin override effect for speaker mode
