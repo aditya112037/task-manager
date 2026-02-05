@@ -121,7 +121,7 @@ export const initMedia = async () => {
     });
 
     // ✅ FIX: Set the local stream in webrtc module after successful getUserMedia
-    __setLocalStream(stream);
+   
     locks.media.initialized = true;
     
     console.log("Media initialized successfully");
