@@ -1,16 +1,11 @@
-// services/conferenceSocket.js - UPDATED VERSION
+// services/conferenceSocket.js - PURE SIGNALING VERSION
 import { getSocket } from "./socket";
-import { getLocalStream, cleanup as cleanupWebRTC } from "./webrtc";
 
 /* ----------------------------------------------------
    ATOMIC LOCKS - Module-level, single source of truth
+   MEDIA LOCKS REMOVED - WebRTC owns media now
 ---------------------------------------------------- */
 const locks = {
-  media: {
-    initAttempted: false,
-    initInProgress: false,
-    initialized: false
-  },
   conference: {
     joinInProgress: false,
     joined: false,
@@ -32,127 +27,6 @@ const getSafeSocket = () => {
     return null;
   }
   return socket;
-};
-
-/**
- * Safe media access with cleanup
- */
-const safeGetUserMedia = async (constraints) => {
-  try {
-    return await navigator.mediaDevices.getUserMedia(constraints);
-  } catch (error) {
-    console.error("getUserMedia failed:", error.name, error.message);
-
-    // ✅ HANDLE CAMERA BUSY (Zoom-style)
-    if (error.name === "NotReadableError") {
-      console.warn("Camera busy. Retrying after delay...");
-
-      await new Promise(res => setTimeout(res, 800));
-
-      try {
-        return await navigator.mediaDevices.getUserMedia(constraints);
-      } catch (retryError) {
-        console.error("Retry failed:", retryError.name);
-      }
-    }
-
-    return null; // Do NOT throw
-  }
-};
-
-
-/* ----------------------------------------------------
-   MEDIA INITIALIZATION - ATOMICALLY LOCKED
-   Rule: One attempt per session, no retries
----------------------------------------------------- */
-
-/**
- * Initializes media once and only once
- * @returns {Promise<MediaStream|null>} Stream or null on failure
- */
-export const initMedia = async () => {
-  // ATOMIC CHECK: Already attempted? Stop.
-  if (locks.media.initAttempted) {
-    console.warn("Media initialization already attempted this session. Returning existing stream or null.");
-    
-    const existingStream = getLocalStream();
-    if (existingStream && existingStream.active) {
-      return existingStream;
-    }
-    return null;
-  }
-
-  // ATOMIC LOCK: Mark attempt in progress
-  if (locks.media.initInProgress) {
-    console.warn("Media initialization already in progress. Waiting...");
-    
-    // Wait up to 2 seconds for completion
-    for (let i = 0; i < 20; i++) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-      if (!locks.media.initInProgress) {
-        const existingStream = getLocalStream();
-        if (existingStream && existingStream.active) {
-          return existingStream;
-        }
-        return null;
-      }
-    }
-    console.warn("Media init timeout, returning null");
-    return null;
-  }
-
-
-
-  try {
-    console.log("Initializing media (one-time attempt)...");
-    
-    const stream = await safeGetUserMedia({
-      video: {
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-        frameRate: { ideal: 30 },
-        facingMode: "user"
-      },
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true
-      }
-    });
-
-    // ✅ FIX: Set the local stream in webrtc module after successful getUserMedia
-   
-    locks.media.initialized = true;
-    
-    console.log("Media initialized successfully");
-    return stream;
-
-  } catch (error) {
-    console.error("Media initialization failed:", error.message);
-    
-    // User-friendly error without throwing
-    const errorMap = {
-      'NotReadableError': 'Camera/microphone is already in use by another application.',
-      'NotFoundError': 'No camera or microphone found.',
-      'NotAllowedError': 'Permission denied for camera/microphone.',
-      'AbortError': 'Camera/microphone access was aborted.',
-      'OverconstrainedError': 'Camera constraints could not be met.'
-    };
-    
-    console.warn(errorMap[error.name] || 'Failed to access camera/microphone.');
-    return null;
-    
-  } finally {
-    // RELEASE PROGRESS LOCK (keep attempted lock)
-    locks.media.initInProgress = false;
-  }
-};
-
-/**
- * Check if media was initialized (safe, no side effects)
- */
-export const isMediaInitialized = () => {
-  return locks.media.initialized;
 };
 
 /* ----------------------------------------------------
@@ -187,8 +61,6 @@ export const joinConference = (conferenceId) => {
   // SET LOCKS
   locks.conference.joinInProgress = true;
   locks.conference.currentConferenceId = conferenceId;
-    // SET LOCKS
-
 
   console.log("Joining conference (atomic):", conferenceId);
   
@@ -366,9 +238,7 @@ export const sendSpeakingStatus = (speaking) => {
 export const getConferenceState = () => ({
   joined: locks.conference.joined,
   joinInProgress: locks.conference.joinInProgress,
-  conferenceId: locks.conference.currentConferenceId,
-  mediaInitialized: locks.media.initialized,
-  mediaInitAttempted: locks.media.initAttempted
+  conferenceId: locks.conference.currentConferenceId
 });
 
 /**
@@ -379,7 +249,7 @@ export const isInConference = () => {
 };
 
 /* ----------------------------------------------------
-   EVENT LISTENER MANAGEMENT (UNCHANGED, WORKS WELL)
+   EVENT LISTENER MANAGEMENT
 ---------------------------------------------------- */
 
 /**
@@ -408,6 +278,7 @@ export const setupConferenceListeners = (handlers) => {
     onOffer,
     onAnswer,
     onIceCandidate,
+    onScreenShareUpdate,
   } = handlers;
 
   // Setup all listeners
@@ -425,6 +296,7 @@ export const setupConferenceListeners = (handlers) => {
   if (onOffer) socket.on("conference:offer", onOffer);
   if (onAnswer) socket.on("conference:answer", onAnswer);
   if (onIceCandidate) socket.on("conference:ice-candidate", onIceCandidate);
+  if (onScreenShareUpdate) socket.on("conference:screen-share-update", onScreenShareUpdate);
 
   console.log("Conference listeners setup complete");
 
@@ -446,38 +318,27 @@ export const setupConferenceListeners = (handlers) => {
     if (onOffer) socket.off("conference:offer", onOffer);
     if (onAnswer) socket.off("conference:answer", onAnswer);
     if (onIceCandidate) socket.off("conference:ice-candidate", onIceCandidate);
+    if (onScreenShareUpdate) socket.off("conference:screen-share-update", onScreenShareUpdate);
     
     console.log("Conference listeners cleaned up");
   };
 };
 
 /* ----------------------------------------------------
-   CLEANUP - RESETS ALL LOCKS
+   CLEANUP - PURE SIGNALING ONLY
 ---------------------------------------------------- */
 
 /**
- * Complete cleanup of all conference resources
+ * Complete cleanup of all conference resources (signaling only)
  */
 export const cleanupConference = () => {
-  console.log("Performing complete conference cleanup");
-  
-  // Leave conference if joined
+  console.log("Conference cleanup (signaling only)");
+
   if (locks.conference.joined) {
     leaveConference();
   }
-  
-  // Cleanup WebRTC
-  try {
-    cleanupWebRTC();
-  } catch (error) {
-    console.warn("Error cleaning up WebRTC:", error);
-  }
-  
-  // ✅ FIX 3: Keep initAttempted true for session safety
-  locks.media.initInProgress = false;
-  locks.media.initialized = false;
-  
-  console.log("Cleanup complete. Locks reset.");
+
+  console.log("Conference socket cleanup complete");
 };
 
 /* ----------------------------------------------------
@@ -489,10 +350,6 @@ export const cleanupConference = () => {
  */
 export const logLockStatus = () => {
   console.group("Conference Socket Locks");
-  console.log("MEDIA:");
-  console.log("  initAttempted:", locks.media.initAttempted);
-  console.log("  initInProgress:", locks.media.initInProgress);
-  console.log("  initialized:", locks.media.initialized);
   console.log("CONFERENCE:");
   console.log("  joinInProgress:", locks.conference.joinInProgress);
   console.log("  joined:", locks.conference.joined);
@@ -505,9 +362,6 @@ export const logLockStatus = () => {
  */
 export const forceResetLocks = () => {
   console.warn("FORCING RESET OF ALL LOCKS");
-  locks.media.initAttempted = false;
-  locks.media.initInProgress = false;
-  locks.media.initialized = false;
   locks.conference.joinInProgress = false;
   locks.conference.joined = false;
   locks.conference.currentConferenceId = null;
