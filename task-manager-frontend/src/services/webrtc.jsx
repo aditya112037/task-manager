@@ -197,6 +197,15 @@ export const getPeerIds = () => Object.keys(peers);
 
 export const getPeers = () => peers;
 
+export const getLocalStream = () => {
+  return (
+    screenStream ||
+    cameraStream ||
+    audioStream ||
+    null
+  );
+};
+
 /* -----------------------------
    CLEANUP
 ------------------------------ */
