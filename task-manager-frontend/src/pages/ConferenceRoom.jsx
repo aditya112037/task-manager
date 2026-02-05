@@ -29,7 +29,6 @@ import {
   cleanupConference,
   sendSpeakingStatus,
   joinConference,
-  initMedia,
 } from "../services/conferenceSocket";
 import RaiseHandIndicator from "../components/Conference/RaiseHandIndicator";
 import ParticipantsPanel from "../components/Conference/ParticipantsPanel";
@@ -44,12 +43,21 @@ import { getSocket } from "../services/socket";
 import {
   createPeer,
   removePeer,
-  toggleAudio,
-  toggleVideo,
-  startScreenShare,
-  stopScreenShare,
+  startAudio,
+  stopAudio,
+  startCamera,
+  stopCamera,
+  startScreen,
+  stopScreen,
+  syncPeerTracks,
   startSpeakerDetection,
   stopSpeakerDetection,
+  getCameraStream,
+  getScreenStream,
+  getPeerIds,
+  setAudioEnabled,
+  setCameraEnabled,
+  getAudioStream,
 } from "../services/webrtc";
 import VideoTile from "../components/Conference/VideoTile";
 import { useAuth } from "../context/AuthContext";
@@ -66,21 +74,19 @@ export default function ConferenceRoom() {
   const socket = getSocket();
   const { user: currentUser } = useAuth();
 
-  const localVideoRef = useRef(null);
-  const [localStream, setLocalStreamState] = useState(null);
-
   const [adminMenuAnchor, setAdminMenuAnchor] = useState(null);
   const [selectedParticipantId, setSelectedParticipantId] = useState(null);
   const [participantsPanelOpen, setParticipantsPanelOpen] = useState(true);
 
-  const [remoteStreams, setRemoteStreams] = useState({});
+  // ✅ ISSUE 2: Fix remoteStreams structure
+  const [remoteStreams, setRemoteStreams] = useState({}); // { socketId: { camera?: MediaStream, screen?: MediaStream } }
   const [layout, setLayout] = useState(LAYOUT.GRID);
-  const [screenSharer, setScreenSharer] = useState(null);
+  const [screenSharer, setScreenSharer] = useState(null); // socketId of who's sharing screen
   const [raisedHands, setRaisedHands] = useState([]);
   const [participants, setParticipants] = useState([]);
   const [handRaised, setHandRaised] = useState(false);
-  const [micOn, setMicOn] = useState(true);
-  const [camOn, setCamOn] = useState(true);  
+  const [micOn, setMicOn] = useState(false);
+  const [camOn, setCamOn] = useState(false);  
   const micOnRef = useRef(micOn);
   const camOnRef = useRef(camOn);
   const [sharingScreen, setSharingScreen] = useState(false);
@@ -92,9 +98,6 @@ export default function ConferenceRoom() {
   const mountedRef = useRef(true);
   const hasJoinedRef = useRef(false);
   const conferenceEndedRef = useRef(false);
-
-  // Track which peers already have tracks added
-  const peersWithTracksRef = useRef(new Set());
 
   // ✅ FIX 3: Proper role detection with memoization
   const myParticipant = useMemo(() => {
@@ -115,12 +118,16 @@ export default function ConferenceRoom() {
 
   const leaveAndCleanupLocal = useCallback(() => {
     stopSpeakerDetection();
+    stopCamera();
+    stopAudio();
+    if (sharingScreen) {
+      stopScreen();
+    }
     socket.emit("conference:leave");
     cleanupConference();
     setRemoteStreams({});
-    peersWithTracksRef.current.clear();
     navigate(-1);
-  }, [socket, navigate]);
+  }, [socket, navigate, sharingScreen]);
 
   const handleConferenceEnded = useCallback(() => {
     if (conferenceEndedRef.current) return;
@@ -130,56 +137,56 @@ export default function ConferenceRoom() {
     stopSpeakerDetection();
     cleanupConference();
     setRemoteStreams({});
-    peersWithTracksRef.current.clear();
     showNotification("Conference has ended", "info");
     navigate("/teams");
   }, [navigate, showNotification]);
 
-  const handleToggleMic = useCallback(() => {
+  const handleToggleMic = useCallback(async () => {
     if (speakerModeEnabled && activeSpeaker !== socket.id && !isAdminOrManager) {
       showNotification("Only the active speaker can unmute", "warning");
       return;
     }
     
-    if (!localStream) {
-      showNotification("No microphone available", "error");
-      return;
+    try {
+      if (micOn) {
+        stopAudio();
+        setMicOn(false);
+      } else {
+        await startAudio();
+        setMicOn(true);
+      }
+      
+      socket.emit("conference:media-update", {
+        conferenceId,
+        micOn: !micOn,
+        camOn,
+      });
+    } catch (error) {
+      console.error("Failed to toggle microphone:", error);
+      showNotification("Failed to toggle microphone", "error");
     }
-    
-    const newMicState = !micOn;
-    toggleAudio(newMicState);
-    setMicOn(newMicState);
-    
-    socket.emit("conference:media-update", {
-      conferenceId,
-      micOn: newMicState,
-      camOn,
-    });
-  }, [speakerModeEnabled, activeSpeaker, socket, isAdminOrManager, localStream, micOn, camOn, conferenceId, showNotification]);
+  }, [speakerModeEnabled, activeSpeaker, socket.id, isAdminOrManager, micOn, camOn, conferenceId, showNotification]);
 
-  const handleToggleCam = useCallback(() => {
-    if (!localStream) {
-      showNotification("Camera unavailable", "warning");
-      return;
+  const handleToggleCam = useCallback(async () => {
+    try {
+      if (camOn) {
+        stopCamera();
+        setCamOn(false);
+      } else {
+        await startCamera();
+        setCamOn(true);
+      }
+      
+      socket.emit("conference:media-update", {
+        conferenceId,
+        camOn: !camOn,
+        micOn,
+      });
+    } catch (error) {
+      console.error("Failed to toggle camera:", error);
+      showNotification("Failed to toggle camera", "error");
     }
-
-    const videoTrack = localStream.getVideoTracks()[0];
-    if (!videoTrack || videoTrack.readyState !== "live") {
-      showNotification("Camera not available. Please refresh.", "error");
-      setCamOn(false);
-      return;
-    }
-
-    const next = !videoTrack.enabled;
-    videoTrack.enabled = next;
-    setCamOn(next);
-
-    socket.emit("conference:media-update", {
-      conferenceId,
-      camOn: next,
-      micOn,
-    });
-  }, [localStream, micOn, conferenceId, socket, showNotification]);
+  }, [camOn, micOn, conferenceId, socket, showNotification]);
 
   const handleRaiseHand = useCallback(() => {
     if (!handRaised) {
@@ -193,35 +200,41 @@ export default function ConferenceRoom() {
   const handleScreenShare = useCallback(async () => {
     try {
       if (!sharingScreen) {
-        await startScreenShare(localVideoRef);
+        await startScreen();
+        
+        // ✅ ISSUE 3: Sync with all peers, not just streams
+        getPeerIds().forEach(syncPeerTracks);
+        
+        // ✅ ISSUE 5: Notify server about screen share
+        socket.emit("conference:screen-share", { 
+          active: true,
+          conferenceId 
+        });
+        
+        setSharingScreen(true);
+        setScreenSharer(socket.id);
         setLayout(LAYOUT.PRESENTATION);
-        setScreenSharer("me");
       } else {
-        await stopScreenShare(localVideoRef);
+        stopScreen();
+        
+        // ✅ ISSUE 5: Notify server about screen share stop
+        socket.emit("conference:screen-share", { 
+          active: false,
+          conferenceId 
+        });
+        
         setSharingScreen(false);
-        setLayout(LAYOUT.GRID);
         setScreenSharer(null);
+        setLayout(LAYOUT.GRID);
       }
-      setSharingScreen((v) => !v);
     } catch (error) {
       console.error("Screen share error:", error);
       showNotification("Screen share failed", "error");
     }
-  }, [sharingScreen, showNotification]);
-
-  // ✅ FIX 6: Force audio on sanity check
-  useEffect(() => {
-    if (!localStream) return;
-    localStream.getAudioTracks().forEach(track => {
-      if (!track.enabled) {
-        track.enabled = true;
-      }
-    });
-  }, [localStream]);
+  }, [sharingScreen, socket, conferenceId, showNotification]);
 
   // Initialize and join conference
   useEffect(() => {
-    const peersSet = peersWithTracksRef.current;
     if (!conferenceId) {
       showNotification("No conference ID provided", "error");
       navigate("/teams");
@@ -267,24 +280,23 @@ export default function ConferenceRoom() {
       }
 
       try {
-        // Step 1: Initialize media
-        const stream = await initMedia();
-        if (stream) {
-          setLocalStreamState(stream);
-          if (localVideoRef.current) {
-            localVideoRef.current.srcObject = stream;
-          }
-          showNotification("Media initialized successfully", "success");
-        } else {
-          showNotification("Joined conference without camera/microphone", "info");
-        }
-
-        // Step 2: Join conference
+        // ✅ Join conference FIRST (Zoom-style)
         hasJoinedRef.current = true;
         const joinSuccess = joinConference(conferenceId);
         if (!joinSuccess) {
           showNotification("Failed to join conference", "error");
         }
+
+        // Start media independently (non-blocking)
+        startAudio().catch(() => {
+          showNotification("Microphone permission denied", "warning");
+        });
+        
+        startCamera().catch(() => {
+          showNotification("Camera permission denied", "warning");
+        });
+        
+        showNotification("Joined conference successfully", "success");
       } catch (error) {
         console.error("Conference initialization error:", error);
         showNotification(`Failed to join: ${error.message}`, "error");
@@ -298,7 +310,6 @@ export default function ConferenceRoom() {
       if (hasJoinedRef.current && !conferenceEndedRef.current) {
         console.log("Component unmounting, cleaning up conference");
         cleanupConference();
-        peersSet.clear();
       }
     };
   }, [conferenceId, socket, navigate, showNotification]);
@@ -310,83 +321,61 @@ export default function ConferenceRoom() {
 
   // Audio analyser for mic level
   useEffect(() => {
-    if (!localStream) {
+    const audioStream = getAudioStream();
+    if (!audioStream || !micOn) {
       setMicLevel(0);
       return;
     }
     
-    const audioCtx = new AudioContext();
-    const analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 256;
-
-    const source = audioCtx.createMediaStreamSource(localStream);
-    source.connect(analyser);
-
-    const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-    let rafId;
-
-    const update = () => {
-      analyser.getByteFrequencyData(dataArray);
-      const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-      setMicLevel(prev => prev * 0.75 + avg * 0.25);
-      rafId = requestAnimationFrame(update);
-    };
-
-    update();
-
-    return () => {
-      cancelAnimationFrame(rafId);
-      analyser.disconnect();
-      source.disconnect();
-      audioCtx.close();
-    };
-  }, [localStream]);
-
-  useEffect(() => {
-  const handler = (e) => {
-    const { socketId, stream } = e.detail;
-    setRemoteStreams(prev => ({
-      ...prev,
-      [socketId]: stream
-    }));
-  };
-
-  window.addEventListener("webrtc:remote-stream", handler);
-  return () => window.removeEventListener("webrtc:remote-stream", handler);
-}, []);
-
-  // ✅ FIXED: Add tracks to peer ONCE only
-  const addTracksToPeer = useCallback((peer, socketId) => {
-    if (!peer || !localStream) return;
-    
-    // Check if tracks were already added to this peer
-    if (peersWithTracksRef.current.has(socketId)) {
-      console.log(`Tracks already added to peer ${socketId}, skipping`);
-      return;
-    }
-    
     try {
-      // Add all tracks from local stream
-      localStream.getTracks().forEach(track => {
-        // Check if this track is already being sent
-        const existingSenders = peer.getSenders();
-        const alreadySending = existingSenders.some(
-          sender => sender.track && sender.track.kind === track.kind
-        );
-        
-        if (!alreadySending) {
-          peer.addTrack(track, localStream);
-          console.log(`Added ${track.kind} track to peer ${socketId}`);
-        }
-      });
-      
-      // Mark this peer as having tracks added
-      peersWithTracksRef.current.add(socketId);
+      const audioCtx = new AudioContext();
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+
+      const source = audioCtx.createMediaStreamSource(audioStream);
+      source.connect(analyser);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+      let rafId;
+
+      const update = () => {
+        analyser.getByteFrequencyData(dataArray);
+        const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+        setMicLevel(prev => prev * 0.75 + avg * 0.25);
+        rafId = requestAnimationFrame(update);
+      };
+
+      update();
+
+      return () => {
+        cancelAnimationFrame(rafId);
+        analyser.disconnect();
+        source.disconnect();
+        audioCtx.close();
+      };
     } catch (error) {
-      console.error(`Error adding tracks to peer ${socketId}:`, error);
+      console.error("Mic level detection error:", error);
+      setMicLevel(0);
     }
-  }, [localStream]);
+  }, [micOn]);
+
+  // ✅ ISSUE 2: Updated remote stream handler
+  useEffect(() => {
+    const handler = (e) => {
+      const { socketId, kind, stream } = e.detail;
+      setRemoteStreams(prev => ({
+        ...prev,
+        [socketId]: {
+          ...prev[socketId],
+          [kind]: stream
+        }
+      }));
+    };
+
+    window.addEventListener("webrtc:remote-stream", handler);
+    return () => window.removeEventListener("webrtc:remote-stream", handler);
+  }, []);
 
   const handleUserJoined = useCallback(
     async ({ socketId }) => {
@@ -400,21 +389,13 @@ export default function ConferenceRoom() {
       // ✅ Only if I was already in the room
       if (!hasJoinedRef.current) return;
 
-      if (!localStream) {
-        console.warn("Local stream not ready, skipping offer");
-        return;
-      }
-
       // 1️⃣ Create peer
       const pc = createPeer(socketId, socket);
 
-      // ✅ FIX: Add tracks to THIS peer only
-      addTracksToPeer(socketId);
+      // ✅ Sync tracks with this peer
+      syncPeerTracks(socketId);
 
-      // 3️⃣ Receive remote tracks
-
-
-      // 4️⃣ Create offer
+      // 2️⃣ Create offer
       try {
         const offer = await pc.createOffer({
           offerToReceiveAudio: true,
@@ -433,26 +414,26 @@ export default function ConferenceRoom() {
         console.error("Offer creation failed:", err);
       }
     },
-    [socket, localStream, addTracksToPeer]
+    [socket]
   );
 
-useEffect(() => {
-  if (!currentUser || !socket?.id) return;
+  useEffect(() => {
+    if (!currentUser || !socket?.id) return;
 
-  // Inject local participant immediately (UI truth)
-  setParticipants(prev => {
-    if (prev.some(p => p.socketId === socket.id)) return prev;
+    // Inject local participant immediately (UI truth)
+    setParticipants(prev => {
+      if (prev.some(p => p.socketId === socket.id)) return prev;
 
-    return [{
-      userId: currentUser._id,
-      socketId: socket.id,
-      name: currentUser.name,
-      role: "participant", // will be corrected by server
-      micOn,
-      camOn,
-    }];
-  });
-}, [currentUser, socket?.id, camOn, micOn]);
+      return [{
+        userId: currentUser._id,
+        socketId: socket.id,
+        name: currentUser.name,
+        role: "participant", // will be corrected by server
+        micOn,
+        camOn,
+      }];
+    });
+  }, [currentUser, socket?.id, camOn, micOn]);
 
   const handleOffer = useCallback(
     async ({ from, offer }) => {
@@ -462,13 +443,12 @@ useEffect(() => {
 
       const pc = createPeer(from, socket);
 
-      // ✅ FIX: Add tracks to THIS peer only
-      addTracksToPeer(from);
-
-
-
       try {
         await pc.setRemoteDescription(offer);
+        
+        // ✅ Sync tracks with this peer
+        syncPeerTracks(from);
+
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
 
@@ -482,7 +462,7 @@ useEffect(() => {
         console.error("Error handling offer:", err);
       }
     },
-    [socket, addTracksToPeer]
+    [socket]
   );
 
   const handleAnswer = useCallback(async ({ from, answer }) => {
@@ -515,27 +495,46 @@ useEffect(() => {
     console.log("User left:", socketId);
     
     removePeer(socketId);
-    peersWithTracksRef.current.delete(socketId);
     setRemoteStreams(prev => {
       const copy = { ...prev };
       delete copy[socketId];
       return copy;
     });
     
+    if (screenSharer === socketId) {
+      setScreenSharer(null);
+      setLayout(LAYOUT.GRID);
+    }
+    
     if (activeSpeaker === socketId) {
       console.log("Active speaker left, clearing speaker");
       setActiveSpeaker(null);
     }
-  }, [activeSpeaker]);
+  }, [activeSpeaker, screenSharer]);
+
+  // ✅ ISSUE 5: Handle screen share updates from others
+  const handleScreenShareUpdate = useCallback(({ socketId, active }) => {
+    if (!mountedRef.current) return;
+    
+    console.log("Screen share update:", socketId, active);
+    
+    if (active) {
+      setScreenSharer(socketId);
+      setLayout(LAYOUT.PRESENTATION);
+    } else {
+      if (screenSharer === socketId) {
+        setScreenSharer(null);
+        setLayout(LAYOUT.GRID);
+      }
+    }
+  }, [screenSharer]);
 
   useEffect(() => {
     mountedRef.current = true;
     const mounted = () => mountedRef.current;
 
-    // ✅ FIX 4: Handle participants update from server ONLY
     const handleParticipantsUpdate = ({ participants }) => {
       if (!mounted()) return;
-      // Server is the single source of truth
       setParticipants(participants || []);
     };
 
@@ -579,21 +578,17 @@ useEffect(() => {
     const handleForceMute = () => {
       if (!mounted()) return;
       console.log("Admin forced mute");
-      if (localStream) {
-        toggleAudio(false);
-        setMicOn(false);
-        showNotification("Admin has muted your microphone", "warning");
-      }
+      stopAudio();
+      setMicOn(false);
+      showNotification("Admin has muted your microphone", "warning");
     };
 
     const handleForceCameraOff = () => {
       if (!mounted()) return;
       console.log("Admin turned off camera");
-      if (localStream) {
-        toggleVideo(false);
-        setCamOn(false);
-        showNotification("Admin has turned off your camera", "warning");
-      }
+      stopCamera();
+      setCamOn(false);
+      showNotification("Admin has turned off your camera", "warning");
     };
 
     const handleRemovedByAdmin = () => {
@@ -618,6 +613,7 @@ useEffect(() => {
     socket.on("conference:force-mute", handleForceMute);
     socket.on("conference:force-camera-off", handleForceCameraOff);
     socket.on("conference:removed-by-admin", handleRemovedByAdmin);
+    socket.on("conference:screen-share-update", handleScreenShareUpdate);
     
     return () => {
       mountedRef.current = false;      
@@ -637,10 +633,10 @@ useEffect(() => {
       socket.off("conference:force-mute", handleForceMute);
       socket.off("conference:force-camera-off", handleForceCameraOff);
       socket.off("conference:removed-by-admin", handleRemovedByAdmin);
+      socket.off("conference:screen-share-update", handleScreenShareUpdate);
     };
   }, [
     conferenceId, 
-    localStream,
     currentUser, 
     socket, 
     showNotification, 
@@ -651,12 +647,12 @@ useEffect(() => {
     handleAnswer, 
     handleIceCandidate, 
     handleUserLeft,
-    addTracksToPeer
+    handleScreenShareUpdate,
   ]);
   
-  // Use sendSpeakingStatus instead of raw socket emit
+  // ✅ ISSUE 4: Speaker detection with guard
   useEffect(() => {
-    if (!localStream || !speakerModeEnabled) return;
+    if (!speakerModeEnabled || !micOn) return;
 
     const cleanup = startSpeakerDetection((speaking) => {
       if (!speakerModeEnabled) return;
@@ -664,29 +660,21 @@ useEffect(() => {
     });
 
     return cleanup;
-  }, [localStream, speakerModeEnabled]);
+  }, [speakerModeEnabled, micOn]);
 
   // Admin override effect for speaker mode
   useEffect(() => {
-    if (!localStream || !speakerModeEnabled || !activeSpeaker) return;
-    
-    const audioTracks = localStream.getAudioTracks();
-    if (audioTracks.length === 0) return;
+    if (!speakerModeEnabled || !activeSpeaker) return;
     
     const shouldSpeak = activeSpeaker === socket.id || isAdminOrManager;
     
-    audioTracks.forEach(track => {
-      if (shouldSpeak && !track.enabled) {
-        track.enabled = true;
-        setMicOn(true);
-        console.log("Admin override: Unmuting because I'm the speaker");
-      } else if (!shouldSpeak && micOnRef.current && track.enabled) {
-        track.enabled = false;
-        setMicOn(false);
-        console.log("Admin override: Muting because I'm not the speaker");
-      }
-    });
-  }, [activeSpeaker, speakerModeEnabled, localStream, socket.id, isAdminOrManager]);
+    if (shouldSpeak && !micOn) {
+      startAudio().then(() => setMicOn(true)).catch(console.error);
+    } else if (!shouldSpeak && micOn) {
+      stopAudio();
+      setMicOn(false);
+    }
+  }, [activeSpeaker, speakerModeEnabled, socket.id, isAdminOrManager, micOn]);
 
   const handleAdminAction = useCallback((action, targetSocketId) => {
     const socket = getSocket();
@@ -733,13 +721,8 @@ useEffect(() => {
     
     if (!newMode) {
       setActiveSpeaker(null);
-      if (localStream) {
-        localStream.getAudioTracks().forEach(track => {
-          if (!track.enabled) {
-            track.enabled = true;
-            setMicOn(true);
-          }
-        });
+      if (!micOn) {
+        startAudio().then(() => setMicOn(true)).catch(console.error);
       }
     }
     
@@ -749,7 +732,7 @@ useEffect(() => {
     });
     
     showNotification(`Speaker mode ${newMode ? "enabled" : "disabled"}`, "info");
-  }, [speakerModeEnabled, localStream, conferenceId, socket, showNotification]);
+  }, [speakerModeEnabled, micOn, conferenceId, socket, showNotification]);
 
   const setAsSpeaker = useCallback((socketId) => {
     socket.emit("conference:set-speaker", {
@@ -770,30 +753,27 @@ useEffect(() => {
     setLayout(newLayout);
   }, []);
 
+  // Helper to get all camera streams for display
   const allCameraStreams = useMemo(() => {
-    return Object.entries(remoteStreams).filter(([socketId, stream]) => stream);
+    return Object.entries(remoteStreams)
+      .filter(([socketId, streams]) => streams?.camera)
+      .map(([socketId, streams]) => [socketId, streams.camera]);
   }, [remoteStreams]);
+
+  // Helper to get screen stream if available
+  const getRemoteScreenStream = (socketId) => {
+    return remoteStreams[socketId]?.screen;
+  };
 
   const activeSpeakerParticipant = participants.find(p => p.socketId === activeSpeaker);
   const activeSpeakerName = activeSpeakerParticipant?.userName || 
     (activeSpeaker === socket.id ? "You" : `User ${activeSpeaker?.slice(0, 4)}`);
 
-  // ✅ FIX 4: Proper participants count logic
   const participantsLoaded = Array.isArray(participants);
   const inConference = Boolean(conferenceId);
 
   return (
     <Box sx={{ display: "flex", height: "100vh", background: "#000" }}>
-      {/* ✅ FIX 1: Hidden local video element that NEVER unmounts */}
-      <Box sx={{ display: "none" }}>
-        <video
-          ref={localVideoRef}
-          autoPlay
-          muted
-          playsInline
-        />
-      </Box>
-
       <Box sx={{ 
         flex: 1, 
         display: "flex", 
@@ -939,48 +919,64 @@ useEffect(() => {
         {layout === LAYOUT.PRESENTATION ? (
           <>
             <Box sx={{ flex: 1, mb: 2 }}>
-              {/* ✅ FIX 1: Use stream prop instead of videoRef for local video */}
-              <VideoTile
-                stream={localStream}
-                label={screenSharer === "me" ? "You (Presenting)" : "Presenter"}
-                isScreen
-                isLocal
-                isActiveSpeaker={speakerModeEnabled && activeSpeaker === socket.id}
-              />
+              {screenSharer === socket.id ? (
+                <VideoTile
+                  stream={getScreenStream() || getCameraStream()}
+                  label="You (Presenting)"
+                  isScreen={!!getScreenStream()}
+                  isLocal
+                  isActiveSpeaker={speakerModeEnabled && activeSpeaker === socket.id}
+                />
+              ) : screenSharer && getRemoteScreenStream(screenSharer) ? (
+                <VideoTile
+                  stream={getRemoteScreenStream(screenSharer)}
+                  label={`${participants.find(p => p.socketId === screenSharer)?.userName || 'Presenter'} (Presenting)`}
+                  isScreen
+                  isActiveSpeaker={speakerModeEnabled && activeSpeaker === screenSharer}
+                />
+              ) : (
+                <VideoTile
+                  stream={getCameraStream()}
+                  label="No one is presenting"
+                  isActiveSpeaker={speakerModeEnabled && activeSpeaker === socket.id}
+                />
+              )}
             </Box>
 
             <Box sx={{ display: "flex", gap: 2, overflowX: "auto", height: "200px" }}>
-              {allCameraStreams.map(([socketId, stream]) => {
-                const participant = participants.find(p => p.socketId === socketId);
-                const userName = participant?.userName || `User ${socketId.slice(0, 4)}`;
-                
-                return (
-                  <Box key={socketId} sx={{ position: "relative" }}>
-                    <VideoTile 
-                      stream={stream} 
-                      label={userName} 
-                      small
-                      isActiveSpeaker={speakerModeEnabled && activeSpeaker === socketId}
-                    />
-                    {inConference && isAdminOrManager && socketId !== socket.id && (
-                      <IconButton
-                        size="small"
-                        onClick={(e) => handleOpenAdminMenu(e, socketId)}
-                        sx={{
-                          position: "absolute",
-                          top: 4,
-                          right: 4,
-                          background: "rgba(0,0,0,0.7)",
-                          color: "white",
-                          "&:hover": { background: "rgba(0,0,0,0.9)" },
-                        }}
-                      >
-                        <MoreVertIcon fontSize="small" />
-                      </IconButton>
-                    )}
-                  </Box>
-                );
-              })}
+              {allCameraStreams
+                .filter(([socketId]) => socketId !== screenSharer)
+                .map(([socketId, stream]) => {
+                  const participant = participants.find(p => p.socketId === socketId);
+                  const userName = participant?.userName || `User ${socketId.slice(0, 4)}`;
+                  
+                  return (
+                    <Box key={socketId} sx={{ position: "relative" }}>
+                      <VideoTile 
+                        stream={stream} 
+                        label={userName} 
+                        small
+                        isActiveSpeaker={speakerModeEnabled && activeSpeaker === socketId}
+                      />
+                      {inConference && isAdminOrManager && socketId !== socket.id && (
+                        <IconButton
+                          size="small"
+                          onClick={(e) => handleOpenAdminMenu(e, socketId)}
+                          sx={{
+                            position: "absolute",
+                            top: 4,
+                            right: 4,
+                            background: "rgba(0,0,0,0.7)",
+                            color: "white",
+                            "&:hover": { background: "rgba(0,0,0,0.9)" },
+                          }}
+                        >
+                          <MoreVertIcon fontSize="small" />
+                        </IconButton>
+                      )}
+                    </Box>
+                  );
+                })}
             </Box>
           </>
         ) : layout === LAYOUT.SPEAKER ? (
@@ -988,9 +984,8 @@ useEffect(() => {
             {activeSpeaker && (
               <Box sx={{ flex: 2, minHeight: "60%" }}>
                 {activeSpeaker === socket.id ? (
-                  // ✅ FIX 1: Use stream prop for local video
                   <VideoTile 
-                    stream={localStream}
+                    stream={getCameraStream()}
                     label="You (Speaking)"
                     isLocal
                     isActiveSpeaker={true}
@@ -1027,9 +1022,8 @@ useEffect(() => {
             }}>
               {activeSpeaker !== socket.id && (
                 <Box sx={{ position: "relative" }}>
-                  {/* ✅ FIX 1: Use stream prop for local video */}
                   <VideoTile 
-                    stream={localStream}
+                    stream={getCameraStream()}
                     label="You"
                     isLocal
                     small
@@ -1083,9 +1077,8 @@ useEffect(() => {
             overflow: "auto",
           }}>
             <Box sx={{ position: "relative" }}>
-              {/* ✅ FIX 1: Use stream prop for local video */}
               <VideoTile 
-                stream={localStream}
+                stream={getCameraStream()}
                 label="You"
                 isLocal
                 isActiveSpeaker={speakerModeEnabled && activeSpeaker === socket.id}
@@ -1225,16 +1218,11 @@ useEffect(() => {
           <Tooltip title={camOn ? "Turn Camera Off" : "Turn Camera On"}>
             <IconButton
               onClick={handleToggleCam}
-              disabled={!localStream}
               sx={{
                 background: camOn ? "#1565c0" : "#424242",
                 color: "white",
                 "&:hover": {
                   background: camOn ? "#0d47a1" : "#303030",
-                },
-                "&.Mui-disabled": {
-                  background: "#333",
-                  color: "#666",
                 },
               }}
             >
@@ -1245,16 +1233,11 @@ useEffect(() => {
           <Tooltip title={sharingScreen ? "Stop Screen Share" : "Start Screen Share"}>
             <IconButton
               onClick={handleScreenShare}
-              disabled={!localStream}
               sx={{
                 background: sharingScreen ? "#6a1b9a" : "#424242",
                 color: "white",
                 "&:hover": {
                   background: sharingScreen ? "#4a148c" : "#303030",
-                },
-                "&.Mui-disabled": {
-                  background: "#333",
-                  color: "#666",
                 },
               }}
             >
@@ -1295,15 +1278,10 @@ useEffect(() => {
               <Tooltip title="Set Yourself as Speaker">
                 <IconButton
                   onClick={() => setAsSpeaker(socket.id)}
-                  disabled={!localStream}
                   sx={{
                     background: "#00e676",
                     color: "black",
                     "&:hover": { background: "#00c853" },
-                    "&.Mui-disabled": {
-                      background: "#333",
-                      color: "#666",
-                    },
                   }}
                 >
                   <MicExternalOnIcon />
@@ -1332,7 +1310,6 @@ useEffect(() => {
         </Box>
 
         <Box sx={{ mt: 1, display: "flex", justifyContent: "center", alignItems: "center", gap: 1 }}>
-          {/* ✅ FIX 4: Show correct participant count */}
           <Typography color="#aaa" variant="caption">
             Participants: {participants.length}
           </Typography>
@@ -1349,9 +1326,14 @@ useEffect(() => {
               • Admin Mode
             </Typography>
           )}
-          {!localStream && (
+          {!micOn && !camOn && (
             <Typography color="#ff9800" variant="caption" ml={1}>
-              • Audio/Video Disabled
+              • Media Disabled
+            </Typography>
+          )}
+          {screenSharer && (
+            <Typography color="#9c27b0" variant="caption" ml={1}>
+              • Screen Sharing
             </Typography>
           )}
         </Box>
