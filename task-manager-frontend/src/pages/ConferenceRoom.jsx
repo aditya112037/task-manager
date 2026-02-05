@@ -158,7 +158,7 @@ export default function ConferenceRoom() {
       console.error("Failed to toggle microphone:", error);
       showNotification("Failed to toggle microphone", "error");
     }
-  }, [speakerModeEnabled, activeSpeaker, socket.id, isAdminOrManager, micOn, camOn, conferenceId, showNotification]);
+  }, [socket, speakerModeEnabled, activeSpeaker, socket.id, isAdminOrManager, micOn, camOn, conferenceId, showNotification]);
 
   const handleToggleCam = useCallback(async () => {
     try {
