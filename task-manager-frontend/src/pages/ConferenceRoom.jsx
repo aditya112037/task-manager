@@ -97,8 +97,9 @@ export default function ConferenceRoom() {
   // ✅ FIX 3: Proper role detection with memoization
   const myParticipant = useMemo(() => {
     if (!currentUser?._id || !participants.length) return null;
-return participants.find(p => p.socketId === socket._id);
-
+    return participants.find(
+      p => String(p.userId) === String(currentUser._id)
+    );
   }, [participants, currentUser?._id]);
 
   const isAdminOrManager = useMemo(() => {
