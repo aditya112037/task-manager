@@ -94,18 +94,16 @@ export default function ConferenceRoom() {
   const hasJoinedRef = useRef(false);
   const conferenceEndedRef = useRef(false);
 
-  // ✅ FIX 3: Proper role detection with memoization
-  const myParticipant = useMemo(() => {
-    if (!currentUser?._id || !participants.length) return null;
-    return participants.find(
-      p => String(p.userId) === String(currentUser._id)
-    );
-  }, [participants, currentUser?._id]);
+const myParticipant = useMemo(() => {
+  if (!socket?.id || !participants.length) return null;
+  return participants.find(p => p.socketId === socket.id);
+}, [participants, socket?.id]);
 
-  const isAdminOrManager = useMemo(() => {
-    if (!myParticipant) return false;
-    return myParticipant.role === "admin" || myParticipant.role === "manager";
-  }, [myParticipant]);
+
+const isAdminOrManager = Boolean(
+  myParticipant && (myParticipant.role === "admin" || myParticipant.role === "manager")
+);
+
 
   const showNotification = useCallback((message, severity = "info") => {
     setNotification({ open: true, message, severity });
@@ -141,13 +139,15 @@ export default function ConferenceRoom() {
     }
     
     try {
-      if (micOn) {
-        stopAudio();
-        setMicOn(false);
-      } else {
-        await startAudio();
-        setMicOn(true);
-      }
+if (micOn) {
+  stopAudio();
+  setMicOn(false);
+} else {
+  const stream = await startAudio();
+  if (!stream) return;
+  setMicOn(true);
+}
+
       
       socket.emit("conference:media-update", {
         conferenceId,
@@ -166,8 +166,9 @@ export default function ConferenceRoom() {
         stopCamera();
         setCamOn(false);
       } else {
-        await startCamera();
-        setCamOn(true);
+        const stream = await startCamera();
+if (!stream) return;
+setCamOn(true);
       }
       
       socket.emit("conference:media-update", {
@@ -205,7 +206,6 @@ export default function ConferenceRoom() {
         });
         
         setSharingScreen(true);
-        setScreenSharer(socket.id);
         setLayout(LAYOUT.PRESENTATION);
       } else {
         stopScreen();
@@ -654,7 +654,7 @@ export default function ConferenceRoom() {
 
   // Admin override effect for speaker mode
   useEffect(() => {
-    if (!speakerModeEnabled || !activeSpeaker) return;
+    if (!speakerModeEnabled || !activeSpeaker || !myParticipant) return;
     
     const shouldSpeak = activeSpeaker === socket.id || isAdminOrManager;
     
@@ -1335,7 +1335,7 @@ export default function ConferenceRoom() {
           raisedHands={raisedHands}
           isAdminOrManager={participantsLoaded && isAdminOrManager}
           onAdminAction={handleAdminAction}
-          currentUserId={currentUser?._id}
+          currentUserId={socket.id}
           onClose={() => setParticipantsPanelOpen(false)}
           speakerModeEnabled={speakerModeEnabled}
           activeSpeaker={activeSpeaker}
