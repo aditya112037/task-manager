@@ -312,6 +312,22 @@ export default function ConferenceRoom() {
     camOnRef.current = camOn;
   }, [micOn, camOn]);
 
+  useEffect(() => {
+  Object.values(remoteStreams).forEach((streams) => {
+    if (!streams?.audio) return;
+
+    let audioEl = document.getElementById(`audio-${streams.audio.id}`);
+    if (!audioEl) {
+      audioEl = document.createElement("audio");
+      audioEl.id = `audio-${streams.audio.id}`;
+      audioEl.autoplay = true;
+      audioEl.playsInline = true;
+      audioEl.srcObject = streams.audio;
+      document.body.appendChild(audioEl);
+    }
+  });
+}, [remoteStreams]);
+
   // Audio analyser for mic level
   useEffect(() => {
     const audioStream = getAudioStream();
@@ -410,23 +426,7 @@ export default function ConferenceRoom() {
     [socket]
   );
 
-  useEffect(() => {
-    if (!currentUser || !socket?.id) return;
 
-    // Inject local participant immediately (UI truth)
-    setParticipants(prev => {
-      if (prev.some(p => p.socketId === socket.id)) return prev;
-
-      return [{
-        userId: currentUser._id,
-        socketId: socket.id,
-        name: currentUser.name,
-        role: "participant", // will be corrected by server
-        micOn,
-        camOn,
-      }];
-    });
-  }, [currentUser, socket?.id, camOn, micOn]);
 
   const handleOffer = useCallback(
     async ({ from, offer }) => {

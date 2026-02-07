@@ -37,18 +37,30 @@ export const createPeer = (socketId, socket) => {
     }
   };
 
-  pc.ontrack = e => {
-    if (!e.streams?.[0]) return;
-    window.dispatchEvent(
-      new CustomEvent("webrtc:remote-stream", {
-        detail: {
-          socketId,
-          stream: e.streams[0],
-          track: e.track,
-        },
-      })
-    );
-  };
+pc.ontrack = (e) => {
+  const track = e.track;
+  if (!track) return;
+
+  const kind =
+    track.kind === "audio"
+      ? "audio"
+      : track.label.toLowerCase().includes("screen")
+      ? "screen"
+      : "camera";
+
+  const stream = new MediaStream([track]);
+
+  window.dispatchEvent(
+    new CustomEvent("webrtc:remote-stream", {
+      detail: {
+        socketId,
+        kind,
+        stream,
+      },
+    })
+  );
+};
+
 
   pc.onconnectionstatechange = () => {
     if (["failed", "disconnected"].includes(pc.connectionState)) {
