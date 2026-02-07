@@ -97,9 +97,8 @@ export default function ConferenceRoom() {
   // ✅ FIX 3: Proper role detection with memoization
   const myParticipant = useMemo(() => {
     if (!currentUser?._id || !participants.length) return null;
-    return participants.find(
-      p => String(p.userId) === String(currentUser._id)
-    );
+return participants.find(p => p.socketId === socket.id);
+
   }, [participants, currentUser?._id]);
 
   const isAdminOrManager = useMemo(() => {
@@ -426,22 +425,7 @@ export default function ConferenceRoom() {
     [socket]
   );
 
-  useEffect(() => {
-    if (!currentUser || !socket?.id) return;
 
-    // Inject local participant immediately (UI truth)
-    setParticipants(prev => {
-      if (prev.some(p => p.socketId === socket.id)) return prev;
-
-      return [{
-        userId: currentUser._id,
-        socketId: socket.id,
-        name: currentUser.name,
-        micOn,
-        camOn,
-      }];
-    });
-  }, [currentUser, socket?.id, camOn, micOn]);
 
   const handleOffer = useCallback(
     async ({ from, offer }) => {
