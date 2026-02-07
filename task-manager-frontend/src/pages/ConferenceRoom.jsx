@@ -664,7 +664,7 @@ setCamOn(true);
       stopAudio();
       setMicOn(false);
     }
-  }, [activeSpeaker, speakerModeEnabled, socket.id, isAdminOrManager, micOn]);
+  }, [activeSpeaker, speakerModeEnabled, myParticipant, socket.id, isAdminOrManager, micOn]);
 
   const handleAdminAction = useCallback((action, targetSocketId) => {
     const socket = getSocket();
