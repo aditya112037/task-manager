@@ -426,7 +426,22 @@ export default function ConferenceRoom() {
     [socket]
   );
 
+  useEffect(() => {
+    if (!currentUser || !socket?.id) return;
 
+    // Inject local participant immediately (UI truth)
+    setParticipants(prev => {
+      if (prev.some(p => p.socketId === socket.id)) return prev;
+
+      return [{
+        userId: currentUser._id,
+        socketId: socket.id,
+        name: currentUser.name,
+        micOn,
+        camOn,
+      }];
+    });
+  }, [currentUser, socket?.id, camOn, micOn]);
 
   const handleOffer = useCallback(
     async ({ from, offer }) => {
