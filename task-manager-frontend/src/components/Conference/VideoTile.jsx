@@ -16,33 +16,41 @@ export default function VideoTile({
   const internalRef = useRef(null);
   const ref = videoRef || internalRef;
 
-
   useEffect(() => {
-
-
     const videoEl = ref.current;
-    if (!videoEl || !stream) return;
-    videoEl.srcObject = stream;
+    if (!videoEl) return;
 
-    const play = async () => {
+    // 🚫 HARD GUARD — NEVER CRASH RENDER TREE
+    if (!(stream instanceof MediaStream)) {
+      if (videoEl.srcObject) {
+        videoEl.srcObject = null;
+      }
+      return;
+    }
+
+    // ✅ Only assign if different (prevents flicker + errors)
+    if (videoEl.srcObject !== stream) {
+      videoEl.srcObject = stream;
+    }
+
+    const tryPlay = async () => {
       try {
-        await videoEl.play()
-      } catch (error) {
-        // Silent catch for autoplay restrictions
-        console.debug("Video play failed (likely autoplay restriction):", error);
+        await videoEl.play();
+      } catch (err) {
+        // Autoplay restrictions are NORMAL — ignore safely
+        console.debug("VideoTile autoplay blocked:", err?.message);
       }
     };
 
-    play();
+    tryPlay();
 
-    // Cleanup: Don't nullify srcObject, let React handle it
     return () => {
-      // Only clean up if this is an internal ref
-    if (ref === internalRef && videoEl) {
-      videoEl.srcObject = null;
-    }
+      // Cleanup ONLY for internally owned refs
+      if (ref === internalRef && videoEl) {
+        videoEl.srcObject = null;
+      }
     };
-  }, [stream, ref]); // Re-run whenever stream changes
+  }, [stream, ref]);
 
   const sizeStyles = large
     ? { height: "100%", minHeight: 400 }
@@ -57,6 +65,8 @@ export default function VideoTile({
     : isLocal
     ? { border: "2px solid #2196f3" }
     : { border: "1px solid #333" };
+
+  const hasValidStream = stream instanceof MediaStream;
 
   return (
     <Box
@@ -74,18 +84,17 @@ export default function VideoTile({
         autoPlay
         playsInline
         muted={isLocal}
-        style={{ 
-          width: "100%", 
-          height: "100%", 
+        style={{
+          width: "100%",
+          height: "100%",
           objectFit: "cover",
           backgroundColor: "#000",
-          // Ensure video is visible even if stream is null
-          display: stream ? "block" : "none"
+          display: hasValidStream ? "block" : "none",
         }}
       />
 
-      {/* Show placeholder if no stream */}
-      {!stream && (
+      {/* Placeholder when no video */}
+      {!hasValidStream && (
         <Box
           sx={{
             width: "100%",
@@ -102,6 +111,7 @@ export default function VideoTile({
         </Box>
       )}
 
+      {/* Active speaker badge */}
       {isActiveSpeaker && (
         <Box
           sx={{
@@ -125,6 +135,7 @@ export default function VideoTile({
         </Box>
       )}
 
+      {/* Bottom gradient + label */}
       <Box
         sx={{
           position: "absolute",
@@ -151,24 +162,26 @@ export default function VideoTile({
           <Chip
             label="Screen"
             size="small"
-            sx={{ 
-              ml: 1, 
-              background: "#9c27b0", 
+            sx={{
+              ml: 1,
+              background: "#9c27b0",
               color: "#fff",
               fontSize: "0.7rem",
-              height: 20
+              height: 20,
             }}
           />
         )}
       </Box>
 
       {children && (
-        <Box sx={{ 
-          position: "absolute", 
-          top: 8, 
-          left: 8,
-          zIndex: 2 
-        }}>
+        <Box
+          sx={{
+            position: "absolute",
+            top: 8,
+            left: 8,
+            zIndex: 2,
+          }}
+        >
           {children}
         </Box>
       )}

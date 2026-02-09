@@ -41,21 +41,18 @@ pc.ontrack = (e) => {
   const track = e.track;
   if (!track) return;
 
-  const kind =
-    track.kind === "audio"
-      ? "audio"
-      : track.label.toLowerCase().includes("screen")
-      ? "screen"
-      : "camera";
-
-  const stream = new MediaStream([track]);
+  const kind = e.track.kind === "audio"
+  ? "audio"
+  : e.track.label?.includes("screen")
+    ? "screen"
+    : "camera";
 
   window.dispatchEvent(
     new CustomEvent("webrtc:remote-stream", {
       detail: {
         socketId,
         kind,
-        stream,
+        stream: e.streams[0],
       },
     })
   );
