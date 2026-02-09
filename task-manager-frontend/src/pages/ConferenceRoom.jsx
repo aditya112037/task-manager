@@ -311,10 +311,7 @@ const handleToggleCam = useCallback(async () => {
     };
   }, [conferenceId, socket, navigate, showNotification]);
 
-  useEffect(() => {
-    micOnRef.current = micOn;
-    camOnRef.current = camOn;
-  }, [micOn, camOn]);
+
 
 useEffect(() => {
   Object.entries(remoteStreamsRef.current).forEach(([socketId, streams]) => {
