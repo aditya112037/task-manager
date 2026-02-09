@@ -39,16 +39,19 @@ export default function VideoTile({
     }
 
     videoEl.play().catch(() => {});
-  }, [stream]);
+  }, [stream, ref]); // ✅ Fixed: Added 'ref' to dependencies
 
   // Cleanup ONLY on unmount
   useEffect(() => {
+    // ✅ Fixed: Capture ref.current in a variable for cleanup
+    const videoEl = ref.current;
+    
     return () => {
-      if (ref === internalRef && ref.current) {
-        ref.current.srcObject = null;
+      if (ref === internalRef && videoEl) {
+        videoEl.srcObject = null;
       }
     };
-  }, []);
+  }, [ref, internalRef]); // ✅ Fixed: Added proper dependencies
 
   const sizeStyles = large
     ? { height: "100%", minHeight: 400 }
