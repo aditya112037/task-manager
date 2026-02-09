@@ -82,7 +82,6 @@ export default function ConferenceRoom() {
   const [handRaised, setHandRaised] = useState(false);
   const [micOn, setMicOn] = useState(() => !!getAudioStream());
   const [camOn, setCamOn] = useState(false);  
-  const camOnRef = useRef(camOn);
   const [sharingScreen, setSharingScreen] = useState(false);
   const [activeSpeaker, setActiveSpeaker] = useState(null);
   const [speakerModeEnabled, setSpeakerModeEnabled] = useState(false);
