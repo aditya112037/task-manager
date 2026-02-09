@@ -117,7 +117,6 @@ const isAdminOrManager = Boolean(
     }
     socket.emit("conference:leave");
     cleanupConference();
-    setRemoteStreams({});
     navigate(-1);
   }, [socket, navigate, sharingScreen]);
 
@@ -127,7 +126,6 @@ const isAdminOrManager = Boolean(
     conferenceEndedRef.current = true;
     hasJoinedRef.current = false;
     cleanupConference();
-    setRemoteStreams({});
     showNotification("Conference has ended", "info");
     navigate("/teams");
   }, [navigate, showNotification]);
@@ -488,11 +486,8 @@ const handler = (e) => {
     console.log("User left:", socketId);
     
     removePeer(socketId);
-    setRemoteStreams(prev => {
-      const copy = { ...prev };
-      delete copy[socketId];
-      return copy;
-    });
+    delete remoteStreamsRef.current[socketId];
+    forceRender(v => v + 1);
     
     if (screenSharer === socketId) {
       setScreenSharer(null);
