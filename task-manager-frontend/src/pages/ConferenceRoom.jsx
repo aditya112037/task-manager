@@ -80,9 +80,8 @@ export default function ConferenceRoom() {
   const [raisedHands, setRaisedHands] = useState([]);
   const [participants, setParticipants] = useState([]);
   const [handRaised, setHandRaised] = useState(false);
-  const [micOn, setMicOn] = useState(false);
+  const [micOn, setMicOn] = useState(() => !!getAudioStream());
   const [camOn, setCamOn] = useState(false);  
-  const micOnRef = useRef(micOn);
   const camOnRef = useRef(camOn);
   const [sharingScreen, setSharingScreen] = useState(false);
   const [activeSpeaker, setActiveSpeaker] = useState(null);
@@ -135,29 +134,36 @@ const handleToggleMic = useCallback(async () => {
     showNotification("Only the active speaker can unmute", "warning");
     return;
   }
-  
+
   try {
-    if (micOn) {
+    if (getAudioStream()) {
       stopAudio();
       setMicOn(false);
     } else {
-      const stream = await startAudio();
-      if (!stream) return;
-      // Sync tracks with all peers
+      await startAudio();
       getPeerIds().forEach(syncPeerTracks);
       setMicOn(true);
     }
-    
+
     socket.emit("conference:media-update", {
       conferenceId,
-      micOn: !micOn,
+      micOn: !getAudioStream(),
       camOn,
     });
-  } catch (error) {
-    console.error("Failed to toggle microphone:", error);
-    showNotification("Failed to toggle microphone", "error");
+  } catch (err) {
+    console.error(err);
+    showNotification("Microphone error", "error");
   }
-}, [socket, speakerModeEnabled, activeSpeaker, isAdminOrManager, micOn, camOn, conferenceId, showNotification]);
+}, [
+  speakerModeEnabled,
+  activeSpeaker,
+  isAdminOrManager,
+  camOn,
+  conferenceId,
+  socket,
+  showNotification,
+]);
+
 
 const handleToggleCam = useCallback(async () => {
   try {
@@ -286,15 +292,7 @@ const handleToggleCam = useCallback(async () => {
           showNotification("Failed to join conference", "error");
         }
 
-        // Start media independently (non-blocking)
-        startAudio().catch(() => {
-          showNotification("Microphone permission denied", "warning");
-        });
-        
-        startCamera().catch(() => {
-          showNotification("Camera permission denied", "warning");
-        });
-        
+
         showNotification("Joined conference successfully", "success");
       } catch (error) {
         console.error("Conference initialization error:", error);
@@ -334,45 +332,39 @@ useEffect(() => {
 }, [participants.length]);
 
  
-  useEffect(() => {
-    const audioStream = getAudioStream();
-    if (!audioStream || !micOn) {
-      setMicLevel(0);
-      return;
-    }
-    
-    try {
-      const audioCtx = new AudioContext();
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 256;
+useEffect(() => {
+  if (!micOn || !getAudioStream()) {
+    setMicLevel(0);
+    return;
+  }
 
-      const source = audioCtx.createMediaStreamSource(audioStream);
-      source.connect(analyser);
+  const audioCtx = new AudioContext();
+  const analyser = audioCtx.createAnalyser();
+  const source = audioCtx.createMediaStreamSource(getAudioStream());
 
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+  analyser.fftSize = 256;
+  source.connect(analyser);
 
-      let rafId;
+  const data = new Uint8Array(analyser.frequencyBinCount);
+  let raf;
 
-      const update = () => {
-        analyser.getByteFrequencyData(dataArray);
-        const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-        setMicLevel(prev => prev * 0.75 + avg * 0.25);
-        rafId = requestAnimationFrame(update);
-      };
+  const loop = () => {
+    analyser.getByteFrequencyData(data);
+    const avg = data.reduce((a, b) => a + b, 0) / data.length;
+    setMicLevel(avg);
+    raf = requestAnimationFrame(loop);
+  };
 
-      update();
+  loop();
 
-      return () => {
-        cancelAnimationFrame(rafId);
-        analyser.disconnect();
-        source.disconnect();
-        audioCtx.close();
-      };
-    } catch (error) {
-      console.error("Mic level detection error:", error);
-      setMicLevel(0);
-    }
-  }, [micOn]);
+  return () => {
+    cancelAnimationFrame(raf);
+    source.disconnect();
+    analyser.disconnect();
+    audioCtx.close();
+  };
+}, [micOn]);
+
 
   // ✅ ISSUE 2: Updated remote stream handler
   useEffect(() => {
@@ -578,13 +570,18 @@ if (audioEl) {
       }
     };
 
-    const handleForceMute = () => {
-      if (!mounted()) return;
-      console.log("Admin forced mute");
-      stopAudio();
-      setMicOn(false);
-      showNotification("Admin has muted your microphone", "warning");
-    };
+const handleForceMute = () => {
+  stopAudio();
+  setMicOn(false);
+
+  socket.emit("conference:media-update", {
+    conferenceId,
+    micOn: false,
+  });
+
+  showNotification("Admin muted your microphone", "warning");
+};
+
 
     const handleForceCameraOff = () => {
       if (!mounted()) return;
@@ -673,7 +670,7 @@ useEffect(() => {
     
     if (shouldSpeak && !micOn) {
       startAudio().then(() => setMicOn(true)).catch(console.error);
-    } else if (!shouldSpeak && micOn) {
+    } else if (!shouldSpeak && getAudioStream()) {
       stopAudio();
       setMicOn(false);
     }

@@ -59,7 +59,9 @@ export default function ParticipantsPanel({
           const roleLabel = p.role === "admin" ? "Host" : "Participant";
           // ✅ Use the correct property names with fallbacks
           const displayName = p.userName || p.name || "User";
-          const micOn = Boolean(p.micOn);
+          const micOn = p.socketId === currentUserId
+  ? !!getAudioStream()
+  : Boolean(p.micOn);
           const camOn = Boolean(p.camOn);
           const isActiveSpeaker = speakerModeEnabled && activeSpeaker === p.socketId;
 
