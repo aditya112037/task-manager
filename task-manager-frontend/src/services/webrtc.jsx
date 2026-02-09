@@ -37,27 +37,28 @@ export const createPeer = (socketId, socket) => {
     }
   };
 
-pc.ontrack = (e) => {
-  const track = e.track;
-  if (!track) return;
+  pc.ontrack = (e) => {
+    const track = e.track;
+    if (!track) return;
 
-  const kind = e.track.kind === "audio"
-  ? "audio"
-  : e.track.label?.includes("screen")
-    ? "screen"
-    : "camera";
+    // ✅ FIXED TRACK CLASSIFICATION
+    const kind =
+      e.track.kind === "audio"
+        ? "audio"
+        : e.transceiver?.mid === "screen" || e.track.contentHint === "detail"
+          ? "screen"
+          : "camera";
 
-  window.dispatchEvent(
-    new CustomEvent("webrtc:remote-stream", {
-      detail: {
-        socketId,
-        kind,
-        stream: e.streams[0],
-      },
-    })
-  );
-};
-
+    window.dispatchEvent(
+      new CustomEvent("webrtc:remote-stream", {
+        detail: {
+          socketId,
+          kind,
+          stream: e.streams[0],
+        },
+      })
+    );
+  };
 
   pc.onconnectionstatechange = () => {
     if (["failed", "disconnected"].includes(pc.connectionState)) {
@@ -85,6 +86,20 @@ export const syncPeerTracks = (socketId) => {
 
   const { pc } = peer;
 
+  // Remove existing senders if streams are gone
+  if (!audioStream && peer.audioSender) {
+    pc.removeTrack(peer.audioSender);
+    peer.audioSender = null;
+  }
+  if (!cameraStream && peer.cameraSender) {
+    pc.removeTrack(peer.cameraSender);
+    peer.cameraSender = null;
+  }
+  if (!screenStream && peer.screenSender) {
+    pc.removeTrack(peer.screenSender);
+    peer.screenSender = null;
+  }
+
   // 🎤 AUDIO
   const audioTrack = audioStream?.getAudioTracks()[0];
   if (audioTrack && !peer.audioSender) {
@@ -100,7 +115,35 @@ export const syncPeerTracks = (socketId) => {
   // 🖥️ SCREEN
   const screenTrack = screenStream?.getVideoTracks()[0];
   if (screenTrack && !peer.screenSender) {
+    // ✅ Set contentHint for proper screen detection
+    screenTrack.contentHint = "detail";
     peer.screenSender = pc.addTrack(screenTrack, screenStream);
+  }
+};
+
+/* -----------------------------
+   UPDATE SINGLE TRACK
+------------------------------ */
+
+export const updatePeerTrack = (socketId, kind, enabled) => {
+  const peer = peers[socketId];
+  if (!peer) return;
+
+  switch (kind) {
+    case 'audio':
+      if (peer.audioSender) {
+        const track = peer.audioSender.track;
+        if (track) track.enabled = enabled;
+      }
+      break;
+    case 'camera':
+      if (peer.cameraSender) {
+        const track = peer.cameraSender.track;
+        if (track) track.enabled = enabled;
+      }
+      break;
+    default:
+      break;
   }
 };
 
@@ -114,7 +157,9 @@ export const removePeer = (socketId) => {
 
   try {
     peer.pc.close();
-  } catch {}
+  } catch (err) {
+    console.warn("Error closing peer connection:", err);
+  }
 
   delete peers[socketId];
 };
@@ -126,13 +171,26 @@ export const removePeer = (socketId) => {
 export const startAudio = async () => {
   if (audioStream) return audioStream;
 
-  audioStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  return audioStream;
+  try {
+    audioStream = await navigator.mediaDevices.getUserMedia({ 
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      } 
+    });
+    return audioStream;
+  } catch (error) {
+    console.error("Failed to start audio:", error);
+    throw error;
+  }
 };
 
 export const stopAudio = () => {
-  audioStream?.getTracks().forEach(t => t.stop());
-  audioStream = null;
+  if (audioStream) {
+    audioStream.getTracks().forEach(t => t.stop());
+    audioStream = null;
+  }
 };
 
 /* -----------------------------
@@ -142,13 +200,26 @@ export const stopAudio = () => {
 export const startCamera = async () => {
   if (cameraStream) return cameraStream;
 
-  cameraStream = await navigator.mediaDevices.getUserMedia({ video: true });
-  return cameraStream;
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ 
+      video: {
+        width: { ideal: 1280 },
+        height: { ideal: 720 },
+        frameRate: { ideal: 30 }
+      } 
+    });
+    return cameraStream;
+  } catch (error) {
+    console.error("Failed to start camera:", error);
+    throw error;
+  }
 };
 
 export const stopCamera = () => {
-  cameraStream?.getTracks().forEach(t => t.stop());
-  cameraStream = null;
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+  }
 };
 
 /* -----------------------------
@@ -158,28 +229,61 @@ export const stopCamera = () => {
 export const startScreen = async () => {
   if (screenStream) return screenStream;
 
-  screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+  try {
+    screenStream = await navigator.mediaDevices.getDisplayMedia({ 
+      video: { 
+        displaySurface: "monitor",
+        frameRate: { ideal: 30 },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
+      },
+      audio: false // Screen share typically doesn't include audio
+    });
 
-  const track = screenStream.getVideoTracks()[0];
-  track.onended = stopScreen;
+    const track = screenStream.getVideoTracks()[0];
+    if (track) {
+      // ✅ Set contentHint for proper screen detection
+      track.contentHint = "detail";
+      track.onended = stopScreen;
+    }
 
-  return screenStream;
+    return screenStream;
+  } catch (error) {
+    console.error("Failed to start screen sharing:", error);
+    throw error;
+  }
 };
 
 export const stopScreen = () => {
-  screenStream?.getTracks().forEach(t => t.stop());
-  screenStream = null;
+  if (screenStream) {
+    screenStream.getTracks().forEach(t => t.stop());
+    screenStream = null;
+  }
 };
 
 /* -----------------------------
    TOGGLES (NO SIDE EFFECTS)
 ------------------------------ */
 
-export const setAudioEnabled = (enabled) =>
-  audioStream?.getAudioTracks().forEach(t => (t.enabled = enabled));
+export const setAudioEnabled = (enabled) => {
+  if (audioStream) {
+    audioStream.getAudioTracks().forEach(t => {
+      if (t.enabled !== enabled) {
+        t.enabled = enabled;
+      }
+    });
+  }
+};
 
-export const setCameraEnabled = (enabled) =>
-  cameraStream?.getVideoTracks().forEach(t => (t.enabled = enabled));
+export const setCameraEnabled = (enabled) => {
+  if (cameraStream) {
+    cameraStream.getVideoTracks().forEach(t => {
+      if (t.enabled !== enabled) {
+        t.enabled = enabled;
+      }
+    });
+  }
+};
 
 /* -----------------------------
    STREAM GETTERS
@@ -215,6 +319,54 @@ export const getLocalStream = () => {
   );
 };
 
+export const isAudioActive = () => {
+  return audioStream && audioStream.getAudioTracks().some(t => t.enabled);
+};
+
+export const isCameraActive = () => {
+  return cameraStream && cameraStream.getVideoTracks().some(t => t.enabled);
+};
+
+export const isScreenActive = () => {
+  return screenStream && screenStream.getVideoTracks().some(t => t.readyState === 'live');
+};
+
+/* -----------------------------
+   OFFER/ANSWER HELPERS
+------------------------------ */
+
+export const createOffer = async (socketId) => {
+  const pc = createPeer(socketId);
+  const offer = await pc.createOffer({
+    offerToReceiveAudio: true,
+    offerToReceiveVideo: true,
+  });
+  await pc.setLocalDescription(offer);
+  return offer;
+};
+
+export const handleOffer = async (socketId, offer) => {
+  const pc = createPeer(socketId);
+  await pc.setRemoteDescription(offer);
+  const answer = await pc.createAnswer();
+  await pc.setLocalDescription(answer);
+  return answer;
+};
+
+export const handleAnswer = async (socketId, answer) => {
+  const pc = peers[socketId]?.pc;
+  if (pc) {
+    await pc.setRemoteDescription(answer);
+  }
+};
+
+export const addIceCandidate = async (socketId, candidate) => {
+  const pc = peers[socketId]?.pc;
+  if (pc) {
+    await pc.addIceCandidate(candidate);
+  }
+};
+
 /* -----------------------------
    CLEANUP
 ------------------------------ */
@@ -224,4 +376,25 @@ export const cleanup = () => {
   stopCamera();
   stopScreen();
   Object.keys(peers).forEach(removePeer);
+};
+
+/* -----------------------------
+   DEBUGGING
+------------------------------ */
+
+export const debugPeers = () => {
+  console.group("WebRTC Debug Info");
+  console.log("Audio Stream:", audioStream?.id || "null");
+  console.log("Camera Stream:", cameraStream?.id || "null");
+  console.log("Screen Stream:", screenStream?.id || "null");
+  console.log("Peers:", Object.keys(peers).length);
+  Object.entries(peers).forEach(([id, peer]) => {
+    console.log(`  Peer ${id}:`, {
+      connectionState: peer.pc.connectionState,
+      audioSender: !!peer.audioSender,
+      cameraSender: !!peer.cameraSender,
+      screenSender: !!peer.screenSender
+    });
+  });
+  console.groupEnd();
 };

@@ -2,11 +2,12 @@ import React, { useEffect, useRef } from "react";
 import { Box, Typography, Chip } from "@mui/material";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 
-const isValidMediaStream = (stream) => {
+const isAttachableStream = (stream) => {
   return (
     stream &&
     typeof stream === "object" &&
-    stream instanceof MediaStream
+    typeof stream.getTracks === "function" &&
+    stream.getTracks().length > 0
   );
 };
 
@@ -28,33 +29,26 @@ export default function VideoTile({
     const videoEl = ref.current;
     if (!videoEl) return;
 
-    // 🚨 HARD GUARD — THIS IS THE FIX
-    if (!isValidMediaStream(stream)) {
-      videoEl.srcObject = null;
+    if (!isAttachableStream(stream)) {
+      // DO NOT nuke srcObject unless unmounting
       return;
     }
 
-    // Avoid redundant re-assign
     if (videoEl.srcObject !== stream) {
       videoEl.srcObject = stream;
     }
 
-    const play = async () => {
-      try {
-        await videoEl.play();
-      } catch {
-        // autoplay restriction — safe to ignore
-      }
-    };
+    videoEl.play().catch(() => {});
+  }, [stream]);
 
-    play();
-
+  // Cleanup ONLY on unmount
+  useEffect(() => {
     return () => {
-      if (ref === internalRef && videoEl) {
-        videoEl.srcObject = null;
+      if (ref === internalRef && ref.current) {
+        ref.current.srcObject = null;
       }
     };
-  }, [stream, ref]);
+  }, []);
 
   const sizeStyles = large
     ? { height: "100%", minHeight: 400 }
@@ -70,7 +64,7 @@ export default function VideoTile({
     ? { border: "2px solid #2196f3" }
     : { border: "1px solid #333" };
 
-  const showVideo = isValidMediaStream(stream);
+  const showVideo = isAttachableStream(stream);
 
   return (
     <Box

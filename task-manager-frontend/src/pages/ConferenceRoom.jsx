@@ -130,57 +130,58 @@ const isAdminOrManager = Boolean(
     navigate("/teams");
   }, [navigate, showNotification]);
 
-  const handleToggleMic = useCallback(async () => {
-    if (speakerModeEnabled && activeSpeaker !== socket.id && !isAdminOrManager) {
-      showNotification("Only the active speaker can unmute", "warning");
-      return;
+const handleToggleMic = useCallback(async () => {
+  if (speakerModeEnabled && activeSpeaker !== socket.id && !isAdminOrManager) {
+    showNotification("Only the active speaker can unmute", "warning");
+    return;
+  }
+  
+  try {
+    if (micOn) {
+      stopAudio();
+      setMicOn(false);
+    } else {
+      const stream = await startAudio();
+      if (!stream) return;
+      // Sync tracks with all peers
+      getPeerIds().forEach(syncPeerTracks);
+      setMicOn(true);
     }
     
-    try {
-if (micOn) {
-  stopAudio();
-  setMicOn(false);
-} else {
-  const stream = await startAudio();
-  if (!stream) return;
-  getPeerIds().forEach(syncPeerTracks);
-  setMicOn(true);
-}
+    socket.emit("conference:media-update", {
+      conferenceId,
+      micOn: !micOn,
+      camOn,
+    });
+  } catch (error) {
+    console.error("Failed to toggle microphone:", error);
+    showNotification("Failed to toggle microphone", "error");
+  }
+}, [socket, speakerModeEnabled, activeSpeaker, isAdminOrManager, micOn, camOn, conferenceId, showNotification]);
 
-      
-      socket.emit("conference:media-update", {
-        conferenceId,
-        micOn: !micOn,
-        camOn,
-      });
-    } catch (error) {
-      console.error("Failed to toggle microphone:", error);
-      showNotification("Failed to toggle microphone", "error");
+const handleToggleCam = useCallback(async () => {
+  try {
+    if (camOn) {
+      stopCamera();
+      setCamOn(false);
+    } else {
+      const stream = await startCamera();
+      if (!stream) return;
+      // Sync tracks with all peers
+      getPeerIds().forEach(syncPeerTracks);
+      setCamOn(true);
     }
-  }, [socket, speakerModeEnabled, activeSpeaker, isAdminOrManager, micOn, camOn, conferenceId, showNotification]);
-
-  const handleToggleCam = useCallback(async () => {
-    try {
-      if (camOn) {
-        stopCamera();
-        setCamOn(false);
-      } else {
-        const stream = await startCamera();
-if (!stream) return;
- getPeerIds().forEach(syncPeerTracks)
-setCamOn(true);
-      }
-      
-      socket.emit("conference:media-update", {
-        conferenceId,
-        camOn: !camOn,
-        micOn,
-      });
-    } catch (error) {
-      console.error("Failed to toggle camera:", error);
-      showNotification("Failed to toggle camera", "error");
-    }
-  }, [camOn, micOn, conferenceId, socket, showNotification]);
+    
+    socket.emit("conference:media-update", {
+      conferenceId,
+      camOn: !camOn,
+      micOn,
+    });
+  } catch (error) {
+    console.error("Failed to toggle camera:", error);
+    showNotification("Failed to toggle camera", "error");
+  }
+}, [camOn, micOn, conferenceId, socket, showNotification]);
 
   const handleRaiseHand = useCallback(() => {
     if (!handRaised) {
@@ -651,15 +652,18 @@ if (audioEl) {
     handleScreenShareUpdate,
   ]);
   
-  // ✅ ISSUE 4: Speaker detection with guard
-  useEffect(() => {
-    if (!speakerModeEnabled || !micOn) return;
-
-  //matte kudasai
-  //nigga
-
-    return () => {};
-  }, [speakerModeEnabled, micOn]);
+useEffect(() => {
+  // Cleanup audio elements when participants change
+  return () => {
+    Object.values(audioElsRef.current).forEach(audioEl => {
+      if (audioEl && audioEl.parentNode) {
+        audioEl.srcObject = null;
+        audioEl.remove();
+      }
+    });
+    audioElsRef.current = {};
+  };
+}, []);
 
   // Admin override effect for speaker mode
   useEffect(() => {
