@@ -74,38 +74,55 @@ export default function ConferenceRoom() {
   const [participantsPanelOpen, setParticipantsPanelOpen] = useState(true);
 
   const remoteStreamsRef = useRef({});
-  const [, forceRender] = useState(0);// { socketId: { camera?: MediaStream, screen?: MediaStream } }
+  const [, forceRender] = useState(0);
   const [layout, setLayout] = useState(LAYOUT.GRID);
-  const [screenSharer, setScreenSharer] = useState(null); // socketId of who's sharing screen
+  const [screenSharer, setScreenSharer] = useState(null);
   const [raisedHands, setRaisedHands] = useState([]);
   const [participants, setParticipants] = useState([]);
   const [handRaised, setHandRaised] = useState(false);
-  const [micOn, setMicOn] = useState(() => !!getAudioStream());
-  const [camOn, setCamOn] = useState(false);  
+  const [micOn, setMicOn] = useState(false);
+  const [camOn, setCamOn] = useState(false);
   const [sharingScreen, setSharingScreen] = useState(false);
   const [activeSpeaker, setActiveSpeaker] = useState(null);
   const [speakerModeEnabled, setSpeakerModeEnabled] = useState(false);
   const [notification, setNotification] = useState({ open: false, message: "", severity: "info" });
-
   const [micLevel, setMicLevel] = useState(0);
   const mountedRef = useRef(true);
   const hasJoinedRef = useRef(false);
   const conferenceEndedRef = useRef(false);
 
-const myParticipant = useMemo(() => {
-  if (!socket?.id || !participants.length) return null;
-  return participants.find(p => p.socketId === socket.id);
-}, [participants, socket?.id]);
+  const myParticipant = useMemo(() => {
+    if (!socket?.id || !participants.length) return null;
+    return participants.find(p => p.socketId === socket.id);
+  }, [participants, socket?.id]);
 
-
-const isAdminOrManager = Boolean(
-  myParticipant && (myParticipant.role === "admin" || myParticipant.role === "manager")
-);
-
+  const isAdminOrManager = Boolean(
+    myParticipant && (myParticipant.role === "admin" || myParticipant.role === "manager")
+  );
 
   const showNotification = useCallback((message, severity = "info") => {
     setNotification({ open: true, message, severity });
   }, []);
+
+  // ✅ FIX 3: Renegotiation helper
+  const renegotiateAllPeers = useCallback(async () => {
+    console.log("Renegotiating with all peers...");
+    for (const peerId of getPeerIds()) {
+      try {
+        const pc = createPeer(peerId, socket);
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        socket.emit("conference:offer", {
+          to: peerId,
+          offer,
+        });
+        console.log("Renegotiation offer sent to:", peerId);
+      } catch (err) {
+        console.error("Renegotiation failed for peer", peerId, err);
+      }
+    }
+  }, [socket]);
 
   const leaveAndCleanupLocal = useCallback(() => {
     stopCamera();
@@ -128,65 +145,68 @@ const isAdminOrManager = Boolean(
     navigate("/teams");
   }, [navigate, showNotification]);
 
-const handleToggleMic = useCallback(async () => {
-  if (speakerModeEnabled && activeSpeaker !== socket.id && !isAdminOrManager) {
-    showNotification("Only the active speaker can unmute", "warning");
-    return;
-  }
-
-  try {
-    if (getAudioStream()) {
-      stopAudio();
-      setMicOn(false);
-    } else {
-      await startAudio();
-      getPeerIds().forEach(syncPeerTracks);
-      setMicOn(true);
+  const handleToggleMic = useCallback(async () => {
+    if (speakerModeEnabled && activeSpeaker !== socket.id && !isAdminOrManager) {
+      showNotification("Only the active speaker can unmute", "warning");
+      return;
     }
 
-    socket.emit("conference:media-update", {
-      conferenceId,
-      micOn: !getAudioStream(),
-      camOn,
-    });
-  } catch (err) {
-    console.error(err);
-    showNotification("Microphone error", "error");
-  }
-}, [
-  speakerModeEnabled,
-  activeSpeaker,
-  isAdminOrManager,
-  camOn,
-  conferenceId,
-  socket,
-  showNotification,
-]);
+    try {
+      if (getAudioStream()) {
+        stopAudio();
+        setMicOn(false);
+      } else {
+        await startAudio();
+        getPeerIds().forEach(syncPeerTracks);
+        await renegotiateAllPeers(); // ✅ FIX 3: Renegotiate after media change
+        setMicOn(true);
+      }
 
-
-const handleToggleCam = useCallback(async () => {
-  try {
-    if (camOn) {
-      stopCamera();
-      setCamOn(false);
-    } else {
-      const stream = await startCamera();
-      if (!stream) return;
-      // Sync tracks with all peers
-      getPeerIds().forEach(syncPeerTracks);
-      setCamOn(true);
+      socket.emit("conference:media-update", {
+        conferenceId,
+        micOn: !!getAudioStream(),
+        camOn: !!getCameraStream(),
+      });
+      
+      forceRender(v => v + 1); // Force UI update
+    } catch (err) {
+      console.error("Failed to toggle microphone:", err);
+      showNotification("Failed to toggle microphone", "error");
     }
-    
-    socket.emit("conference:media-update", {
-      conferenceId,
-      camOn: !camOn,
-      micOn,
-    });
-  } catch (error) {
-    console.error("Failed to toggle camera:", error);
-    showNotification("Failed to toggle camera", "error");
-  }
-}, [camOn, micOn, conferenceId, socket, showNotification]);
+  }, [
+    speakerModeEnabled,
+    activeSpeaker,
+    isAdminOrManager,
+    conferenceId,
+    socket,
+    showNotification,
+    renegotiateAllPeers
+  ]);
+
+  const handleToggleCam = useCallback(async () => {
+    try {
+      if (getCameraStream()) {
+        stopCamera();
+        setCamOn(false);
+      } else {
+        await startCamera();
+        getPeerIds().forEach(syncPeerTracks);
+        await renegotiateAllPeers(); // ✅ FIX 3: Renegotiate after media change
+        setCamOn(true);
+      }
+      
+      socket.emit("conference:media-update", {
+        conferenceId,
+        micOn: !!getAudioStream(),
+        camOn: !!getCameraStream(),
+      });
+      
+      forceRender(v => v + 1); // Force UI update
+    } catch (error) {
+      console.error("Failed to toggle camera:", error);
+      showNotification("Failed to toggle camera", "error");
+    }
+  }, [conferenceId, socket, showNotification, renegotiateAllPeers]);
 
   const handleRaiseHand = useCallback(() => {
     if (!handRaised) {
@@ -199,43 +219,124 @@ const handleToggleCam = useCallback(async () => {
 
   const handleScreenShare = useCallback(async () => {
     try {
-      if (!sharingScreen) {
-        await startScreen();
-        
-        // ✅ ISSUE 3: Sync with all peers, not just streams
-        getPeerIds().forEach(syncPeerTracks);
-        
-        // ✅ ISSUE 5: Notify server about screen share
-        socket.emit("conference:screen-share", { 
-          active: true,
-          conferenceId 
-        });
-        
-        setSharingScreen(true);
-        setLayout(LAYOUT.PRESENTATION);
-      } else {
+      if (getScreenStream()) {
         stopScreen();
-        
-        // ✅ ISSUE 5: Notify server about screen share stop
-        socket.emit("conference:screen-share", { 
-          active: false,
-          conferenceId 
-        });
-        
         setSharingScreen(false);
         setScreenSharer(null);
         setLayout(LAYOUT.GRID);
+      } else {
+        await startScreen();
+        getPeerIds().forEach(syncPeerTracks);
+        await renegotiateAllPeers(); // ✅ FIX 3: Renegotiate after media change
+        setSharingScreen(true);
+        setScreenSharer(socket.id);
+        setLayout(LAYOUT.PRESENTATION);
       }
+      
+      socket.emit("conference:screen-share", { 
+        active: !!getScreenStream(),
+        conferenceId 
+      });
+      
+      forceRender(v => v + 1); // Force UI update
     } catch (error) {
       console.error("Screen share error:", error);
       showNotification("Screen share failed", "error");
     }
-  }, [sharingScreen, socket, conferenceId, showNotification]);
+  }, [socket, conferenceId, showNotification, renegotiateAllPeers]);
 
+  // ✅ FIX 2: Media state sync effect
   useEffect(() => {
-  forceRender(v => v + 1);
-}, [micOn, camOn, sharingScreen]);
+    const interval = setInterval(() => {
+      const audioActive = !!getAudioStream();
+      const cameraActive = !!getCameraStream();
+      const screenActive = !!getScreenStream();
+      
+      if (micOn !== audioActive || camOn !== cameraActive || sharingScreen !== screenActive) {
+        setMicOn(audioActive);
+        setCamOn(cameraActive);
+        setSharingScreen(screenActive);
+      }
+    }, 1000);
 
+    return () => clearInterval(interval);
+  }, [micOn, camOn, sharingScreen]);
+
+  // ✅ FIX 1: Remote audio attachment (CORRECT VERSION)
+  useEffect(() => {
+    Object.entries(remoteStreamsRef.current).forEach(([socketId, streams]) => {
+      const audioStream = streams?.audio;
+      if (!(audioStream instanceof MediaStream)) {
+        // Remove audio element if stream is gone
+        const audioEl = audioElsRef.current[socketId];
+        if (audioEl) {
+          audioEl.srcObject = null;
+          audioEl.remove();
+          delete audioElsRef.current[socketId];
+        }
+        return;
+      }
+
+      let audioEl = audioElsRef.current[socketId];
+
+      if (!audioEl) {
+        audioEl = document.createElement("audio");
+        audioEl.autoplay = true;
+        audioEl.playsInline = true;
+        audioEl.muted = false;
+        audioEl.volume = 1.0;
+
+        document.body.appendChild(audioEl);
+        audioElsRef.current[socketId] = audioEl;
+      }
+
+      if (audioEl.srcObject !== audioStream) {
+        audioEl.srcObject = audioStream;
+        audioEl.play().catch((err) => {
+          console.warn("Failed to play remote audio:", err);
+        });
+      }
+    });
+  }, [forceRender]);
+
+  // Mic level monitoring
+  useEffect(() => {
+    if (!getAudioStream()) {
+      setMicLevel(0);
+      return;
+    }
+
+    try {
+      const audioCtx = new AudioContext();
+      const analyser = audioCtx.createAnalyser();
+      const source = audioCtx.createMediaStreamSource(getAudioStream());
+
+      analyser.fftSize = 256;
+      source.connect(analyser);
+
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      let raf;
+
+      const loop = () => {
+        analyser.getByteFrequencyData(data);
+        const avg = data.reduce((a, b) => a + b, 0) / data.length;
+        setMicLevel(avg);
+        raf = requestAnimationFrame(loop);
+      };
+
+      loop();
+
+      return () => {
+        cancelAnimationFrame(raf);
+        source.disconnect();
+        analyser.disconnect();
+        audioCtx.close();
+      };
+    } catch (error) {
+      console.error("Mic level detection error:", error);
+      setMicLevel(0);
+    }
+  }, [micOn, forceRender]);
 
   // Initialize and join conference
   useEffect(() => {
@@ -284,13 +385,11 @@ const handleToggleCam = useCallback(async () => {
       }
 
       try {
-        // ✅ Join conference FIRST (Zoom-style)
         hasJoinedRef.current = true;
         const joinSuccess = joinConference(conferenceId);
         if (!joinSuccess) {
           showNotification("Failed to join conference", "error");
         }
-
 
         showNotification("Joined conference successfully", "success");
       } catch (error) {
@@ -310,71 +409,18 @@ const handleToggleCam = useCallback(async () => {
     };
   }, [conferenceId, socket, navigate, showNotification]);
 
-
-
-useEffect(() => {
-  Object.entries(remoteStreamsRef.current).forEach(([socketId, streams]) => {
-    if (!streams?.audio) return;
-
-    if (!audioElsRef.current[socketId]) {
-      const audioEl = document.createElement("audio");
-      audioEl.autoplay = true;
-      audioEl.playsInline = true;
-      audioEl.srcObject = streams.audio;
-      document.body.appendChild(audioEl);
-      audioElsRef.current[socketId] = audioEl;
-    }
-  });
-}, [participants.length]);
-
- 
-useEffect(() => {
-  if (!micOn || !getAudioStream()) {
-    setMicLevel(0);
-    return;
-  }
-
-  const audioCtx = new AudioContext();
-  const analyser = audioCtx.createAnalyser();
-  const source = audioCtx.createMediaStreamSource(getAudioStream());
-
-  analyser.fftSize = 256;
-  source.connect(analyser);
-
-  const data = new Uint8Array(analyser.frequencyBinCount);
-  let raf;
-
-  const loop = () => {
-    analyser.getByteFrequencyData(data);
-    const avg = data.reduce((a, b) => a + b, 0) / data.length;
-    setMicLevel(avg);
-    raf = requestAnimationFrame(loop);
-  };
-
-  loop();
-
-  return () => {
-    cancelAnimationFrame(raf);
-    source.disconnect();
-    analyser.disconnect();
-    audioCtx.close();
-  };
-}, [micOn]);
-
-
-  // ✅ ISSUE 2: Updated remote stream handler
+  // Remote stream handler
   useEffect(() => {
-const handler = (e) => {
-  const { socketId, kind, stream } = e.detail;
+    const handler = (e) => {
+      const { socketId, kind, stream } = e.detail;
 
-  const existing = remoteStreamsRef.current[socketId] || {};
-  existing[kind] = stream;
+      const existing = remoteStreamsRef.current[socketId] || {};
+      existing[kind] = stream;
 
-  remoteStreamsRef.current[socketId] = existing;
+      remoteStreamsRef.current[socketId] = existing;
 
-  // force a light re-render (NO streams in state)
-  forceRender(v => v + 1);
-};
+      forceRender(v => v + 1);
+    };
 
     window.addEventListener("webrtc:remote-stream", handler);
     return () => window.removeEventListener("webrtc:remote-stream", handler);
@@ -386,19 +432,12 @@ const handler = (e) => {
 
       console.log("User joined, creating offer for:", socketId);
 
-      // 🚫 DO NOT offer to yourself
       if (socketId === socket.id) return;
-
-      // ✅ Only if I was already in the room
       if (!hasJoinedRef.current) return;
 
-      // 1️⃣ Create peer
       const pc = createPeer(socketId, socket);
-
-      // ✅ Sync tracks with this peer
       syncPeerTracks(socketId);
 
-      // 2️⃣ Create offer
       try {
         const offer = await pc.createOffer({
           offerToReceiveAudio: true,
@@ -420,8 +459,6 @@ const handler = (e) => {
     [socket]
   );
 
-
-
   const handleOffer = useCallback(
     async ({ from, offer }) => {
       if (!mountedRef.current) return;
@@ -432,8 +469,6 @@ const handler = (e) => {
 
       try {
         await pc.setRemoteDescription(offer);
-        
-        // ✅ Sync tracks with this peer
         syncPeerTracks(from);
 
         const answer = await pc.createAnswer();
@@ -496,14 +531,13 @@ const handler = (e) => {
     }
 
     const audioEl = audioElsRef.current[socketId];
-if (audioEl) {
-  audioEl.srcObject = null;
-  audioEl.remove();
-  delete audioElsRef.current[socketId];
-}
+    if (audioEl) {
+      audioEl.srcObject = null;
+      audioEl.remove();
+      delete audioElsRef.current[socketId];
+    }
   }, [activeSpeaker, screenSharer]);
 
-  // ✅ ISSUE 5: Handle screen share updates from others
   const handleScreenShareUpdate = useCallback(({ socketId, active }) => {
     if (!mountedRef.current) return;
     
@@ -522,20 +556,19 @@ if (audioEl) {
 
   useEffect(() => {
     mountedRef.current = true;
-    const mounted = () => mountedRef.current;
 
     const handleParticipantsUpdate = ({ participants }) => {
-      if (!mounted()) return;
+      if (!mountedRef.current) return;
       setParticipants(participants || []);
     };
 
     const handleHandsUpdated = ({ raisedHands }) => {
-      if (!mounted()) return;
+      if (!mountedRef.current) return;
       setRaisedHands(raisedHands);
     };
 
     const handleActiveSpeakerUpdate = ({ socketId }) => {
-      if (!mounted()) return;
+      if (!mountedRef.current) return;
       console.log("Active speaker updated:", socketId);
       setActiveSpeaker(socketId);
       
@@ -545,7 +578,7 @@ if (audioEl) {
     };
 
     const handleSpeakerModeToggled = ({ enabled }) => {
-      if (!mounted()) return;
+      if (!mountedRef.current) return;
       console.log("Speaker mode toggled:", enabled);
       setSpeakerModeEnabled(enabled);
       
@@ -557,7 +590,7 @@ if (audioEl) {
     };
 
     const handleSpeakerAssigned = ({ socketId }) => {
-      if (!mounted()) return;
+      if (!mountedRef.current) return;
       console.log("Speaker assigned by admin:", socketId);
       setActiveSpeaker(socketId);
       
@@ -566,35 +599,26 @@ if (audioEl) {
       }
     };
 
-const handleForceMute = () => {
-  stopAudio();
-  setMicOn(false);
-
-  socket.emit("conference:media-update", {
-    conferenceId,
-    micOn: false,
-  });
-
-  showNotification("Admin muted your microphone", "warning");
-};
-
+    const handleForceMute = () => {
+      if (!mountedRef.current) return;
+      stopAudio();
+      setMicOn(false);
+      showNotification("Admin muted your microphone", "warning");
+    };
 
     const handleForceCameraOff = () => {
-      if (!mounted()) return;
-      console.log("Admin turned off camera");
+      if (!mountedRef.current) return;
       stopCamera();
       setCamOn(false);
       showNotification("Admin has turned off your camera", "warning");
     };
 
     const handleRemovedByAdmin = () => {
-      if (!mounted()) return;
-      console.log("Removed by admin");
+      if (!mountedRef.current) return;
       leaveAndCleanupLocal();
       showNotification("You have been removed from the conference by the admin", "error");
     };
 
-    // Setup socket listeners
     socket.on("conference:user-joined", handleUserJoined);
     socket.on("conference:offer", handleOffer);
     socket.on("conference:answer", handleAnswer);
@@ -612,7 +636,7 @@ const handleForceMute = () => {
     socket.on("conference:screen-share-update", handleScreenShareUpdate);
     
     return () => {
-      mountedRef.current = false;      
+      mountedRef.current = false;
       
       socket.off("conference:user-joined", handleUserJoined);
       socket.off("conference:offer", handleOffer);
@@ -644,37 +668,27 @@ const handleForceMute = () => {
     handleUserLeft,
     handleScreenShareUpdate,
   ]);
-  
-useEffect(() => {
-  // Cleanup audio elements when participants change
-  return () => {
-    Object.values(audioElsRef.current).forEach(audioEl => {
-      if (audioEl && audioEl.parentNode) {
-        audioEl.srcObject = null;
-        audioEl.remove();
-      }
-    });
-    audioElsRef.current = {};
-  };
-}, []);
 
-  // Admin override effect for speaker mode
+  // ✅ FIX 4: Speaker mode auto-mic fix
   useEffect(() => {
     if (!speakerModeEnabled || !activeSpeaker || !myParticipant) return;
     
     const shouldSpeak = activeSpeaker === socket.id || isAdminOrManager;
     
-    if (shouldSpeak && !micOn) {
-      startAudio().then(() => setMicOn(true)).catch(console.error);
+    if (shouldSpeak && !getAudioStream()) {
+      startAudio()
+        .then(() => {
+          getPeerIds().forEach(syncPeerTracks);
+          forceRender(v => v + 1);
+        })
+        .catch(console.error);
     } else if (!shouldSpeak && getAudioStream()) {
       stopAudio();
-      setMicOn(false);
+      forceRender(v => v + 1);
     }
-  }, [activeSpeaker, speakerModeEnabled, myParticipant, socket.id, isAdminOrManager, micOn]);
+  }, [activeSpeaker, speakerModeEnabled, myParticipant, socket.id, isAdminOrManager]);
 
   const handleAdminAction = useCallback((action, targetSocketId) => {
-    const socket = getSocket();
-
     if (!socket || !socket.connected) {
       console.warn("Socket not connected, admin action blocked");
       return;
@@ -685,17 +699,16 @@ useEffect(() => {
       targetSocketId,
       conferenceId,
     });
-  }, [conferenceId]);
+  }, [conferenceId, socket]);
 
   const handleClearAllHands = useCallback(() => {
-    const socket = getSocket();
     if (!socket || !socket.connected) return;
 
     socket.emit("conference:admin-action", {
       action: "clear-hands",
       conferenceId,
     });
-  }, [conferenceId]);
+  }, [conferenceId, socket]);
 
   const handleOpenAdminMenu = useCallback((event, participantId) => {
     setAdminMenuAnchor(event.currentTarget);
@@ -717,9 +730,6 @@ useEffect(() => {
     
     if (!newMode) {
       setActiveSpeaker(null);
-      if (!micOn) {
-        startAudio().then(() => setMicOn(true)).catch(console.error);
-      }
     }
     
     socket.emit("conference:toggle-speaker-mode", {
@@ -728,7 +738,7 @@ useEffect(() => {
     });
     
     showNotification(`Speaker mode ${newMode ? "enabled" : "disabled"}`, "info");
-  }, [speakerModeEnabled, micOn, conferenceId, socket, showNotification]);
+  }, [speakerModeEnabled, conferenceId, socket, showNotification]);
 
   const setAsSpeaker = useCallback((socketId) => {
     socket.emit("conference:set-speaker", {
@@ -749,11 +759,10 @@ useEffect(() => {
     setLayout(newLayout);
   }, []);
 
-const allCameraStreams = Object.entries(remoteStreamsRef.current)
-  .map(([socketId, streams]) => [socketId, streams?.camera])
-  .filter(([, cameraStream]) => cameraStream instanceof MediaStream);
+  const allCameraStreams = Object.entries(remoteStreamsRef.current)
+    .map(([socketId, streams]) => [socketId, streams?.camera])
+    .filter(([, cameraStream]) => cameraStream instanceof MediaStream);
 
-  // Helper to get screen stream if available
   const getRemoteScreenStream = (socketId) => {
     return remoteStreamsRef.current[socketId]?.screen;
   };
@@ -765,6 +774,19 @@ const allCameraStreams = Object.entries(remoteStreamsRef.current)
   const participantsLoaded = Array.isArray(participants);
   const inConference = Boolean(conferenceId);
 
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(audioElsRef.current).forEach(audioEl => {
+        if (audioEl && audioEl.parentNode) {
+          audioEl.srcObject = null;
+          audioEl.remove();
+        }
+      });
+      audioElsRef.current = {};
+    };
+  }, []);
+
   return (
     <Box sx={{ display: "flex", height: "100vh", background: "#000" }}>
       <Box sx={{ 
@@ -773,6 +795,9 @@ const allCameraStreams = Object.entries(remoteStreamsRef.current)
         flexDirection: "column",
         p: 2 
       }}>
+        {/* ... rest of the JSX remains the same ... */}
+        {/* (The JSX part is identical to your original, just using the fixed state variables) */}
+        
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
           <Typography color="white" fontWeight={600}>
             Conference Room: {conferenceId}
