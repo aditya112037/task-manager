@@ -68,13 +68,13 @@ export default function ConferenceRoom() {
   const navigate = useNavigate();
   const socket = getSocket();
   const { user: currentUser } = useAuth();
-
+  const audioElsRef = useRef({});
   const [adminMenuAnchor, setAdminMenuAnchor] = useState(null);
   const [selectedParticipantId, setSelectedParticipantId] = useState(null);
   const [participantsPanelOpen, setParticipantsPanelOpen] = useState(true);
 
-  // ✅ ISSUE 2: Fix remoteStreams structure
-  const [remoteStreams, setRemoteStreams] = useState({}); // { socketId: { camera?: MediaStream, screen?: MediaStream } }
+  const remoteStreamsRef = useRef({});
+  const [, forceRender] = useState(0);// { socketId: { camera?: MediaStream, screen?: MediaStream } }
   const [layout, setLayout] = useState(LAYOUT.GRID);
   const [screenSharer, setScreenSharer] = useState(null); // socketId of who's sharing screen
   const [raisedHands, setRaisedHands] = useState([]);
@@ -312,23 +312,22 @@ setCamOn(true);
     camOnRef.current = camOn;
   }, [micOn, camOn]);
 
-  useEffect(() => {
-  Object.values(remoteStreams).forEach((streams) => {
+useEffect(() => {
+  Object.entries(remoteStreamsRef.current).forEach(([socketId, streams]) => {
     if (!streams?.audio) return;
 
-    let audioEl = document.getElementById(`audio-${streams.audio.id}`);
-    if (!audioEl) {
-      audioEl = document.createElement("audio");
-      audioEl.id = `audio-${streams.audio.id}`;
+    if (!audioElsRef.current[socketId]) {
+      const audioEl = document.createElement("audio");
       audioEl.autoplay = true;
       audioEl.playsInline = true;
       audioEl.srcObject = streams.audio;
       document.body.appendChild(audioEl);
+      audioElsRef.current[socketId] = audioEl;
     }
   });
-}, [remoteStreams]);
+}, [participants.length]);
 
-  // Audio analyser for mic level
+ 
   useEffect(() => {
     const audioStream = getAudioStream();
     if (!audioStream || !micOn) {
@@ -371,16 +370,17 @@ setCamOn(true);
 
   // ✅ ISSUE 2: Updated remote stream handler
   useEffect(() => {
-    const handler = (e) => {
-      const { socketId, kind, stream } = e.detail;
-      setRemoteStreams(prev => ({
-        ...prev,
-        [socketId]: {
-          ...prev[socketId],
-          [kind]: stream
-        }
-      }));
-    };
+const handler = (e) => {
+  const { socketId, kind, stream } = e.detail;
+
+  const existing = remoteStreamsRef.current[socketId] || {};
+  existing[kind] = stream;
+
+  remoteStreamsRef.current[socketId] = existing;
+
+  // force a light re-render (NO streams in state)
+  forceRender(v => v + 1);
+};
 
     window.addEventListener("webrtc:remote-stream", handler);
     return () => window.removeEventListener("webrtc:remote-stream", handler);
@@ -503,6 +503,13 @@ setCamOn(true);
       console.log("Active speaker left, clearing speaker");
       setActiveSpeaker(null);
     }
+
+    const audioEl = audioElsRef.current[socketId];
+if (audioEl) {
+  audioEl.srcObject = null;
+  audioEl.remove();
+  delete audioElsRef.current[socketId];
+}
   }, [activeSpeaker, screenSharer]);
 
   // ✅ ISSUE 5: Handle screen share updates from others
@@ -744,15 +751,12 @@ setCamOn(true);
   }, []);
 
   // Helper to get all camera streams for display
-  const allCameraStreams = useMemo(() => {
-    return Object.entries(remoteStreams)
-      .filter(([socketId, streams]) => streams?.camera)
-      .map(([socketId, streams]) => [socketId, streams.camera]);
-  }, [remoteStreams]);
+const allCameraStreams = Object.entries(remoteStreamsRef.current)
+  .filter(([, streams]) => streams?.camera);
 
   // Helper to get screen stream if available
   const getRemoteScreenStream = (socketId) => {
-    return remoteStreams[socketId]?.screen;
+    return remoteStreamsRef.current[socketId]?.screen;
   };
 
   const activeSpeakerParticipant = participants.find(p => p.socketId === activeSpeaker);
