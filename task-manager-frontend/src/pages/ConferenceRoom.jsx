@@ -143,6 +143,7 @@ if (micOn) {
 } else {
   const stream = await startAudio();
   if (!stream) return;
+  getPeerIds().forEach(syncPeerTracks);
   setMicOn(true);
 }
 
@@ -166,6 +167,7 @@ if (micOn) {
       } else {
         const stream = await startCamera();
 if (!stream) return;
+ getPeerIds().forEach(syncPeerTracks)
 setCamOn(true);
       }
       
@@ -223,6 +225,11 @@ setCamOn(true);
       showNotification("Screen share failed", "error");
     }
   }, [sharingScreen, socket, conferenceId, showNotification]);
+
+  useEffect(() => {
+  forceRender(v => v + 1);
+}, [micOn, camOn, sharingScreen]);
+
 
   // Initialize and join conference
   useEffect(() => {
@@ -745,9 +752,9 @@ if (audioEl) {
     setLayout(newLayout);
   }, []);
 
-  // Helper to get all camera streams for display
 const allCameraStreams = Object.entries(remoteStreamsRef.current)
-  .filter(([, streams]) => streams?.camera);
+  .map(([socketId, streams]) => [socketId, streams?.camera])
+  .filter(([, cameraStream]) => cameraStream instanceof MediaStream);
 
   // Helper to get screen stream if available
   const getRemoteScreenStream = (socketId) => {

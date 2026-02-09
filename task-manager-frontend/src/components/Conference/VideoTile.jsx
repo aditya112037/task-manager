@@ -2,6 +2,14 @@ import React, { useEffect, useRef } from "react";
 import { Box, Typography, Chip } from "@mui/material";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 
+const isValidMediaStream = (stream) => {
+  return (
+    stream &&
+    typeof stream === "object" &&
+    stream instanceof MediaStream
+  );
+};
+
 export default function VideoTile({
   stream,
   videoRef,
@@ -20,32 +28,28 @@ export default function VideoTile({
     const videoEl = ref.current;
     if (!videoEl) return;
 
-    // 🚫 HARD GUARD — NEVER CRASH RENDER TREE
-    if (!(stream instanceof MediaStream)) {
-      if (videoEl.srcObject) {
-        videoEl.srcObject = null;
-      }
+    // 🚨 HARD GUARD — THIS IS THE FIX
+    if (!isValidMediaStream(stream)) {
+      videoEl.srcObject = null;
       return;
     }
 
-    // ✅ Only assign if different (prevents flicker + errors)
+    // Avoid redundant re-assign
     if (videoEl.srcObject !== stream) {
       videoEl.srcObject = stream;
     }
 
-    const tryPlay = async () => {
+    const play = async () => {
       try {
         await videoEl.play();
-      } catch (err) {
-        // Autoplay restrictions are NORMAL — ignore safely
-        console.debug("VideoTile autoplay blocked:", err?.message);
+      } catch {
+        // autoplay restriction — safe to ignore
       }
     };
 
-    tryPlay();
+    play();
 
     return () => {
-      // Cleanup ONLY for internally owned refs
       if (ref === internalRef && videoEl) {
         videoEl.srcObject = null;
       }
@@ -66,7 +70,7 @@ export default function VideoTile({
     ? { border: "2px solid #2196f3" }
     : { border: "1px solid #333" };
 
-  const hasValidStream = stream instanceof MediaStream;
+  const showVideo = isValidMediaStream(stream);
 
   return (
     <Box
@@ -89,12 +93,11 @@ export default function VideoTile({
           height: "100%",
           objectFit: "cover",
           backgroundColor: "#000",
-          display: hasValidStream ? "block" : "none",
+          display: showVideo ? "block" : "none",
         }}
       />
 
-      {/* Placeholder when no video */}
-      {!hasValidStream && (
+      {!showVideo && (
         <Box
           sx={{
             width: "100%",
@@ -111,7 +114,6 @@ export default function VideoTile({
         </Box>
       )}
 
-      {/* Active speaker badge */}
       {isActiveSpeaker && (
         <Box
           sx={{
@@ -135,7 +137,6 @@ export default function VideoTile({
         </Box>
       )}
 
-      {/* Bottom gradient + label */}
       <Box
         sx={{
           position: "absolute",
