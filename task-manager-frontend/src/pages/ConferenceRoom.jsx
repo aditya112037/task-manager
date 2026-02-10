@@ -105,23 +105,46 @@ export default function ConferenceRoom() {
     setNotification({ open: true, message, severity });
   }, []);
 
-  // Debug audio state
-  useEffect(() => {
-    const logInterval = setInterval(() => {
-      const localAudio = getAudioStream();
-      const peers = getPeers();
-      console.log("Audio Debug:", {
-        localAudio: !!localAudio,
-        localTrack: localAudio?.getAudioTracks()[0]?.enabled,
-        remoteStreams: Object.keys(remoteStreamsRef.current).length,
-        audioElements: Object.keys(audioElsRef.current).length,
-        peers: Object.keys(peers).length,
-        peerAudioSenders: Object.values(peers).filter(p => p.audioSender).length,
-      });
-    }, 5000);
+// Debug audio state
+useEffect(() => {
+  const logInterval = setInterval(() => {
+    const localAudio = getAudioStream();
+    const peers = getPeers();
+    
+    // Check audio track status
+    const audioTrack = localAudio?.getAudioTracks()[0];
+    
+    console.log("🔊 Audio Debug:", {
+      // Local audio state
+      localAudio: !!localAudio,
+      audioTrack: audioTrack ? {
+        id: audioTrack.id,
+        enabled: audioTrack.enabled,
+        readyState: audioTrack.readyState,
+        muted: audioTrack.muted
+      } : null,
+      
+      // Remote streams
+      remoteAudioStreams: Object.values(remoteStreamsRef.current)
+        .filter(streams => streams?.audio)
+        .map(streams => streams.audio?.getAudioTracks()[0]?.id),
+      
+      // Audio elements
+      audioElements: Object.keys(audioElsRef.current),
+      
+      // Peer connections
+      peerCount: Object.keys(peers).length,
+      peerDetails: Object.entries(peers).map(([id, peer]) => ({
+        id,
+        connectionState: peer.pc.connectionState,
+        hasAudioSender: !!peer.audioSender,
+        audioTrack: peer.audioSender?.track?.id
+      }))
+    });
+  }, 3000); // Increased frequency for debugging
 
-    return () => clearInterval(logInterval);
-  }, []);
+  return () => clearInterval(logInterval);
+}, []);
 
   const hardStopAllMedia = () => {
     stopAudio();
