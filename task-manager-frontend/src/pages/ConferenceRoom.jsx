@@ -159,14 +159,29 @@ const handleToggleMic = useCallback(async () => {
 
   try {
     if (getAudioStream()) {
+      // We're turning OFF audio
+      const wasEnabled = micOn;
       stopAudio();
       setMicOn(false);
+      
+      // Update all peers that we stopped audio
+      getPeerIds().forEach(id => {
+        const peer = peers[id];
+        if (peer && peer.audioSender) {
+          peer.pc.removeTrack(peer.audioSender);
+          peer.audioSender = null;
+        }
+      });
     } else {
+      // We're turning ON audio
       await startAudio();
-      getPeerIds().forEach(syncPeerTracks); // ✅ this is enough
       setMicOn(true);
+      
+      // Add audio track to all existing peers
+      getPeerIds().forEach(syncPeerTracks);
     }
 
+    // Update server state
     socket.emit("conference:media-update", {
       conferenceId,
       micOn: !!getAudioStream(),
@@ -265,39 +280,68 @@ const handleToggleMic = useCallback(async () => {
     return () => clearInterval(interval);
   }, [micOn, camOn, sharingScreen]);
 
-  // ✅ FIX 1: Remote audio attachment (CORRECT VERSION)
+// ✅ FIX 1: Remote audio attachment (CORRECTED VERSION)
 useEffect(() => {
+  const activeAudioEls = new Set();
+  
   Object.entries(remoteStreamsRef.current).forEach(([socketId, streams]) => {
-const audioStream = streams?.audio;
-if (!audioStream || !isValidStream(audioStream)) return;
-
-audioStream.getAudioTracks().forEach(t => {
-  t.enabled = true;
-});
-
-    if (!isValidStream(audioStream)) return;
-
+    const audioStream = streams?.audio;
+    
+    // Check if we have a valid audio stream
+    if (!audioStream || typeof audioStream.getAudioTracks !== 'function') return;
+    
+    const audioTracks = audioStream.getAudioTracks();
+    if (audioTracks.length === 0 || !audioTracks[0].enabled) return;
+    
+    // Get or create audio element
     let audioEl = audioElsRef.current[socketId];
-
+    
     if (!audioEl) {
       audioEl = document.createElement("audio");
+      audioEl.id = `remote-audio-${socketId}`;
       audioEl.autoplay = true;
       audioEl.playsInline = true;
       audioEl.muted = false;
       audioEl.volume = 1;
+      audioEl.style.display = "none";
       document.body.appendChild(audioEl);
       audioElsRef.current[socketId] = audioEl;
-      audioEl.onloadedmetadata = () => {
-  audioEl.play().catch(() => {});
-};
     }
-
+    
+    // Set the stream and play
     if (audioEl.srcObject !== audioStream) {
       audioEl.srcObject = audioStream;
-      audioEl.play().catch(() => {});
+    }
+    
+    // Ensure audio is playing
+    audioEl.play().catch(err => {
+      console.warn(`Failed to auto-play audio for ${socketId}:`, err);
+      // Try with user interaction
+      const playOnClick = () => {
+        audioEl.play();
+        document.removeEventListener('click', playOnClick);
+      };
+      document.addEventListener('click', playOnClick);
+    });
+    
+    activeAudioEls.add(socketId);
+  });
+  
+  // Clean up unused audio elements
+  Object.keys(audioElsRef.current).forEach(socketId => {
+    if (!activeAudioEls.has(socketId)) {
+      const audioEl = audioElsRef.current[socketId];
+      if (audioEl) {
+        audioEl.srcObject = null;
+        audioEl.remove();
+        delete audioElsRef.current[socketId];
+      }
     }
   });
-}, [forceRender]);
+  
+  // Force update to trigger re-render if needed
+  forceRender(v => v + 1);
+}, [remoteStreamsRef.current, forceRender]);
 
 useEffect(() => {
   if (!socket?.id || !currentUser) return;

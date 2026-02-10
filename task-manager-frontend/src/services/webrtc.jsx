@@ -21,12 +21,12 @@ const peers = {}; // socketId -> { pc, audioSender, cameraSender, screenSender }
    PEER CREATION
 ------------------------------ */
 
-
 export const createPeer = (socketId, socket) => {
   if (peers[socketId]) return peers[socketId].pc;
 
   const pc = new RTCPeerConnection({
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+    sdpSemantics: 'unified-plan' // Ensure unified plan for proper track handling
   });
 
   pc.onicecandidate = e => {
@@ -38,26 +38,45 @@ export const createPeer = (socketId, socket) => {
     }
   };
 
+  // FIXED: Better track handling with proper stream identification
   pc.ontrack = (e) => {
     const track = e.track;
-    if (!track) return;
+    const stream = e.streams[0];
+    
+    if (!track || !stream) return;
 
-    const kind =
-      track.kind === "audio"
-        ? "audio"
-        : track.contentHint === "detail"
-          ? "screen"
-          : "camera";
+    // Determine track type
+    let kind = 'unknown';
+    if (track.kind === 'audio') {
+      kind = 'audio';
+    } else if (track.kind === 'video') {
+      // Try to detect screen share
+      const settings = track.getSettings();
+      if (settings.displaySurface || settings.logicalSurface || 
+          track.contentHint === 'detail' || track.contentHint === 'text') {
+        kind = 'screen';
+      } else {
+        kind = 'camera';
+      }
+    }
 
+    console.log(`Received ${kind} track from ${socketId}:`, track.id);
+    
+    // Dispatch event with the stream
     window.dispatchEvent(
       new CustomEvent("webrtc:remote-stream", {
         detail: {
           socketId,
           kind,
-          stream: e.streams[0],
+          stream: stream,
         },
       })
     );
+  };
+
+  // Handle connection state changes
+  pc.onconnectionstatechange = () => {
+    console.log(`Peer ${socketId} connection state:`, pc.connectionState);
   };
 
   peers[socketId] = {
@@ -70,6 +89,9 @@ export const createPeer = (socketId, socket) => {
   return pc;
 };
 
+/* -----------------------------
+   ADD TRACKS TO PEER
+------------------------------ */
 
 /* -----------------------------
    ADD TRACKS TO PEER
@@ -81,32 +103,67 @@ export const syncPeerTracks = (socketId) => {
 
   const { pc } = peer;
 
-  // 🎤 AUDIO
-// 🎤 AUDIO
-const audioTrack = audioStream?.getAudioTracks()[0];
-
-if (audioTrack) {
-  if (peer.audioSender) {
-    peer.audioSender.replaceTrack(audioTrack);
+  // 🎤 AUDIO - FIXED: Proper track replacement
+  const audioTrack = audioStream?.getAudioTracks()[0];
+  
+  if (audioTrack) {
+    if (peer.audioSender) {
+      try {
+        // First remove the old track if it exists
+        peer.audioSender.replaceTrack(audioTrack).catch(err => {
+          console.warn("Error replacing audio track:", err);
+          // Fallback: remove and add new
+          if (peer.audioSender) {
+            pc.removeTrack(peer.audioSender);
+          }
+          peer.audioSender = pc.addTrack(audioTrack, audioStream);
+        });
+      } catch (err) {
+        console.warn("Failed to replace audio track, adding new:", err);
+        peer.audioSender = pc.addTrack(audioTrack, audioStream);
+      }
+    } else {
+      peer.audioSender = pc.addTrack(audioTrack, audioStream);
+    }
   } else {
-    peer.audioSender = pc.addTrack(audioTrack, audioStream);
+    // No audio track - remove if exists
+    if (peer.audioSender) {
+      pc.removeTrack(peer.audioSender);
+      peer.audioSender = null;
+    }
   }
-}
 
-  // 🎥 CAMERA
+  // 🎥 CAMERA - FIXED: Proper track management
   const cameraTrack = cameraStream?.getVideoTracks()[0];
-  if (cameraTrack && !peer.cameraSender) {
-    peer.cameraSender = pc.addTrack(cameraTrack, cameraStream);
+  if (cameraTrack) {
+    if (!peer.cameraSender) {
+      peer.cameraSender = pc.addTrack(cameraTrack, cameraStream);
+    } else if (peer.cameraSender.track !== cameraTrack) {
+      // Track changed (restart camera), replace it
+      peer.cameraSender.replaceTrack(cameraTrack);
+    }
+  } else if (peer.cameraSender) {
+    // Camera stopped, remove track
+    pc.removeTrack(peer.cameraSender);
+    peer.cameraSender = null;
   }
 
-  // 🖥️ SCREEN
+  // 🖥️ SCREEN - FIXED: Proper track management
   const screenTrack = screenStream?.getVideoTracks()[0];
-  if (screenTrack && !peer.screenSender) {
+  if (screenTrack) {
     screenTrack.contentHint = "detail";
-    peer.screenSender = pc.addTrack(screenTrack, screenStream);
+    if (!peer.screenSender) {
+      peer.screenSender = pc.addTrack(screenTrack, screenStream);
+    } else if (peer.screenSender.track !== screenTrack) {
+      // Screen track changed, replace it
+      peer.screenSender.replaceTrack(screenTrack);
+    }
+  } else if (peer.screenSender) {
+    // Screen sharing stopped, remove track
+    pc.removeTrack(peer.screenSender);
+    peer.screenSender = null;
   }
 };
-
 
 /* -----------------------------
    UPDATE SINGLE TRACK
@@ -157,29 +214,41 @@ export const removePeer = (socketId) => {
 ------------------------------ */
 
 export const startAudio = async () => {
-  if (audioStream) return audioStream;
+  // Always create new stream to ensure fresh tracks
+  if (audioStream) {
+    stopAudio();
+  }
 
   try {
     audioStream = await navigator.mediaDevices.getUserMedia({ 
       audio: {
         echoCancellation: true,
         noiseSuppression: true,
-        autoGainControl: true
+        autoGainControl: true,
+        channelCount: 1
       } 
     });
+    
+    // Ensure track is enabled
+    audioStream.getAudioTracks().forEach(t => {
+      t.enabled = true;
+    });
+    
     return audioStream;
   } catch (error) {
     console.error("Failed to start audio:", error);
     throw error;
   }
 };
-
 export const stopAudio = () => {
   if (!audioStream) return;
 
+  // Only stop tracks, don't just disable
   audioStream.getAudioTracks().forEach(t => {
-    t.enabled = false;   // ✅ mute only
+    t.stop(); // Stop the track completely
   });
+  
+  audioStream = null; // Clear the stream reference
 };
 
 
