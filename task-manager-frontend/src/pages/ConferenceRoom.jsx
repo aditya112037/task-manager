@@ -164,7 +164,6 @@ const leaveAndCleanupLocal = useCallback(() => {
       } else {
         await startAudio();
         getPeerIds().forEach(syncPeerTracks);
-        renegotiatePeer(id, socket);
         setMicOn(true);
       }
 
