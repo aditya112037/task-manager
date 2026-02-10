@@ -81,8 +81,10 @@ export const joinConference = (conferenceId) => {
     socket.off("conference:joined", handleJoined);
     socket.off("conference:error", handleError);
   };
-
-  socket.once("conference:joined", handleJoined);
+socket.once("conference:user-joined", () => {
+  locks.conference.joined = true;
+  locks.conference.joinInProgress = false;
+});
   socket.once("conference:error", handleError);
 
   // ✅ FIX 2: Safety timeout to prevent permanent deadlock
