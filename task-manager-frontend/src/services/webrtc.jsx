@@ -29,16 +29,7 @@ export const createPeer = (socketId, socket) => {
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
   });
 
-  const audioTransceiver = pc.addTransceiver("audio", {
-    direction: "sendrecv",
-    sendEncodings: [{}], // REQUIRED
-  });
-
-  const videoTransceiver = pc.addTransceiver("video", {
-    direction: "sendrecv",
-  });
-
-  pc.onicecandidate = (e) => {
+  pc.onicecandidate = e => {
     if (e.candidate) {
       socket.emit("conference:ice-candidate", {
         to: socketId,
@@ -55,8 +46,8 @@ export const createPeer = (socketId, socket) => {
       track.kind === "audio"
         ? "audio"
         : track.contentHint === "detail"
-        ? "screen"
-        : "camera";
+          ? "screen"
+          : "camera";
 
     window.dispatchEvent(
       new CustomEvent("webrtc:remote-stream", {
@@ -71,8 +62,8 @@ export const createPeer = (socketId, socket) => {
 
   peers[socketId] = {
     pc,
-    audioSender: audioTransceiver.sender,
-    cameraSender: videoTransceiver.sender,
+    audioSender: null,
+    cameraSender: null,
     screenSender: null,
   };
 
@@ -90,12 +81,10 @@ export const syncPeerTracks = (socketId) => {
 
   const { pc } = peer;
 
-  // 🎤 AUDIO (CRITICAL FIX)
+  // 🎤 AUDIO
   const audioTrack = audioStream?.getAudioTracks()[0];
-  if (audioTrack && peer.audioSender) {
-    if (!peer.audioSender.track || peer.audioSender.track !== audioTrack) {
-      peer.audioSender.replaceTrack(audioTrack);
-    }
+  if (audioTrack && !peer.audioSender) {
+    peer.audioSender = pc.addTrack(audioTrack, audioStream);
   }
 
   // 🎥 CAMERA
@@ -137,23 +126,6 @@ export const updatePeerTrack = (socketId, kind, enabled) => {
     default:
       break;
   }
-};
-
-export const renegotiatePeer = async (socketId, socket) => {
-  const peer = peers[socketId];
-  if (!peer) return;
-
-  const pc = peer.pc;
-
-  if (pc.signalingState !== "stable") return;
-
-  const offer = await pc.createOffer();
-  await pc.setLocalDescription(offer);
-
-  socket.emit("conference:offer", {
-    to: socketId,
-    offer,
-  });
 };
 
 
