@@ -2,6 +2,12 @@ import React, { useEffect, useRef } from "react";
 import { Box, Typography, Chip } from "@mui/material";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 
+const isRenderableStream = (stream) =>
+  stream &&
+  typeof stream.getTracks === "function" &&
+  stream.getTracks().some(t => t.readyState === "live");
+
+
 const isAttachableStream = (stream) => {
   return (
     stream &&
@@ -25,21 +31,22 @@ export default function VideoTile({
   const internalRef = useRef(null);
   const ref = videoRef || internalRef;
 
-  useEffect(() => {
-    const videoEl = ref.current;
-    if (!videoEl) return;
+useEffect(() => {
+  const videoEl = ref.current;
+  if (!videoEl) return;
+  if (!isRenderableStream(stream)) return;
 
-    if (!isAttachableStream(stream)) {
-      // DO NOT nuke srcObject unless unmounting
-      return;
-    }
-
-    if (videoEl.srcObject !== stream) {
-      videoEl.srcObject = stream;
-    }
-
+  if (videoEl.srcObject !== stream) {
+    videoEl.srcObject = stream;
     videoEl.play().catch(() => {});
-  }, [stream, ref]); // ✅ Fixed: Added 'ref' to dependencies
+  }
+
+  return () => {
+    if (ref === internalRef && videoEl) {
+      videoEl.srcObject = null;
+    }
+  };
+}, [stream]);
 
   // Cleanup ONLY on unmount
   useEffect(() => {

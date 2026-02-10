@@ -63,6 +63,12 @@ const LAYOUT = {
   SPEAKER: "speaker",
 };
 
+const isValidStream = (stream) =>
+  stream &&
+  typeof stream.getTracks === "function" &&
+  stream.getTracks().length > 0;
+
+
 export default function ConferenceRoom() {
   const { conferenceId } = useParams();
   const navigate = useNavigate();
@@ -123,6 +129,21 @@ export default function ConferenceRoom() {
       }
     }
   }, [socket]);
+
+  const hardStopAllMedia = () => {
+    stopAudio();
+    stopCamera();
+    stopScreen();
+
+    Object.values(audioElsRef.current).forEach(el => {
+      if (el) {
+        el.srcObject = null;
+        el.remove();
+      }
+    });
+
+    audioElsRef.current = {};
+  };
 
   const leaveAndCleanupLocal = useCallback(() => {
     stopCamera();
@@ -263,41 +284,49 @@ export default function ConferenceRoom() {
   }, [micOn, camOn, sharingScreen]);
 
   // ✅ FIX 1: Remote audio attachment (CORRECT VERSION)
-  useEffect(() => {
-    Object.entries(remoteStreamsRef.current).forEach(([socketId, streams]) => {
-      const audioStream = streams?.audio;
-      if (!(audioStream instanceof MediaStream)) {
-        // Remove audio element if stream is gone
-        const audioEl = audioElsRef.current[socketId];
-        if (audioEl) {
-          audioEl.srcObject = null;
-          audioEl.remove();
-          delete audioElsRef.current[socketId];
-        }
-        return;
-      }
+useEffect(() => {
+  Object.entries(remoteStreamsRef.current).forEach(([socketId, streams]) => {
+    const audioStream = streams?.audio;
+    if (!isValidStream(audioStream)) return;
 
-      let audioEl = audioElsRef.current[socketId];
+    let audioEl = audioElsRef.current[socketId];
 
-      if (!audioEl) {
-        audioEl = document.createElement("audio");
-        audioEl.autoplay = true;
-        audioEl.playsInline = true;
-        audioEl.muted = false;
-        audioEl.volume = 1.0;
+    if (!audioEl) {
+      audioEl = document.createElement("audio");
+      audioEl.autoplay = true;
+      audioEl.playsInline = true;
+      audioEl.muted = false;
+      audioEl.volume = 1;
+      document.body.appendChild(audioEl);
+      audioElsRef.current[socketId] = audioEl;
+    }
 
-        document.body.appendChild(audioEl);
-        audioElsRef.current[socketId] = audioEl;
-      }
+    if (audioEl.srcObject !== audioStream) {
+      audioEl.srcObject = audioStream;
+      audioEl.play().catch(() => {});
+    }
+  });
+}, [forceRender]);
 
-      if (audioEl.srcObject !== audioStream) {
-        audioEl.srcObject = audioStream;
-        audioEl.play().catch((err) => {
-          console.warn("Failed to play remote audio:", err);
-        });
-      }
-    });
-  }, [forceRender]);
+useEffect(() => {
+  if (!socket?.id || !currentUser) return;
+
+  setParticipants(prev => {
+    if (prev.some(p => p.socketId === socket.id)) return prev;
+
+    return [
+      {
+        socketId: socket.id,
+        userId: currentUser._id,
+        userName: currentUser.name || "You",
+        role: "participant",
+      },
+      ...prev,
+    ];
+  });
+}, [socket?.id, currentUser]);
+
+
 
   // Mic level monitoring
   useEffect(() => {
@@ -404,6 +433,7 @@ export default function ConferenceRoom() {
     return () => {
       if (hasJoinedRef.current && !conferenceEndedRef.current) {
         console.log("Component unmounting, cleaning up conference");
+        hardStopAllMedia();
         cleanupConference();
       }
     };
@@ -615,8 +645,18 @@ export default function ConferenceRoom() {
 
     const handleRemovedByAdmin = () => {
       if (!mountedRef.current) return;
-      leaveAndCleanupLocal();
+      hardStopAllMedia();
+      cleanupConference();
+      navigate("/teams");
       showNotification("You have been removed from the conference by the admin", "error");
+    };
+
+    const handleConferenceEndedByAdmin = () => {
+      if (!mountedRef.current) return;
+      socket.emit("conference:end", { conferenceId });
+      hardStopAllMedia();
+      cleanupConference();
+      navigate("/teams");
     };
 
     socket.on("conference:user-joined", handleUserJoined);
@@ -759,9 +799,14 @@ export default function ConferenceRoom() {
     setLayout(newLayout);
   }, []);
 
-  const allCameraStreams = Object.entries(remoteStreamsRef.current)
-    .map(([socketId, streams]) => [socketId, streams?.camera])
-    .filter(([, cameraStream]) => cameraStream instanceof MediaStream);
+const isRenderableStream = (stream) =>
+  stream &&
+  typeof stream.getTracks === "function" &&
+  stream.getTracks().some(t => t.readyState === "live");
+
+const allCameraStreams = Object.entries(remoteStreamsRef.current)
+  .map(([socketId, streams]) => [socketId, streams?.camera])
+  .filter(([, stream]) => isRenderableStream(stream));
 
   const getRemoteScreenStream = (socketId) => {
     return remoteStreamsRef.current[socketId]?.screen;
@@ -777,13 +822,8 @@ export default function ConferenceRoom() {
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      Object.values(audioElsRef.current).forEach(audioEl => {
-        if (audioEl && audioEl.parentNode) {
-          audioEl.srcObject = null;
-          audioEl.remove();
-        }
-      });
-      audioElsRef.current = {};
+      hardStopAllMedia();
+      cleanupConference();
     };
   }, []);
 
@@ -1312,6 +1352,9 @@ export default function ConferenceRoom() {
               onClick={() => {
                 if (isAdminOrManager) {
                   socket.emit("conference:end", { conferenceId });
+                  hardStopAllMedia();
+                  cleanupConference();
+                  navigate("/teams");
                 } else {
                   leaveAndCleanupLocal();
                 }
