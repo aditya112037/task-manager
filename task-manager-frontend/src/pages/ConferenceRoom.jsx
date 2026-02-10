@@ -151,41 +151,42 @@ const leaveAndCleanupLocal = useCallback(() => {
     navigate("/teams");
   }, [navigate, showNotification]);
 
-  const handleToggleMic = useCallback(async () => {
-    if (speakerModeEnabled && activeSpeaker !== socket.id && !isAdminOrManager) {
-      showNotification("Only the active speaker can unmute", "warning");
-      return;
+const handleToggleMic = useCallback(async () => {
+  if (speakerModeEnabled && activeSpeaker !== socket.id && !isAdminOrManager) {
+    showNotification("Only the active speaker can unmute", "warning");
+    return;
+  }
+
+  try {
+    if (getAudioStream()) {
+      stopAudio();
+      setMicOn(false);
+    } else {
+      await startAudio();
+      getPeerIds().forEach(syncPeerTracks); // ✅ this is enough
+      setMicOn(true);
     }
 
-    try {
-      if (getAudioStream()) {
-        stopAudio();
-        setMicOn(false);
-      } else {
-        await startAudio();
-        getPeerIds().forEach(syncPeerTracks);
-        setMicOn(true);
-      }
+    socket.emit("conference:media-update", {
+      conferenceId,
+      micOn: !!getAudioStream(),
+      camOn: !!getCameraStream(),
+    });
 
-      socket.emit("conference:media-update", {
-        conferenceId,
-        micOn: !!getAudioStream(),
-        camOn: !!getCameraStream(),
-      });
-      
-      forceRender(v => v + 1); // Force UI update
-    } catch (err) {
-      console.error("Failed to toggle microphone:", err);
-      showNotification("Failed to toggle microphone", "error");
-    }
-  }, [
-    speakerModeEnabled,
-    activeSpeaker,
-    isAdminOrManager,
-    conferenceId,
-    socket,
-    showNotification,
-  ]);
+    forceRender(v => v + 1);
+  } catch (err) {
+    console.error("Failed to toggle microphone:", err);
+    showNotification("Failed to toggle microphone", "error");
+  }
+}, [
+  speakerModeEnabled,
+  activeSpeaker,
+  isAdminOrManager,
+  conferenceId,
+  socket,
+  showNotification,
+]);
+
 
   const handleToggleCam = useCallback(async () => {
     try {
