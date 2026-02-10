@@ -64,12 +64,6 @@ const LAYOUT = {
   SPEAKER: "speaker",
 };
 
-const isValidStream = (stream) =>
-  stream &&
-  typeof stream.getTracks === "function" &&
-  stream.getTracks().length > 0;
-
-
 export default function ConferenceRoom() {
   const { conferenceId } = useParams();
   const navigate = useNavigate();
@@ -355,7 +349,7 @@ const handleToggleMic = useCallback(async () => {
     
     // Force update to trigger re-render if needed
     forceRender(v => v + 1);
-  }, [remoteStreamsRef.current]);
+  }, [forceRender]); // Removed remoteStreamsRef.current from dependencies
 
   useEffect(() => {
     if (!socket?.id || !currentUser) return;
@@ -839,22 +833,29 @@ const handleToggleMic = useCallback(async () => {
     setLayout(newLayout);
   }, []);
 
-  const isRenderableStream = (stream) =>
+  const isRenderableStream = useCallback((stream) =>
     stream &&
     typeof stream.getTracks === "function" &&
-    stream.getTracks().some(t => t.readyState === "live");
+    stream.getTracks().some(t => t.readyState === "live"), []);
 
-  const allCameraStreams = Object.entries(remoteStreamsRef.current)
-    .map(([socketId, streams]) => [socketId, streams?.camera])
-    .filter(([, stream]) => isRenderableStream(stream));
+  const allCameraStreams = useMemo(() => 
+    Object.entries(remoteStreamsRef.current)
+      .map(([socketId, streams]) => [socketId, streams?.camera])
+      .filter(([, stream]) => isRenderableStream(stream))
+  , [isRenderableStream]);
 
-  const getRemoteScreenStream = (socketId) => {
+  const getRemoteScreenStream = useCallback((socketId) => {
     return remoteStreamsRef.current[socketId]?.screen;
-  };
+  }, []);
 
-  const activeSpeakerParticipant = participants.find(p => p.socketId === activeSpeaker);
-  const activeSpeakerName = activeSpeakerParticipant?.userName || 
-    (activeSpeaker === socket.id ? "You" : `User ${activeSpeaker?.slice(0, 4)}`);
+  const activeSpeakerParticipant = useMemo(() => 
+    participants.find(p => p.socketId === activeSpeaker)
+  , [participants, activeSpeaker]);
+
+  const activeSpeakerName = useMemo(() => 
+    activeSpeakerParticipant?.userName || 
+    (activeSpeaker === socket.id ? "You" : `User ${activeSpeaker?.slice(0, 4)}`)
+  , [activeSpeakerParticipant, activeSpeaker, socket.id]);
 
   const participantsLoaded = Array.isArray(participants);
   const inConference = Boolean(conferenceId);
