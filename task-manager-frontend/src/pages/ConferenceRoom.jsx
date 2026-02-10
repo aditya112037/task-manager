@@ -268,10 +268,13 @@ const handleToggleMic = useCallback(async () => {
   // ✅ FIX 1: Remote audio attachment (CORRECT VERSION)
 useEffect(() => {
   Object.entries(remoteStreamsRef.current).forEach(([socketId, streams]) => {
-    const audioStream = streams?.audio;
-    audioStream.getAudioTracks().forEach(t => {
+const audioStream = streams?.audio;
+if (!audioStream || !isValidStream(audioStream)) return;
+
+audioStream.getAudioTracks().forEach(t => {
   t.enabled = true;
 });
+
     if (!isValidStream(audioStream)) return;
 
     let audioEl = audioElsRef.current[socketId];

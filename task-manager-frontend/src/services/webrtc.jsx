@@ -82,10 +82,16 @@ export const syncPeerTracks = (socketId) => {
   const { pc } = peer;
 
   // 🎤 AUDIO
-  const audioTrack = audioStream?.getAudioTracks()[0];
-  if (audioTrack && !peer.audioSender) {
+// 🎤 AUDIO
+const audioTrack = audioStream?.getAudioTracks()[0];
+
+if (audioTrack) {
+  if (peer.audioSender) {
+    peer.audioSender.replaceTrack(audioTrack);
+  } else {
     peer.audioSender = pc.addTrack(audioTrack, audioStream);
   }
+}
 
   // 🎥 CAMERA
   const cameraTrack = cameraStream?.getVideoTracks()[0];
@@ -171,13 +177,13 @@ export const startAudio = async () => {
 export const stopAudio = () => {
   if (!audioStream) return;
 
-  audioStream.getTracks().forEach(t => {
-    t.enabled = false;
-    t.stop();
+  audioStream.getAudioTracks().forEach(t => {
+    t.enabled = false;   // ✅ mute only
   });
-
-  audioStream = null;
 };
+
+
+
 
 
 /* -----------------------------
@@ -208,6 +214,8 @@ export const stopCamera = () => {
     cameraStream = null;
   }
 };
+
+
 
 /* -----------------------------
    LOCAL MEDIA — SCREEN
