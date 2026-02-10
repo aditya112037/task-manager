@@ -46,7 +46,7 @@ useEffect(() => {
       videoEl.srcObject = null;
     }
   };
-}, [stream]);
+}, [stream], ref);
 
   // Cleanup ONLY on unmount
   useEffect(() => {
