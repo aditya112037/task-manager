@@ -53,6 +53,7 @@ import {
   getScreenStream,
   getPeerIds,
   getAudioStream,
+  getPeers,
 } from "../services/webrtc";
 import VideoTile from "../components/Conference/VideoTile";
 import { useAuth } from "../context/AuthContext";
@@ -110,7 +111,23 @@ export default function ConferenceRoom() {
     setNotification({ open: true, message, severity });
   }, []);
 
+  // Debug audio state
+  useEffect(() => {
+    const logInterval = setInterval(() => {
+      const localAudio = getAudioStream();
+      const peers = getPeers();
+      console.log("Audio Debug:", {
+        localAudio: !!localAudio,
+        localTrack: localAudio?.getAudioTracks()[0]?.enabled,
+        remoteStreams: Object.keys(remoteStreamsRef.current).length,
+        audioElements: Object.keys(audioElsRef.current).length,
+        peers: Object.keys(peers).length,
+        peerAudioSenders: Object.values(peers).filter(p => p.audioSender).length,
+      });
+    }, 5000);
 
+    return () => clearInterval(logInterval);
+  }, []);
 
   const hardStopAllMedia = () => {
     stopAudio();
@@ -164,7 +181,6 @@ const handleToggleMic = useCallback(async () => {
       setMicOn(false);
       
       // IMPORTANT: Sync with all peers that we stopped audio
-      // getPeerIds() returns array of connected peer IDs
       const peerIds = getPeerIds();
       peerIds.forEach(socketId => {
         syncPeerTracks(socketId); // This will remove audio track from peer
@@ -261,7 +277,7 @@ const handleToggleMic = useCallback(async () => {
     }
   }, [socket, conferenceId, showNotification]);
 
-  // ✅ FIX 2: Media state sync effect
+  // Media state sync effect
   useEffect(() => {
     const interval = setInterval(() => {
       const audioActive = !!getAudioStream();
@@ -278,88 +294,86 @@ const handleToggleMic = useCallback(async () => {
     return () => clearInterval(interval);
   }, [micOn, camOn, sharingScreen]);
 
-// ✅ FIX 1: Remote audio attachment (CORRECTED VERSION)
-useEffect(() => {
-  const activeAudioEls = new Set();
-  
-  Object.entries(remoteStreamsRef.current).forEach(([socketId, streams]) => {
-    const audioStream = streams?.audio;
+  // Remote audio attachment (CORRECTED VERSION)
+  useEffect(() => {
+    const activeAudioEls = new Set();
     
-    // Check if we have a valid audio stream
-    if (!audioStream || typeof audioStream.getAudioTracks !== 'function') return;
-    
-    const audioTracks = audioStream.getAudioTracks();
-    if (audioTracks.length === 0 || !audioTracks[0].enabled) return;
-    
-    // Get or create audio element
-    let audioEl = audioElsRef.current[socketId];
-    
-    if (!audioEl) {
-      audioEl = document.createElement("audio");
-      audioEl.id = `remote-audio-${socketId}`;
-      audioEl.autoplay = true;
-      audioEl.playsInline = true;
-      audioEl.muted = false;
-      audioEl.volume = 1;
-      audioEl.style.display = "none";
-      document.body.appendChild(audioEl);
-      audioElsRef.current[socketId] = audioEl;
-    }
-    
-    // Set the stream and play
-    if (audioEl.srcObject !== audioStream) {
-      audioEl.srcObject = audioStream;
-    }
-    
-    // Ensure audio is playing
-    audioEl.play().catch(err => {
-      console.warn(`Failed to auto-play audio for ${socketId}:`, err);
-      // Try with user interaction
-      const playOnClick = () => {
-        audioEl.play();
-        document.removeEventListener('click', playOnClick);
-      };
-      document.addEventListener('click', playOnClick);
+    Object.entries(remoteStreamsRef.current).forEach(([socketId, streams]) => {
+      const audioStream = streams?.audio;
+      
+      // Check if we have a valid audio stream
+      if (!audioStream || typeof audioStream.getAudioTracks !== 'function') return;
+      
+      const audioTracks = audioStream.getAudioTracks();
+      if (audioTracks.length === 0 || !audioTracks[0].enabled) return;
+      
+      // Get or create audio element
+      let audioEl = audioElsRef.current[socketId];
+      
+      if (!audioEl) {
+        audioEl = document.createElement("audio");
+        audioEl.id = `remote-audio-${socketId}`;
+        audioEl.autoplay = true;
+        audioEl.playsInline = true;
+        audioEl.muted = false;
+        audioEl.volume = 1;
+        audioEl.style.display = "none";
+        document.body.appendChild(audioEl);
+        audioElsRef.current[socketId] = audioEl;
+      }
+      
+      // Set the stream and play
+      if (audioEl.srcObject !== audioStream) {
+        audioEl.srcObject = audioStream;
+      }
+      
+      // Ensure audio is playing
+      audioEl.play().catch(err => {
+        console.warn(`Failed to auto-play audio for ${socketId}:`, err);
+        // Try with user interaction
+        const playOnClick = () => {
+          audioEl.play();
+          document.removeEventListener('click', playOnClick);
+        };
+        document.addEventListener('click', playOnClick);
+      });
+      
+      activeAudioEls.add(socketId);
     });
     
-    activeAudioEls.add(socketId);
-  });
-  
-  // Clean up unused audio elements
-  Object.keys(audioElsRef.current).forEach(socketId => {
-    if (!activeAudioEls.has(socketId)) {
-      const audioEl = audioElsRef.current[socketId];
-      if (audioEl) {
-        audioEl.srcObject = null;
-        audioEl.remove();
-        delete audioElsRef.current[socketId];
+    // Clean up unused audio elements
+    Object.keys(audioElsRef.current).forEach(socketId => {
+      if (!activeAudioEls.has(socketId)) {
+        const audioEl = audioElsRef.current[socketId];
+        if (audioEl) {
+          audioEl.srcObject = null;
+          audioEl.remove();
+          delete audioElsRef.current[socketId];
+        }
       }
-    }
-  });
-  
-  // Force update to trigger re-render if needed
-  forceRender(v => v + 1);
-}, [remoteStreamsRef.current, forceRender]);
+    });
+    
+    // Force update to trigger re-render if needed
+    forceRender(v => v + 1);
+  }, [remoteStreamsRef.current]);
 
-useEffect(() => {
-  if (!socket?.id || !currentUser) return;
+  useEffect(() => {
+    if (!socket?.id || !currentUser) return;
 
-  setParticipants(prev => {
-    if (prev.some(p => p.socketId === socket.id)) return prev;
+    setParticipants(prev => {
+      if (prev.some(p => p.socketId === socket.id)) return prev;
 
-    return [
-      {
-        socketId: socket.id,
-        userId: currentUser._id,
-        userName: currentUser.name || "You",
-        role: "participant",
-      },
-      ...prev,
-    ];
-  });
-}, [socket?.id, currentUser]);
-
-
+      return [
+        {
+          socketId: socket.id,
+          userId: currentUser._id,
+          userName: currentUser.name || "You",
+          role: "participant",
+        },
+        ...prev,
+      ];
+    });
+  }, [socket?.id, currentUser]);
 
   // Mic level monitoring
   useEffect(() => {
@@ -398,7 +412,7 @@ useEffect(() => {
       console.error("Mic level detection error:", error);
       setMicLevel(0);
     }
-  }, [micOn, forceRender]);
+  }, [micOn]);
 
   // Initialize and join conference
   useEffect(() => {
@@ -684,8 +698,6 @@ useEffect(() => {
       showNotification("You have been removed from the conference by the admin", "error");
     };
 
-
-
     socket.on("conference:user-joined", handleUserJoined);
     socket.on("conference:offer", handleOffer);
     socket.on("conference:answer", handleAnswer);
@@ -737,7 +749,7 @@ useEffect(() => {
     handleScreenShareUpdate,
   ]);
 
-  // ✅ FIX 4: Speaker mode auto-mic fix
+  // Speaker mode auto-mic fix
   useEffect(() => {
     if (!speakerModeEnabled || !activeSpeaker || !myParticipant) return;
     
@@ -827,14 +839,14 @@ useEffect(() => {
     setLayout(newLayout);
   }, []);
 
-const isRenderableStream = (stream) =>
-  stream &&
-  typeof stream.getTracks === "function" &&
-  stream.getTracks().some(t => t.readyState === "live");
+  const isRenderableStream = (stream) =>
+    stream &&
+    typeof stream.getTracks === "function" &&
+    stream.getTracks().some(t => t.readyState === "live");
 
-const allCameraStreams = Object.entries(remoteStreamsRef.current)
-  .map(([socketId, streams]) => [socketId, streams?.camera])
-  .filter(([, stream]) => isRenderableStream(stream));
+  const allCameraStreams = Object.entries(remoteStreamsRef.current)
+    .map(([socketId, streams]) => [socketId, streams?.camera])
+    .filter(([, stream]) => isRenderableStream(stream));
 
   const getRemoteScreenStream = (socketId) => {
     return remoteStreamsRef.current[socketId]?.screen;
@@ -847,16 +859,15 @@ const allCameraStreams = Object.entries(remoteStreamsRef.current)
   const participantsLoaded = Array.isArray(participants);
   const inConference = Boolean(conferenceId);
 
-useEffect(() => {
-  return () => {
-    // ❗ ONLY cleanup if conference actually ended
-    if (conferenceEndedRef.current) {
-      hardStopAllMedia();
-      cleanupConference();
-    }
-  };
-}, []);
-
+  useEffect(() => {
+    return () => {
+      // ❗ ONLY cleanup if conference actually ended
+      if (conferenceEndedRef.current) {
+        hardStopAllMedia();
+        cleanupConference();
+      }
+    };
+  }, []);
 
   return (
     <Box sx={{ display: "flex", height: "100vh", background: "#000" }}>
@@ -866,9 +877,6 @@ useEffect(() => {
         flexDirection: "column",
         p: 2 
       }}>
-        {/* ... rest of the JSX remains the same ... */}
-        {/* (The JSX part is identical to your original, just using the fixed state variables) */}
-        
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
           <Typography color="white" fontWeight={600}>
             Conference Room: {conferenceId}
