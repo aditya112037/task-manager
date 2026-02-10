@@ -127,16 +127,19 @@ export default function ConferenceRoom() {
     audioElsRef.current = {};
   };
 
-  const leaveAndCleanupLocal = useCallback(() => {
-    stopCamera();
-    stopAudio();
-    if (sharingScreen) {
-      stopScreen();
-    }
-    socket.emit("conference:leave");
-    cleanupConference();
-    navigate(-1);
-  }, [socket, navigate, sharingScreen]);
+const leaveAndCleanupLocal = useCallback(() => {
+  conferenceEndedRef.current = true;
+
+  stopCamera();
+  stopAudio();
+  stopScreen();
+
+  socket.emit("conference:leave");
+  cleanupConference();
+
+  navigate(-1);
+}, []);
+
 
   const handleConferenceEnded = useCallback(() => {
     if (conferenceEndedRef.current) return;
@@ -792,13 +795,16 @@ const allCameraStreams = Object.entries(remoteStreamsRef.current)
   const participantsLoaded = Array.isArray(participants);
   const inConference = Boolean(conferenceId);
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
+useEffect(() => {
+  return () => {
+    // ❗ ONLY cleanup if conference actually ended
+    if (conferenceEndedRef.current) {
       hardStopAllMedia();
       cleanupConference();
-    };
-  }, []);
+    }
+  };
+}, []);
+
 
   return (
     <Box sx={{ display: "flex", height: "100vh", background: "#000" }}>
