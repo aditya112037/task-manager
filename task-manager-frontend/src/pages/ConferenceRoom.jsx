@@ -164,6 +164,7 @@ const leaveAndCleanupLocal = useCallback(() => {
       } else {
         await startAudio();
         getPeerIds().forEach(syncPeerTracks);
+        renegotiatePeer(id, socket);
         setMicOn(true);
       }
 
@@ -268,6 +269,9 @@ const leaveAndCleanupLocal = useCallback(() => {
 useEffect(() => {
   Object.entries(remoteStreamsRef.current).forEach(([socketId, streams]) => {
     const audioStream = streams?.audio;
+    audioStream.getAudioTracks().forEach(t => {
+  t.enabled = true;
+});
     if (!isValidStream(audioStream)) return;
 
     let audioEl = audioElsRef.current[socketId];

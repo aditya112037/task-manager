@@ -21,14 +21,16 @@ const peers = {}; // socketId -> { pc, audioSender, cameraSender, screenSender }
    PEER CREATION
 ------------------------------ */
 
+
 export const createPeer = (socketId, socket) => {
   if (peers[socketId]) return peers[socketId].pc;
 
   const pc = new RTCPeerConnection({
+    
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
   });
 
-  // ✅ EXPLICIT TRANSCEIVERS (CRITICAL FOR AUDIO)
+
   const audioTransceiver = pc.addTransceiver("audio", { direction: "sendrecv" });
   const videoTransceiver = pc.addTransceiver("video", { direction: "sendrecv" });
 
@@ -141,6 +143,24 @@ export const updatePeerTrack = (socketId, kind, enabled) => {
       break;
   }
 };
+
+export const renegotiatePeer = async (socketId, socket) => {
+  const peer = peers[socketId];
+  if (!peer) return;
+
+  const pc = peer.pc;
+
+  if (pc.signalingState !== "stable") return;
+
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+
+  socket.emit("conference:offer", {
+    to: socketId,
+    offer,
+  });
+};
+
 
 /* -----------------------------
    REMOVE PEER
