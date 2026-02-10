@@ -28,6 +28,10 @@ export const createPeer = (socketId, socket) => {
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
   });
 
+  // ✅ EXPLICIT TRANSCEIVERS (CRITICAL FOR AUDIO)
+  const audioTransceiver = pc.addTransceiver("audio", { direction: "sendrecv" });
+  const videoTransceiver = pc.addTransceiver("video", { direction: "sendrecv" });
+
   pc.onicecandidate = e => {
     if (e.candidate) {
       socket.emit("conference:ice-candidate", {
@@ -41,11 +45,10 @@ export const createPeer = (socketId, socket) => {
     const track = e.track;
     if (!track) return;
 
-    // ✅ FIXED TRACK CLASSIFICATION
     const kind =
-      e.track.kind === "audio"
+      track.kind === "audio"
         ? "audio"
-        : e.transceiver?.mid === "screen" || e.track.contentHint === "detail"
+        : track.contentHint === "detail"
           ? "screen"
           : "camera";
 
@@ -60,16 +63,10 @@ export const createPeer = (socketId, socket) => {
     );
   };
 
-  pc.onconnectionstatechange = () => {
-    if (["failed", "disconnected"].includes(pc.connectionState)) {
-      removePeer(socketId);
-    }
-  };
-
   peers[socketId] = {
     pc,
-    audioSender: null,
-    cameraSender: null,
+    audioSender: audioTransceiver.sender,
+    cameraSender: videoTransceiver.sender,
     screenSender: null,
   };
 
@@ -86,11 +83,7 @@ export const syncPeerTracks = (socketId) => {
 
   const { pc } = peer;
 
-  // Remove existing senders if streams are gone
-  if (!audioStream && peer.audioSender) {
-    pc.removeTrack(peer.audioSender);
-    peer.audioSender = null;
-  }
+
   if (!cameraStream && peer.cameraSender) {
     pc.removeTrack(peer.cameraSender);
     peer.cameraSender = null;
@@ -102,9 +95,11 @@ export const syncPeerTracks = (socketId) => {
 
   // 🎤 AUDIO
   const audioTrack = audioStream?.getAudioTracks()[0];
-  if (audioTrack && !peer.audioSender) {
-    peer.audioSender = pc.addTrack(audioTrack, audioStream);
+if (peer.audioSender) {
+  if (peer.audioSender.track !== audioTrack) {
+    peer.audioSender.replaceTrack(audioTrack || null);
   }
+}
 
   // 🎥 CAMERA
   const cameraTrack = cameraStream?.getVideoTracks()[0];
@@ -187,11 +182,16 @@ export const startAudio = async () => {
 };
 
 export const stopAudio = () => {
-  if (audioStream) {
-    audioStream.getTracks().forEach(t => t.stop());
-    audioStream = null;
-  }
+  if (!audioStream) return;
+
+  audioStream.getTracks().forEach(t => {
+    t.enabled = false;
+    t.stop();
+  });
+
+  audioStream = null;
 };
+
 
 /* -----------------------------
    LOCAL MEDIA — CAMERA
