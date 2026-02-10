@@ -651,13 +651,7 @@ useEffect(() => {
       showNotification("You have been removed from the conference by the admin", "error");
     };
 
-    const handleConferenceEndedByAdmin = () => {
-      if (!mountedRef.current) return;
-      socket.emit("conference:end", { conferenceId });
-      hardStopAllMedia();
-      cleanupConference();
-      navigate("/teams");
-    };
+
 
     socket.on("conference:user-joined", handleUserJoined);
     socket.on("conference:offer", handleOffer);
