@@ -24,13 +24,16 @@ const peers = {}; // socketId -> { pc, audioSender, cameraSender, screenSender }
 export const createPeer = (socketId, socket) => {
   if (peers[socketId]) return peers[socketId].pc;
 
+  console.log(`🔄 Creating peer for ${socketId}`);
+
   const pc = new RTCPeerConnection({
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-    sdpSemantics: 'unified-plan' // Ensure unified plan for proper track handling
+    sdpSemantics: 'unified-plan'
   });
 
   pc.onicecandidate = e => {
     if (e.candidate) {
+      console.log(`❄️ ICE candidate for ${socketId}:`, e.candidate.type);
       socket.emit("conference:ice-candidate", {
         to: socketId,
         candidate: e.candidate,
@@ -38,38 +41,92 @@ export const createPeer = (socketId, socket) => {
     }
   };
 
-pc.ontrack = (e) => {
-  const track = e.track;
-  if (!track) return;
+  pc.ontrack = (e) => {
+    const track = e.track;
+    if (!track) return;
 
-  let stream;
+    // 🔥 CRITICAL FIX: Always create a stream for the track
+    let stream;
+    if (e.streams && e.streams[0]) {
+      stream = e.streams[0];
+    } else {
+      console.log(`📡 Reconstructing stream for ${track.kind} track from ${socketId}`);
+      stream = new MediaStream([track]);
+    }
 
-  if (e.streams && e.streams[0]) {
-    stream = e.streams[0];
-  } else {
-    // 🔥 reconstruct stream (REQUIRED)
-    stream = new MediaStream([track]);
-  }
+    const kind = track.kind; // 'audio' or 'video'
 
-  const kind = track.kind; // 'audio' or 'video'
+    console.log(`📡 Received ${kind} track from ${socketId}:`, {
+      trackId: track.id,
+      enabled: track.enabled,
+      readyState: track.readyState
+    });
 
-  console.log(`Received ${kind} track from ${socketId}:`, track.id);
+    // 🔥 Add track event listeners
+    track.onended = () => {
+      console.log(`⚠️ ${kind} track ended from ${socketId} - this should NOT happen during active call`);
+    };
 
-  window.dispatchEvent(
-    new CustomEvent("webrtc:remote-stream", {
-      detail: {
-        socketId,
-        kind,
-        stream,
-      },
-    })
-  );
-};
+    // For audio tracks specifically
+    if (kind === 'audio') {
+      console.log(`🔊 AUDIO TRACK RECEIVED from ${socketId} - READY TO PLAY`);
+      track.onmute = () => console.log(`🔇 Audio track muted from ${socketId}`);
+      track.onunmute = () => console.log(`🔊 Audio track unmuted from ${socketId}`);
+      
+      // Ensure track is enabled
+      if (!track.enabled) {
+        console.log(`⚠️ Audio track from ${socketId} is disabled, enabling...`);
+        track.enabled = true;
+      }
+    }
 
+    window.dispatchEvent(
+      new CustomEvent("webrtc:remote-stream", {
+        detail: {
+          socketId,
+          kind,
+          stream,
+        },
+      })
+    );
+
+    // Force UI update
+    setTimeout(() => {
+      window.dispatchEvent(new CustomEvent("webrtc:force-render"));
+    }, 100);
+  };
 
   // Handle connection state changes
   pc.onconnectionstatechange = () => {
     console.log(`Peer ${socketId} connection state:`, pc.connectionState);
+    if (pc.connectionState === 'connected') {
+      console.log(`✅ Peer ${socketId} fully connected`);
+      // Force sync tracks when connection is established
+      setTimeout(() => {
+        if (peers[socketId]) {
+          syncPeerTracks(socketId);
+        }
+      }, 500);
+    }
+  };
+
+  // Handle negotiation needed
+  pc.onnegotiationneeded = async () => {
+    console.log(`🤝 Negotiation needed for ${socketId}`);
+    try {
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: true,
+      });
+      await pc.setLocalDescription(offer);
+      socket.emit("conference:offer", {
+        to: socketId,
+        offer,
+      });
+      console.log(`📤 Offer sent to ${socketId} (renegotiation)`);
+    } catch (err) {
+      console.error("Renegotiation failed:", err);
+    }
   };
 
   peers[socketId] = {
@@ -95,102 +152,151 @@ export const syncPeerTracks = (socketId) => {
 
   const { pc } = peer;
 
-  console.log(`Syncing tracks for ${socketId}:`, {
+  console.log(`🔄 Syncing tracks for ${socketId}:`, {
     hasAudioStream: !!audioStream,
+    audioTrack: audioStream?.getAudioTracks()[0]?.enabled,
     hasCameraStream: !!cameraStream,
     hasScreenStream: !!screenStream
   });
 
-  // 🎤 AUDIO
+  // 🎤 AUDIO - CRITICAL: Only sync if we have audio stream
   const audioTrack = audioStream?.getAudioTracks()[0];
   
-  if (audioTrack) {
-    console.log(`Audio track available for ${socketId}:`, audioTrack.id, audioTrack.enabled);
+  if (audioTrack && audioTrack.enabled) {
+    console.log(`🔊 Audio track available for ${socketId}:`, audioTrack.id, audioTrack.enabled);
     
     if (peer.audioSender) {
       try {
-        console.log(`Replacing audio track for ${socketId}`);
-        peer.audioSender.replaceTrack(audioTrack).catch(err => {
-          console.error(`Error replacing audio track for ${socketId}:`, err);
+        console.log(`🔄 Replacing audio track for ${socketId}`);
+        peer.audioSender.replaceTrack(audioTrack).then(() => {
+          console.log(`✅ Audio track replaced for ${socketId}`);
+        }).catch(err => {
+          console.error(`❌ Error replacing audio track for ${socketId}:`, err);
           // Fallback: remove and add new
           if (peer.audioSender) {
             pc.removeTrack(peer.audioSender);
           }
           peer.audioSender = pc.addTrack(audioTrack, audioStream);
+          console.log(`🔄 Added new audio track (fallback) for ${socketId}`);
         });
       } catch (err) {
-        console.error(`Failed to replace audio track for ${socketId}:`, err);
+        console.error(`❌ Failed to replace audio track for ${socketId}:`, err);
         peer.audioSender = pc.addTrack(audioTrack, audioStream);
+        console.log(`🔄 Added new audio track (catch) for ${socketId}`);
       }
     } else {
-      console.log(`Adding new audio track for ${socketId}`);
+      console.log(`➕ Adding new audio track for ${socketId}`);
       peer.audioSender = pc.addTrack(audioTrack, audioStream);
     }
   } else {
-    console.log(`No audio track for ${socketId}`);
+    console.log(`🔇 No active audio track for ${socketId}`);
     // No audio track - remove if exists
     if (peer.audioSender) {
-      console.log(`Removing audio sender for ${socketId}`);
-      pc.removeTrack(peer.audioSender);
+      console.log(`🗑️ Removing audio sender for ${socketId}`);
+      try {
+        pc.removeTrack(peer.audioSender);
+      } catch (err) {
+        console.warn(`Could not remove audio sender:`, err);
+      }
       peer.audioSender = null;
     }
   }
 
-  // ... rest of the function remains the same ...
-};
+  // 🎥 CAMERA
+  const cameraTrack = cameraStream?.getVideoTracks()[0];
+  if (cameraTrack) {
+    if (!peer.cameraSender) {
+      peer.cameraSender = pc.addTrack(cameraTrack, cameraStream);
+    } else if (peer.cameraSender.track !== cameraTrack) {
+      peer.cameraSender.replaceTrack(cameraTrack);
+    }
+  } else if (peer.cameraSender) {
+    try {
+      pc.removeTrack(peer.cameraSender);
+    } catch (err) {
+      console.warn(`Could not remove camera sender:`, err);
+    }
+    peer.cameraSender = null;
+  }
 
-/* -----------------------------
-   UPDATE SINGLE TRACK
------------------------------- */
-
-export const updatePeerTrack = (socketId, kind, enabled) => {
-  const peer = peers[socketId];
-  if (!peer) return;
-
-  switch (kind) {
-    case 'audio':
-      if (peer.audioSender) {
-        const track = peer.audioSender.track;
-        if (track) track.enabled = enabled;
-      }
-      break;
-    case 'camera':
-      if (peer.cameraSender) {
-        const track = peer.cameraSender.track;
-        if (track) track.enabled = enabled;
-      }
-      break;
-    default:
-      break;
+  // 🖥️ SCREEN
+  const screenTrack = screenStream?.getVideoTracks()[0];
+  if (screenTrack) {
+    screenTrack.contentHint = "detail";
+    if (!peer.screenSender) {
+      peer.screenSender = pc.addTrack(screenTrack, screenStream);
+    } else if (peer.screenSender.track !== screenTrack) {
+      peer.screenSender.replaceTrack(screenTrack);
+    }
+  } else if (peer.screenSender) {
+    try {
+      pc.removeTrack(peer.screenSender);
+    } catch (err) {
+      console.warn(`Could not remove screen sender:`, err);
+    }
+    peer.screenSender = null;
   }
 };
 
-
 /* -----------------------------
-   REMOVE PEER
+   AUDIO LIFECYCLE FIXES (CRITICAL)
+   Rule: NEVER stop() audio tracks during active call
 ------------------------------ */
 
-export const removePeer = (socketId) => {
-  const peer = peers[socketId];
-  if (!peer) return;
+// 1️⃣ SAFE MUTE (most common)
+export const muteAudio = () => {
+  if (!audioStream) return;
+  console.log("🔇 Muting audio");
+  audioStream.getAudioTracks().forEach(t => {
+    t.enabled = false;
+  });
+};
 
-  try {
-    peer.pc.close();
-  } catch (err) {
-    console.warn("Error closing peer connection:", err);
+// 2️⃣ SAFE UNMUTE
+export const unmuteAudio = () => {
+  if (!audioStream) return;
+  console.log("🔊 Unmuting audio");
+  audioStream.getAudioTracks().forEach(t => {
+    t.enabled = true;
+  });
+};
+
+// 3️⃣ HARD DESTROY (ONLY on leave/end)
+export const destroyAudio = () => {
+  if (!audioStream) {
+    console.log("No audio stream to destroy");
+    return;
   }
-
-  delete peers[socketId];
+  
+  console.log("💀 Destroying audio (calling .stop() on tracks)");
+  const tracks = audioStream.getTracks();
+  tracks.forEach(t => {
+    console.log(`Stopping track: ${t.id}, kind: ${t.kind}`);
+    t.stop();
+  });
+  
+  audioStream = null;
+  console.log("✅ Audio destroyed");
 };
 
 /* -----------------------------
-   LOCAL MEDIA — AUDIO
+   ORIGINAL stopAudio - KEEP FOR COMPATIBILITY
+   But mark it as DEPRECATED
+------------------------------ */
+export const stopAudio = () => {
+  console.warn("⚠️ stopAudio() called - use muteAudio() during call, destroyAudio() on leave");
+  muteAudio();
+};
+
+/* -----------------------------
+   LOCAL MEDIA — AUDIO (UPDATED)
 ------------------------------ */
 
 export const startAudio = async () => {
   // Always create new stream to ensure fresh tracks
   if (audioStream) {
-    stopAudio();
+    console.log("🔄 Recreating audio stream");
+    destroyAudio(); // Clean up old stream completely
   }
 
   try {
@@ -206,7 +312,7 @@ export const startAudio = async () => {
     
     const audioTrack = audioStream.getAudioTracks()[0];
     if (audioTrack) {
-      console.log("🎤 Microphone acquired:", {
+      console.log("✅ Microphone acquired:", {
         id: audioTrack.id,
         label: audioTrack.label,
         enabled: audioTrack.enabled
@@ -215,10 +321,15 @@ export const startAudio = async () => {
       // Ensure track is enabled
       audioTrack.enabled = true;
       
-      // Add event listeners for track state
-      audioTrack.onmute = () => console.log("🎤 Audio track muted");
-      audioTrack.onunmute = () => console.log("🎤 Audio track unmuted");
-      audioTrack.onended = () => console.log("🎤 Audio track ended");
+      // 🔥 CRITICAL: Add ended listener to detect premature stops
+      audioTrack.onended = () => {
+        console.error("❌ CRITICAL: Audio track ENDED unexpectedly");
+        console.trace("Track ended stack trace");
+      };
+      
+      // Add other event listeners
+      audioTrack.onmute = () => console.log("🔇 Audio track muted");
+      audioTrack.onunmute = () => console.log("🔊 Audio track unmuted");
     }
     
     return audioStream;
@@ -227,22 +338,6 @@ export const startAudio = async () => {
     throw error;
   }
 };
-
-export const stopAudio = () => {
-  if (!audioStream) return;
-
-  // Stop all audio tracks but DON'T remove from peers
-  // (syncPeerTracks will handle this when called)
-  audioStream.getAudioTracks().forEach(t => {
-    t.stop();
-  });
-  
-  // Clear the stream reference
-  audioStream = null;
-};
-
-
-
 
 /* -----------------------------
    LOCAL MEDIA — CAMERA
@@ -273,8 +368,6 @@ export const stopCamera = () => {
   }
 };
 
-
-
 /* -----------------------------
    LOCAL MEDIA — SCREEN
 ------------------------------ */
@@ -295,9 +388,11 @@ export const startScreen = async () => {
 
     const track = screenStream.getVideoTracks()[0];
     if (track) {
-      // ✅ Set contentHint for proper screen detection
       track.contentHint = "detail";
-      track.onended = stopScreen;
+      track.onended = () => {
+        console.log("🖥️ Screen share ended by user");
+        stopScreen();
+      };
     }
 
     return screenStream;
@@ -316,10 +411,12 @@ export const stopScreen = () => {
 
 /* -----------------------------
    TOGGLES (NO SIDE EFFECTS)
+   These only change enabled state, never stop tracks
 ------------------------------ */
 
 export const setAudioEnabled = (enabled) => {
   if (audioStream) {
+    console.log(enabled ? "🔊 Enabling audio" : "🔇 Disabling audio");
     audioStream.getAudioTracks().forEach(t => {
       if (t.enabled !== enabled) {
         t.enabled = enabled;
@@ -354,6 +451,7 @@ export const getScreenStream = () => screenStream;
 
 export const getLocalState = () => ({
   audio: !!audioStream,
+  audioEnabled: audioStream?.getAudioTracks()[0]?.enabled || false,
   camera: !!cameraStream,
   screen: !!screenStream,
   peers: Object.keys(peers).length,
@@ -422,10 +520,12 @@ export const addIceCandidate = async (socketId, candidate) => {
 
 /* -----------------------------
    CLEANUP
+   IMPORTANT: Use destroyAudio() for audio, not stopAudio()
 ------------------------------ */
 
 export const cleanup = () => {
-  stopAudio();
+  console.log("🧹 Cleaning up WebRTC resources");
+  destroyAudio(); // Use destroyAudio, not stopAudio
   stopCamera();
   stopScreen();
   Object.keys(peers).forEach(removePeer);
@@ -436,8 +536,17 @@ export const cleanup = () => {
 ------------------------------ */
 
 export const debugPeers = () => {
-  console.group("WebRTC Debug Info");
+  console.group("🔍 WebRTC Debug Info");
   console.log("Audio Stream:", audioStream?.id || "null");
+  if (audioStream) {
+    const audioTrack = audioStream.getAudioTracks()[0];
+    console.log("Audio Track:", {
+      id: audioTrack?.id,
+      enabled: audioTrack?.enabled,
+      readyState: audioTrack?.readyState,
+      muted: audioTrack?.muted
+    });
+  }
   console.log("Camera Stream:", cameraStream?.id || "null");
   console.log("Screen Stream:", screenStream?.id || "null");
   console.log("Peers:", Object.keys(peers).length);
@@ -450,4 +559,47 @@ export const debugPeers = () => {
     });
   });
   console.groupEnd();
+};
+
+/* -----------------------------
+   NEW: Force sync all peers (for debugging)
+------------------------------ */
+
+export const forceResyncAllPeers = () => {
+  console.log("🔄 Force re-syncing all peers");
+  const peerIds = getPeerIds();
+  console.log(`Re-syncing ${peerIds.length} peers`);
+  
+  peerIds.forEach(socketId => {
+    console.log(`Syncing tracks for ${socketId}`);
+    syncPeerTracks(socketId);
+  });
+  
+  return peerIds.length;
+};
+
+/* -----------------------------
+   NEW: Check audio health
+------------------------------ */
+
+export const checkAudioHealth = () => {
+  const state = {
+    hasAudioStream: !!audioStream,
+    audioTrack: null,
+    peers: Object.keys(peers).length,
+    peerAudioSenders: Object.values(peers).filter(p => p.audioSender).length
+  };
+  
+  if (audioStream) {
+    const track = audioStream.getAudioTracks()[0];
+    state.audioTrack = {
+      id: track?.id,
+      enabled: track?.enabled,
+      readyState: track?.readyState,
+      muted: track?.muted
+    };
+  }
+  
+  console.log("🔊 Audio Health Check:", state);
+  return state;
 };
