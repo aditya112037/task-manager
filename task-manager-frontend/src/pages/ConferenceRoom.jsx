@@ -138,7 +138,7 @@ const leaveAndCleanupLocal = useCallback(() => {
   cleanupConference();
 
   navigate(-1);
-}, []);
+}, [navigate, socket]);
 
 
   const handleConferenceEnded = useCallback(() => {
