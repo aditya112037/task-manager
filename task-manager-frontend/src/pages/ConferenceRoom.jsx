@@ -160,17 +160,14 @@ const handleToggleMic = useCallback(async () => {
   try {
     if (getAudioStream()) {
       // We're turning OFF audio
-      const wasEnabled = micOn;
       stopAudio();
       setMicOn(false);
       
-      // Update all peers that we stopped audio
-      getPeerIds().forEach(id => {
-        const peer = peers[id];
-        if (peer && peer.audioSender) {
-          peer.pc.removeTrack(peer.audioSender);
-          peer.audioSender = null;
-        }
+      // IMPORTANT: Sync with all peers that we stopped audio
+      // getPeerIds() returns array of connected peer IDs
+      const peerIds = getPeerIds();
+      peerIds.forEach(socketId => {
+        syncPeerTracks(socketId); // This will remove audio track from peer
       });
     } else {
       // We're turning ON audio
@@ -178,7 +175,8 @@ const handleToggleMic = useCallback(async () => {
       setMicOn(true);
       
       // Add audio track to all existing peers
-      getPeerIds().forEach(syncPeerTracks);
+      const peerIds = getPeerIds();
+      peerIds.forEach(syncPeerTracks);
     }
 
     // Update server state
