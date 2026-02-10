@@ -59,7 +59,7 @@ import {
   getPeers,
   checkAudioHealth,
   forceResyncAllPeers,
-  setAudioEnabled,
+
 } from "../services/webrtc";
 import VideoTile from "../components/Conference/VideoTile";
 import { useAuth } from "../context/AuthContext";
@@ -309,35 +309,37 @@ const handleToggleMic = useCallback(async () => {
     }
   }, [socket, conferenceId, showNotification]);
 
-  // Auto-start audio when joining conference
-  useEffect(() => {
-    if (!hasJoinedRef.current || conferenceEndedRef.current) return;
-    
-    const initializeMedia = async () => {
-      try {
-        // Start audio automatically when joining
-        if (!getAudioStream()) {
-          console.log("🔊 Auto-starting audio for new participant");
-          await startAudio();
-          unmuteAudio(); // ✅ Ensure it's unmuted
-          setMicOn(true);
-          
-          // Sync with existing peers
-          const peerIds = getPeerIds();
-          peerIds.forEach(syncPeerTracks);
-          
-          forceRender(v => v + 1);
-        }
-      } catch (error) {
-        console.warn("Could not auto-start audio:", error);
-        // Don't show notification - some users might not have mic permission
+// Auto-start audio when joining conference
+useEffect(() => {
+  const shouldInitialize = hasJoinedRef.current && !conferenceEndedRef.current;
+  
+  if (!shouldInitialize) return;
+  
+  const initializeMedia = async () => {
+    try {
+      // Start audio automatically when joining
+      if (!getAudioStream()) {
+        console.log("🔊 Auto-starting audio for new participant");
+        await startAudio();
+        unmuteAudio(); // ✅ Ensure it's unmuted
+        setMicOn(true);
+        
+        // Sync with existing peers
+        const peerIds = getPeerIds();
+        peerIds.forEach(syncPeerTracks);
+        
+        forceRender(v => v + 1);
       }
-    };
-    
-    // Delay slightly to ensure WebRTC is ready
-    const timer = setTimeout(initializeMedia, 1000);
-    return () => clearTimeout(timer);
-  }, [hasJoinedRef.current]);
+    } catch (error) {
+      console.warn("Could not auto-start audio:", error);
+      // Don't show notification - some users might not have mic permission
+    }
+  };
+  
+  // Delay slightly to ensure WebRTC is ready
+  const timer = setTimeout(initializeMedia, 1000);
+  return () => clearTimeout(timer);
+}, []); // Remove hasJoinedRef.current from dependencies
 
   // Media state sync effect
   useEffect(() => {
