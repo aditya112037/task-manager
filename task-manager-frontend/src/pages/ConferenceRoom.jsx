@@ -287,6 +287,9 @@ audioStream.getAudioTracks().forEach(t => {
       audioEl.volume = 1;
       document.body.appendChild(audioEl);
       audioElsRef.current[socketId] = audioEl;
+      audioEl.onloadedmetadata = () => {
+  audioEl.play().catch(() => {});
+};
     }
 
     if (audioEl.srcObject !== audioStream) {
