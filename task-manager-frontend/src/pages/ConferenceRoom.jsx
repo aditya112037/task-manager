@@ -562,21 +562,44 @@ useEffect(() => {
   }, [conferenceId, socket, navigate, showNotification]);
 
   // Remote stream handler
-  useEffect(() => {
-    const handler = (e) => {
-      const { socketId, kind, stream } = e.detail;
+// Remote stream handler - FIXED with proper event capture
+const handleRemoteStream = useCallback((e) => {
+  const { socketId, kind, stream } = e.detail;
+  
+  console.log("🎯 EVENT CAPTURED: webrtc:remote-stream", {
+    socketId,
+    kind,
+    streamExists: !!stream,
+    streamId: stream?.id,
+    trackCount: stream?.getTracks()?.length
+  });
 
-      const existing = remoteStreamsRef.current[socketId] || {};
-      existing[kind] = stream;
+  // Create a copy to avoid mutation issues
+  const newRemoteStreams = { ...remoteStreamsRef.current };
+  
+  if (!newRemoteStreams[socketId]) {
+    newRemoteStreams[socketId] = {};
+  }
+  
+  newRemoteStreams[socketId][kind] = stream;
+  remoteStreamsRef.current = newRemoteStreams;
+  
+  console.log(`🎯 Stored ${kind} stream for ${socketId}`);
+  
+  // Force update
+  forceRender(v => v + 1);
+}, []);
 
-      remoteStreamsRef.current[socketId] = existing;
-
-      forceRender(v => v + 1);
-    };
-
-    window.addEventListener("webrtc:remote-stream", handler);
-    return () => window.removeEventListener("webrtc:remote-stream", handler);
-  }, []);
+useEffect(() => {
+  console.log("🎯 Setting up webrtc:remote-stream listener");
+  
+  window.addEventListener("webrtc:remote-stream", handleRemoteStream);
+  
+  return () => {
+    console.log("🎯 Removing webrtc:remote-stream listener");
+    window.removeEventListener("webrtc:remote-stream", handleRemoteStream);
+  };
+}, [handleRemoteStream]);
 
   const handleUserJoined = useCallback(
     async ({ socketId }) => {
