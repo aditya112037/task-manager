@@ -26,20 +26,19 @@ export const createPeer = (socketId, socket) => {
   if (peers[socketId]) return peers[socketId].pc;
 
   const pc = new RTCPeerConnection({
-    
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
   });
 
+  const audioTransceiver = pc.addTransceiver("audio", {
+    direction: "sendrecv",
+    sendEncodings: [{}], // REQUIRED
+  });
 
- const audioTransceiver = pc.addTransceiver("audio", {
-  direction: "sendrecv",
-  sendEncodings: [{}], // 👈 CRITICAL
-});
-  peer.audioSender = audioTransceiver.sender;
+  const videoTransceiver = pc.addTransceiver("video", {
+    direction: "sendrecv",
+  });
 
-  const videoTransceiver = pc.addTransceiver("video", { direction: "sendrecv" });
-
-  pc.onicecandidate = e => {
+  pc.onicecandidate = (e) => {
     if (e.candidate) {
       socket.emit("conference:ice-candidate", {
         to: socketId,
@@ -56,8 +55,8 @@ export const createPeer = (socketId, socket) => {
       track.kind === "audio"
         ? "audio"
         : track.contentHint === "detail"
-          ? "screen"
-          : "camera";
+        ? "screen"
+        : "camera";
 
     window.dispatchEvent(
       new CustomEvent("webrtc:remote-stream", {
@@ -80,6 +79,7 @@ export const createPeer = (socketId, socket) => {
   return pc;
 };
 
+
 /* -----------------------------
    ADD TRACKS TO PEER
 ------------------------------ */
@@ -90,25 +90,13 @@ export const syncPeerTracks = (socketId) => {
 
   const { pc } = peer;
 
-
-  if (!cameraStream && peer.cameraSender) {
-    pc.removeTrack(peer.cameraSender);
-    peer.cameraSender = null;
+  // 🎤 AUDIO (CRITICAL FIX)
+  const audioTrack = audioStream?.getAudioTracks()[0];
+  if (audioTrack && peer.audioSender) {
+    if (!peer.audioSender.track || peer.audioSender.track !== audioTrack) {
+      peer.audioSender.replaceTrack(audioTrack);
+    }
   }
-  if (!screenStream && peer.screenSender) {
-    pc.removeTrack(peer.screenSender);
-    peer.screenSender = null;
-  }
-
-  // 🎤 AUDIO
-if (audioTrack) {
-  if (!peer.audioSender.track) {
-    peer.audioSender.replaceTrack(audioTrack);
-  } else if (peer.audioSender.track !== audioTrack) {
-    peer.audioSender.replaceTrack(audioTrack);
-  }
-}
-
 
   // 🎥 CAMERA
   const cameraTrack = cameraStream?.getVideoTracks()[0];
@@ -119,11 +107,11 @@ if (audioTrack) {
   // 🖥️ SCREEN
   const screenTrack = screenStream?.getVideoTracks()[0];
   if (screenTrack && !peer.screenSender) {
-    // ✅ Set contentHint for proper screen detection
     screenTrack.contentHint = "detail";
     peer.screenSender = pc.addTrack(screenTrack, screenStream);
   }
 };
+
 
 /* -----------------------------
    UPDATE SINGLE TRACK
