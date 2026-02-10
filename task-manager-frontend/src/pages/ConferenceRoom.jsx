@@ -698,6 +698,7 @@ useEffect(() => {
     conferenceId, 
     currentUser, 
     socket, 
+    navigate,
     showNotification, 
     leaveAndCleanupLocal, 
     handleConferenceEnded,
