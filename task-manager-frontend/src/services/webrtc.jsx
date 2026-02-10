@@ -38,41 +38,34 @@ export const createPeer = (socketId, socket) => {
     }
   };
 
-  // FIXED: Better track handling with proper stream identification
-  pc.ontrack = (e) => {
-    const track = e.track;
-    const stream = e.streams[0];
-    
-    if (!track || !stream) return;
+pc.ontrack = (e) => {
+  const track = e.track;
+  if (!track) return;
 
-    // Determine track type
-    let kind = 'unknown';
-    if (track.kind === 'audio') {
-      kind = 'audio';
-    } else if (track.kind === 'video') {
-      // Try to detect screen share
-      const settings = track.getSettings();
-      if (settings.displaySurface || settings.logicalSurface || 
-          track.contentHint === 'detail' || track.contentHint === 'text') {
-        kind = 'screen';
-      } else {
-        kind = 'camera';
-      }
-    }
+  let stream;
 
-    console.log(`Received ${kind} track from ${socketId}:`, track.id);
-    
-    // Dispatch event with the stream
-    window.dispatchEvent(
-      new CustomEvent("webrtc:remote-stream", {
-        detail: {
-          socketId,
-          kind,
-          stream: stream,
-        },
-      })
-    );
-  };
+  if (e.streams && e.streams[0]) {
+    stream = e.streams[0];
+  } else {
+    // 🔥 reconstruct stream (REQUIRED)
+    stream = new MediaStream([track]);
+  }
+
+  const kind = track.kind; // 'audio' or 'video'
+
+  console.log(`Received ${kind} track from ${socketId}:`, track.id);
+
+  window.dispatchEvent(
+    new CustomEvent("webrtc:remote-stream", {
+      detail: {
+        socketId,
+        kind,
+        stream,
+      },
+    })
+  );
+};
+
 
   // Handle connection state changes
   pc.onconnectionstatechange = () => {
