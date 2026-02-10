@@ -23,6 +23,7 @@ import PersonRemoveIcon from "@mui/icons-material/PersonRemove";
 import GroupsIcon from "@mui/icons-material/Groups";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
 import MicExternalOnIcon from "@mui/icons-material/MicExternalOn";
+import SyncIcon from "@mui/icons-material/Sync";
 import { 
   raiseHand, 
   lowerHand, 
@@ -43,7 +44,9 @@ import {
   createPeer,
   removePeer,
   startAudio,
-  stopAudio,
+  muteAudio,
+  unmuteAudio,
+  destroyAudio,
   startCamera,
   stopCamera,
   startScreen,
@@ -54,6 +57,9 @@ import {
   getPeerIds,
   getAudioStream,
   getPeers,
+  checkAudioHealth,
+  forceResyncAllPeers,
+  setAudioEnabled,
 } from "../services/webrtc";
 import VideoTile from "../components/Conference/VideoTile";
 import { useAuth } from "../context/AuthContext";
@@ -105,49 +111,56 @@ export default function ConferenceRoom() {
     setNotification({ open: true, message, severity });
   }, []);
 
-// Debug audio state
-useEffect(() => {
-  const logInterval = setInterval(() => {
-    const localAudio = getAudioStream();
-    const peers = getPeers();
-    
-    // Check audio track status
-    const audioTrack = localAudio?.getAudioTracks()[0];
-    
-    console.log("🔊 Audio Debug:", {
-      // Local audio state
-      localAudio: !!localAudio,
-      audioTrack: audioTrack ? {
-        id: audioTrack.id,
-        enabled: audioTrack.enabled,
-        readyState: audioTrack.readyState,
-        muted: audioTrack.muted
-      } : null,
+  // Debug audio state
+  useEffect(() => {
+    const logInterval = setInterval(() => {
+      const localAudio = getAudioStream();
+      const peers = getPeers();
       
-      // Remote streams
-      remoteAudioStreams: Object.values(remoteStreamsRef.current)
-        .filter(streams => streams?.audio)
-        .map(streams => streams.audio?.getAudioTracks()[0]?.id),
+      // Check audio track status
+      const audioTrack = localAudio?.getAudioTracks()[0];
       
-      // Audio elements
-      audioElements: Object.keys(audioElsRef.current),
-      
-      // Peer connections
-      peerCount: Object.keys(peers).length,
-      peerDetails: Object.entries(peers).map(([id, peer]) => ({
-        id,
-        connectionState: peer.pc.connectionState,
-        hasAudioSender: !!peer.audioSender,
-        audioTrack: peer.audioSender?.track?.id
-      }))
-    });
-  }, 3000); // Increased frequency for debugging
+      console.log("🔊 Audio Debug:", {
+        // Local audio state
+        localAudio: !!localAudio,
+        audioTrack: audioTrack ? {
+          id: audioTrack.id,
+          enabled: audioTrack.enabled,
+          readyState: audioTrack.readyState,
+          muted: audioTrack.muted
+        } : null,
+        
+        // Remote streams
+        remoteAudioStreams: Object.values(remoteStreamsRef.current)
+          .filter(streams => streams?.audio)
+          .map(streams => streams.audio?.getAudioTracks()[0]?.id),
+        
+        // Audio elements
+        audioElements: Object.keys(audioElsRef.current),
+        
+        // Peer connections
+        peerCount: Object.keys(peers).length,
+        peerDetails: Object.entries(peers).map(([id, peer]) => ({
+          id,
+          connectionState: peer.pc.connectionState,
+          hasAudioSender: !!peer.audioSender,
+          audioTrack: peer.audioSender?.track?.id
+        }))
+      });
+    }, 3000);
 
-  return () => clearInterval(logInterval);
-}, []);
+    return () => clearInterval(logInterval);
+  }, []);
+
+  // Listen for force-render events from webrtc.js
+  useEffect(() => {
+    const handler = () => forceRender(v => v + 1);
+    window.addEventListener("webrtc:force-render", handler);
+    return () => window.removeEventListener("webrtc:force-render", handler);
+  }, []);
 
   const hardStopAllMedia = () => {
-    stopAudio();
+    destroyAudio(); // ✅ FIXED: Use destroyAudio instead of stopAudio
     stopCamera();
     stopScreen();
 
@@ -165,7 +178,7 @@ const leaveAndCleanupLocal = useCallback(() => {
   conferenceEndedRef.current = true;
 
   stopCamera();
-  stopAudio();
+  destroyAudio(); // ✅ FIXED: Use destroyAudio when leaving conference
   stopScreen();
 
   socket.emit("conference:leave");
@@ -185,6 +198,7 @@ const leaveAndCleanupLocal = useCallback(() => {
     navigate("/teams");
   }, [navigate, showNotification]);
 
+// ✅ FIXED: Updated handleToggleMic with proper audio lifecycle
 const handleToggleMic = useCallback(async () => {
   if (speakerModeEnabled && activeSpeaker !== socket.id && !isAdminOrManager) {
     showNotification("Only the active speaker can unmute", "warning");
@@ -193,18 +207,19 @@ const handleToggleMic = useCallback(async () => {
 
   try {
     if (getAudioStream()) {
-      // We're turning OFF audio
-      stopAudio();
+      // We're turning OFF audio (MUTE, not destroy)
+      muteAudio(); // ✅ Use muteAudio instead of stopAudio
       setMicOn(false);
       
-      // IMPORTANT: Sync with all peers that we stopped audio
+      // Sync with all peers
       const peerIds = getPeerIds();
       peerIds.forEach(socketId => {
-        syncPeerTracks(socketId); // This will remove audio track from peer
+        syncPeerTracks(socketId);
       });
     } else {
       // We're turning ON audio
       await startAudio();
+      unmuteAudio(); // ✅ Ensure audio is unmuted
       setMicOn(true);
       
       // Add audio track to all existing peers
@@ -251,7 +266,7 @@ const handleToggleMic = useCallback(async () => {
         camOn: !!getCameraStream(),
       });
       
-      forceRender(v => v + 1); // Force UI update
+      forceRender(v => v + 1);
     } catch (error) {
       console.error("Failed to toggle camera:", error);
       showNotification("Failed to toggle camera", "error");
@@ -287,12 +302,42 @@ const handleToggleMic = useCallback(async () => {
         conferenceId 
       });
       
-      forceRender(v => v + 1); // Force UI update
+      forceRender(v => v + 1);
     } catch (error) {
       console.error("Screen share error:", error);
       showNotification("Screen share failed", "error");
     }
   }, [socket, conferenceId, showNotification]);
+
+  // Auto-start audio when joining conference
+  useEffect(() => {
+    if (!hasJoinedRef.current || conferenceEndedRef.current) return;
+    
+    const initializeMedia = async () => {
+      try {
+        // Start audio automatically when joining
+        if (!getAudioStream()) {
+          console.log("🔊 Auto-starting audio for new participant");
+          await startAudio();
+          unmuteAudio(); // ✅ Ensure it's unmuted
+          setMicOn(true);
+          
+          // Sync with existing peers
+          const peerIds = getPeerIds();
+          peerIds.forEach(syncPeerTracks);
+          
+          forceRender(v => v + 1);
+        }
+      } catch (error) {
+        console.warn("Could not auto-start audio:", error);
+        // Don't show notification - some users might not have mic permission
+      }
+    };
+    
+    // Delay slightly to ensure WebRTC is ready
+    const timer = setTimeout(initializeMedia, 1000);
+    return () => clearTimeout(timer);
+  }, [hasJoinedRef.current]);
 
   // Media state sync effect
   useEffect(() => {
@@ -311,49 +356,73 @@ const handleToggleMic = useCallback(async () => {
     return () => clearInterval(interval);
   }, [micOn, camOn, sharingScreen]);
 
-  // Remote audio attachment (CORRECTED VERSION)
+  // Remote audio attachment
   useEffect(() => {
     const activeAudioEls = new Set();
     
     Object.entries(remoteStreamsRef.current).forEach(([socketId, streams]) => {
       const audioStream = streams?.audio;
       
-      // Check if we have a valid audio stream
       if (!audioStream || typeof audioStream.getAudioTracks !== 'function') return;
       
       const audioTracks = audioStream.getAudioTracks();
-      if (audioTracks.length === 0 || !audioTracks[0].enabled) return;
+      if (audioTracks.length === 0) return;
       
       // Get or create audio element
       let audioEl = audioElsRef.current[socketId];
       
       if (!audioEl) {
+        console.log(`🎧 Creating audio element for ${socketId}`);
         audioEl = document.createElement("audio");
         audioEl.id = `remote-audio-${socketId}`;
         audioEl.autoplay = true;
         audioEl.playsInline = true;
         audioEl.muted = false;
-        audioEl.volume = 1;
+        audioEl.volume = 1.0;
         audioEl.style.display = "none";
+        
+        // Add event listeners for debugging
+        audioEl.onloadedmetadata = () => {
+          console.log(`🎧 Audio metadata loaded for ${socketId}`);
+        };
+        
+        audioEl.oncanplay = () => {
+          console.log(`🎧 Audio can play for ${socketId}`);
+        };
+        
+        audioEl.onplay = () => {
+          console.log(`🎧 Audio started playing for ${socketId}`);
+        };
+        
+        audioEl.onerror = (e) => {
+          console.error(`🎧 Audio error for ${socketId}:`, e);
+        };
+        
         document.body.appendChild(audioEl);
         audioElsRef.current[socketId] = audioEl;
       }
       
-      // Set the stream and play
+      // Always set the stream (in case it changed)
       if (audioEl.srcObject !== audioStream) {
+        console.log(`🎧 Setting audio stream for ${socketId}`);
         audioEl.srcObject = audioStream;
       }
       
-      // Ensure audio is playing
-      audioEl.play().catch(err => {
-        console.warn(`Failed to auto-play audio for ${socketId}:`, err);
-        // Try with user interaction
-        const playOnClick = () => {
-          audioEl.play();
-          document.removeEventListener('click', playOnClick);
-        };
-        document.addEventListener('click', playOnClick);
-      });
+      // Try to play
+      const playPromise = audioEl.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(err => {
+          console.warn(`🎧 Auto-play prevented for ${socketId}:`, err.message);
+          // Schedule retry
+          setTimeout(() => {
+            if (audioElsRef.current[socketId]) {
+              audioElsRef.current[socketId].play().catch(e => {
+                console.warn(`🎧 Retry play failed for ${socketId}:`, e.message);
+              });
+            }
+          }, 1000);
+        });
+      }
       
       activeAudioEls.add(socketId);
     });
@@ -363,6 +432,7 @@ const handleToggleMic = useCallback(async () => {
       if (!activeAudioEls.has(socketId)) {
         const audioEl = audioElsRef.current[socketId];
         if (audioEl) {
+          console.log(`🎧 Removing audio element for ${socketId}`);
           audioEl.srcObject = null;
           audioEl.remove();
           delete audioElsRef.current[socketId];
@@ -370,9 +440,8 @@ const handleToggleMic = useCallback(async () => {
       }
     });
     
-    // Force update to trigger re-render if needed
     forceRender(v => v + 1);
-  }, [forceRender]); // Removed remoteStreamsRef.current from dependencies
+  }, [forceRender]);
 
   useEffect(() => {
     if (!socket?.id || !currentUser) return;
@@ -695,7 +764,7 @@ const handleToggleMic = useCallback(async () => {
 
     const handleForceMute = () => {
       if (!mountedRef.current) return;
-      stopAudio();
+      muteAudio(); // ✅ Use muteAudio instead of stopAudio
       setMicOn(false);
       showNotification("Admin muted your microphone", "warning");
     };
@@ -775,12 +844,13 @@ const handleToggleMic = useCallback(async () => {
     if (shouldSpeak && !getAudioStream()) {
       startAudio()
         .then(() => {
+          unmuteAudio(); // ✅ Ensure it's unmuted
           getPeerIds().forEach(syncPeerTracks);
           forceRender(v => v + 1);
         })
         .catch(console.error);
     } else if (!shouldSpeak && getAudioStream()) {
-      stopAudio();
+      muteAudio(); // ✅ Use muteAudio instead of stopAudio
       forceRender(v => v + 1);
     }
   }, [activeSpeaker, speakerModeEnabled, myParticipant, socket.id, isAdminOrManager]);
@@ -882,6 +952,32 @@ const handleToggleMic = useCallback(async () => {
 
   const participantsLoaded = Array.isArray(participants);
   const inConference = Boolean(conferenceId);
+
+  // Debug functions
+  const debugAudioHealth = useCallback(() => {
+    checkAudioHealth();
+    showNotification("Audio health check logged to console", "info");
+  }, [showNotification]);
+
+  const forceResync = useCallback(() => {
+    const count = forceResyncAllPeers();
+    showNotification(`Force re-synced ${count} peers`, "info");
+  }, [showNotification]);
+
+  const playAllRemoteAudio = useCallback(() => {
+    console.log("▶️ Attempting to play all remote audio");
+    Object.entries(audioElsRef.current).forEach(([socketId, audioEl]) => {
+      if (audioEl) {
+        console.log(`▶️ Playing audio for ${socketId}`);
+        audioEl.play().then(() => {
+          console.log(`✅ Audio playing for ${socketId}`);
+        }).catch(err => {
+          console.warn(`❌ Could not play audio for ${socketId}:`, err.message);
+        });
+      }
+    });
+    showNotification("Attempting to play all remote audio", "info");
+  }, [showNotification]);
 
   useEffect(() => {
     return () => {
@@ -1291,6 +1387,50 @@ const handleToggleMic = useCallback(async () => {
           pt: 2,
           borderTop: "1px solid #333",
         }}>
+          {/* Debug buttons - temporary */}
+          {process.env.NODE_ENV === 'development' && (
+            <>
+              <Tooltip title="Debug Audio Health">
+                <IconButton
+                  onClick={debugAudioHealth}
+                  sx={{
+                    background: "#9c27b0",
+                    color: "white",
+                    "&:hover": { background: "#7b1fa2" },
+                  }}
+                >
+                  <MicIcon />
+                </IconButton>
+              </Tooltip>
+              
+              <Tooltip title="Force Re-sync Peers">
+                <IconButton
+                  onClick={forceResync}
+                  sx={{
+                    background: "#ff9800",
+                    color: "white",
+                    "&:hover": { background: "#f57c00" },
+                  }}
+                >
+                  <SyncIcon />
+                </IconButton>
+              </Tooltip>
+              
+              <Tooltip title="Play All Remote Audio">
+                <IconButton
+                  onClick={playAllRemoteAudio}
+                  sx={{
+                    background: "#4caf50",
+                    color: "white",
+                    "&:hover": { background: "#388e3c" },
+                  }}
+                >
+                  <VolumeUpIcon />
+                </IconButton>
+              </Tooltip>
+            </>
+          )}
+
           <Tooltip title={micOn ? "Mute Microphone" : "Unmute Microphone"}>
             <span>
               <IconButton
