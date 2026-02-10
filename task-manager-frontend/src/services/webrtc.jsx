@@ -279,6 +279,19 @@ export const destroyAudio = () => {
   console.log("✅ Audio destroyed");
 };
 
+export const removePeer = (socketId) => {
+  const peer = peers[socketId];
+  if (!peer) return;
+
+  try {
+    peer.pc.close();
+  } catch (err) {
+    console.warn("Error closing peer connection:", err);
+  }
+
+  delete peers[socketId];
+};
+
 /* -----------------------------
    ORIGINAL stopAudio - KEEP FOR COMPATIBILITY
    But mark it as DEPRECATED
