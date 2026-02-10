@@ -358,92 +358,79 @@ useEffect(() => {
     return () => clearInterval(interval);
   }, [micOn, camOn, sharingScreen]);
 
-  // Remote audio attachment
-  useEffect(() => {
-    const activeAudioEls = new Set();
+// Remote audio attachment - FIXED VERSION
+useEffect(() => {
+  console.log("🎧 Checking remote streams:", Object.keys(remoteStreamsRef.current));
+  
+  Object.entries(remoteStreamsRef.current).forEach(([socketId, streams]) => {
+    const audioStream = streams?.audio;
     
-    Object.entries(remoteStreamsRef.current).forEach(([socketId, streams]) => {
-      const audioStream = streams?.audio;
-      
-      if (!audioStream || typeof audioStream.getAudioTracks !== 'function') return;
-      
-      const audioTracks = audioStream.getAudioTracks();
-      if (audioTracks.length === 0) return;
-      
-      // Get or create audio element
-      let audioEl = audioElsRef.current[socketId];
-      
-      if (!audioEl) {
-        console.log(`🎧 Creating audio element for ${socketId}`);
-        audioEl = document.createElement("audio");
-        audioEl.id = `remote-audio-${socketId}`;
-        audioEl.autoplay = true;
-        audioEl.playsInline = true;
-        audioEl.muted = false;
-        audioEl.volume = 1.0;
-        audioEl.style.display = "none";
-        
-        // Add event listeners for debugging
-        audioEl.onloadedmetadata = () => {
-          console.log(`🎧 Audio metadata loaded for ${socketId}`);
-        };
-        
-        audioEl.oncanplay = () => {
-          console.log(`🎧 Audio can play for ${socketId}`);
-        };
-        
-        audioEl.onplay = () => {
-          console.log(`🎧 Audio started playing for ${socketId}`);
-        };
-        
-        audioEl.onerror = (e) => {
-          console.error(`🎧 Audio error for ${socketId}:`, e);
-        };
-        
-        document.body.appendChild(audioEl);
-        audioElsRef.current[socketId] = audioEl;
-      }
-      
-      // Always set the stream (in case it changed)
-      if (audioEl.srcObject !== audioStream) {
-        console.log(`🎧 Setting audio stream for ${socketId}`);
-        audioEl.srcObject = audioStream;
-      }
-      
-      // Try to play
-      const playPromise = audioEl.play();
-      if (playPromise !== undefined) {
-        playPromise.catch(err => {
-          console.warn(`🎧 Auto-play prevented for ${socketId}:`, err.message);
-          // Schedule retry
-          setTimeout(() => {
-            if (audioElsRef.current[socketId]) {
-              audioElsRef.current[socketId].play().catch(e => {
-                console.warn(`🎧 Retry play failed for ${socketId}:`, e.message);
-              });
-            }
-          }, 1000);
-        });
-      }
-      
-      activeAudioEls.add(socketId);
+    if (!audioStream || typeof audioStream.getAudioTracks !== 'function') {
+      console.log(`❌ No valid audio stream for ${socketId}`);
+      return;
+    }
+    
+    const audioTracks = audioStream.getAudioTracks();
+    if (audioTracks.length === 0) {
+      console.log(`❌ No audio tracks for ${socketId}`);
+      return;
+    }
+    
+    console.log(`🎧 Found audio for ${socketId}:`, {
+      trackId: audioTracks[0].id,
+      enabled: audioTracks[0].enabled,
+      readyState: audioTracks[0].readyState
     });
     
-    // Clean up unused audio elements
-    Object.keys(audioElsRef.current).forEach(socketId => {
-      if (!activeAudioEls.has(socketId)) {
-        const audioEl = audioElsRef.current[socketId];
-        if (audioEl) {
-          console.log(`🎧 Removing audio element for ${socketId}`);
-          audioEl.srcObject = null;
-          audioEl.remove();
-          delete audioElsRef.current[socketId];
-        }
-      }
-    });
+    // Get or create audio element
+    let audioEl = audioElsRef.current[socketId];
     
-    forceRender(v => v + 1);
-  }, [forceRender]);
+    if (!audioEl) {
+      console.log(`🎧 CREATING audio element for ${socketId}`);
+      audioEl = document.createElement("audio");
+      audioEl.id = `remote-audio-${socketId}`;
+      audioEl.autoplay = true;
+      audioEl.playsInline = true;
+      audioEl.muted = false;
+      audioEl.volume = 1.0;
+      audioEl.style.display = "none";
+      
+      // Debug event listeners
+      audioEl.onloadedmetadata = () => console.log(`🎧 Metadata loaded for ${socketId}`);
+      audioEl.oncanplay = () => console.log(`🎧 Can play for ${socketId}`);
+      audioEl.onplay = () => console.log(`🎧 Playing for ${socketId}`);
+      audioEl.onerror = (e) => console.error(`🎧 Error for ${socketId}:`, e);
+      
+      document.body.appendChild(audioEl);
+      audioElsRef.current[socketId] = audioEl;
+    }
+    
+    // Set the stream
+    audioEl.srcObject = audioStream;
+    
+    // Play it
+    audioEl.play().then(() => {
+      console.log(`✅ Audio playing for ${socketId}`);
+    }).catch(err => {
+      console.warn(`⚠️ Auto-play blocked for ${socketId}:`, err.message);
+    });
+  });
+  
+  // Clean up
+  Object.keys(audioElsRef.current).forEach(socketId => {
+    if (!remoteStreamsRef.current[socketId]?.audio) {
+      const audioEl = audioElsRef.current[socketId];
+      if (audioEl) {
+        audioEl.srcObject = null;
+        audioEl.remove();
+        delete audioElsRef.current[socketId];
+      }
+    }
+  });
+  
+  console.log("🎧 Audio elements:", Object.keys(audioElsRef.current));
+  forceRender(v => v + 1);
+}, [forceRender]);
 
   useEffect(() => {
     if (!socket?.id || !currentUser) return;
