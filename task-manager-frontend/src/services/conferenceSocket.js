@@ -85,20 +85,13 @@ socket.once("conference:user-joined", () => {
   locks.conference.joined = true;
   locks.conference.joinInProgress = false;
 });
-  socket.once("conference:error", handleError);
+  socket.once("conference:error", () => {
+  locks.conference.joined = false;
+  locks.conference.joinInProgress = false;
+  locks.conference.currentConferenceId = null;
+});
 
-  // ✅ FIX 2: Safety timeout to prevent permanent deadlock
-  setTimeout(() => {
-    if (locks.conference.joinInProgress) {
-      console.warn("Join timeout, releasing conference lock");
-      locks.conference.joinInProgress = false;
-      locks.conference.currentConferenceId = null;
-      
-      // Clean up listeners
-      socket.off("conference:joined", handleJoined);
-      socket.off("conference:error", handleError);
-    }
-  }, 5000);
+
 
   return true;
 };
@@ -109,6 +102,9 @@ socket.once("conference:user-joined", () => {
 export const leaveConference = () => {
   if (!locks.conference.joined || !locks.conference.currentConferenceId) {
     console.warn("Not in a conference, nothing to leave");
+  locks.conference.joined = false;
+  locks.conference.joinInProgress = false;
+  locks.conference.currentConferenceId = null;
     return;
   }
 
