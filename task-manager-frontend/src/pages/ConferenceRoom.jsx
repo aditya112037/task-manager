@@ -110,25 +110,7 @@ export default function ConferenceRoom() {
     setNotification({ open: true, message, severity });
   }, []);
 
-  // ✅ FIX 3: Renegotiation helper
-  const renegotiateAllPeers = useCallback(async () => {
-    console.log("Renegotiating with all peers...");
-    for (const peerId of getPeerIds()) {
-      try {
-        const pc = createPeer(peerId, socket);
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
 
-        socket.emit("conference:offer", {
-          to: peerId,
-          offer,
-        });
-        console.log("Renegotiation offer sent to:", peerId);
-      } catch (err) {
-        console.error("Renegotiation failed for peer", peerId, err);
-      }
-    }
-  }, [socket]);
 
   const hardStopAllMedia = () => {
     stopAudio();
@@ -179,7 +161,6 @@ export default function ConferenceRoom() {
       } else {
         await startAudio();
         getPeerIds().forEach(syncPeerTracks);
-        await renegotiateAllPeers(); // ✅ FIX 3: Renegotiate after media change
         setMicOn(true);
       }
 
@@ -201,7 +182,6 @@ export default function ConferenceRoom() {
     conferenceId,
     socket,
     showNotification,
-    renegotiateAllPeers
   ]);
 
   const handleToggleCam = useCallback(async () => {
@@ -212,7 +192,6 @@ export default function ConferenceRoom() {
       } else {
         await startCamera();
         getPeerIds().forEach(syncPeerTracks);
-        await renegotiateAllPeers(); // ✅ FIX 3: Renegotiate after media change
         setCamOn(true);
       }
       
@@ -227,7 +206,7 @@ export default function ConferenceRoom() {
       console.error("Failed to toggle camera:", error);
       showNotification("Failed to toggle camera", "error");
     }
-  }, [conferenceId, socket, showNotification, renegotiateAllPeers]);
+  }, [conferenceId, socket, showNotification]);
 
   const handleRaiseHand = useCallback(() => {
     if (!handRaised) {
@@ -248,7 +227,6 @@ export default function ConferenceRoom() {
       } else {
         await startScreen();
         getPeerIds().forEach(syncPeerTracks);
-        await renegotiateAllPeers(); // ✅ FIX 3: Renegotiate after media change
         setSharingScreen(true);
         setScreenSharer(socket.id);
         setLayout(LAYOUT.PRESENTATION);
@@ -264,7 +242,7 @@ export default function ConferenceRoom() {
       console.error("Screen share error:", error);
       showNotification("Screen share failed", "error");
     }
-  }, [socket, conferenceId, showNotification, renegotiateAllPeers]);
+  }, [socket, conferenceId, showNotification]);
 
   // ✅ FIX 2: Media state sync effect
   useEffect(() => {

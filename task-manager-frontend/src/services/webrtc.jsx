@@ -96,8 +96,8 @@ export const syncPeerTracks = (socketId) => {
   // 🎤 AUDIO
   const audioTrack = audioStream?.getAudioTracks()[0];
 if (peer.audioSender) {
-  if (peer.audioSender.track !== audioTrack) {
-    peer.audioSender.replaceTrack(audioTrack || null);
+  if (audioTrack && peer.audioSender.track !== audioTrack) {
+    peer.audioSender.replaceTrack(audioTrack);
   }
 }
 
