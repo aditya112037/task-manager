@@ -31,7 +31,12 @@ export const createPeer = (socketId, socket) => {
   });
 
 
-  const audioTransceiver = pc.addTransceiver("audio", { direction: "sendrecv" });
+ const audioTransceiver = pc.addTransceiver("audio", {
+  direction: "sendrecv",
+  sendEncodings: [{}], // 👈 CRITICAL
+});
+  peer.audioSender = audioTransceiver.sender;
+
   const videoTransceiver = pc.addTransceiver("video", { direction: "sendrecv" });
 
   pc.onicecandidate = e => {
@@ -96,12 +101,14 @@ export const syncPeerTracks = (socketId) => {
   }
 
   // 🎤 AUDIO
-  const audioTrack = audioStream?.getAudioTracks()[0];
-if (peer.audioSender) {
-  if (audioTrack && peer.audioSender.track !== audioTrack) {
+if (audioTrack) {
+  if (!peer.audioSender.track) {
+    peer.audioSender.replaceTrack(audioTrack);
+  } else if (peer.audioSender.track !== audioTrack) {
     peer.audioSender.replaceTrack(audioTrack);
   }
 }
+
 
   // 🎥 CAMERA
   const cameraTrack = cameraStream?.getVideoTracks()[0];
