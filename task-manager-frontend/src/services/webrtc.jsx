@@ -41,60 +41,39 @@ export const createPeer = (socketId, socket) => {
     }
   };
 
-  pc.ontrack = (e) => {
-    const track = e.track;
-    if (!track) return;
+pc.ontrack = (e) => {
+  const track = e.track;
+  if (!track) return;
 
-    // 🔥 CRITICAL FIX: Always create a stream for the track
-    let stream;
-    if (e.streams && e.streams[0]) {
-      stream = e.streams[0];
-    } else {
-      console.log(`📡 Reconstructing stream for ${track.kind} track from ${socketId}`);
-      stream = new MediaStream([track]);
-    }
+  let stream;
 
-    const kind = track.kind; // 'audio' or 'video'
+  if (e.streams && e.streams[0]) {
+    stream = e.streams[0];
+  } else {
+    // Create a new stream
+    console.log(`📡 Creating new stream for ${track.kind} track`);
+    stream = new MediaStream([track]);
+  }
 
-    console.log(`📡 Received ${kind} track from ${socketId}:`, {
-      trackId: track.id,
-      enabled: track.enabled,
-      readyState: track.readyState
-    });
+  const kind = track.kind; // 'audio' or 'video'
 
-    // 🔥 Add track event listeners
-    track.onended = () => {
-      console.log(`⚠️ ${kind} track ended from ${socketId} - this should NOT happen during active call`);
-    };
+  console.log(`📡 Dispatching ${kind} track from ${socketId}:`, {
+    trackId: track.id,
+    streamId: stream.id,
+    enabled: track.enabled
+  });
 
-    // For audio tracks specifically
-    if (kind === 'audio') {
-      console.log(`🔊 AUDIO TRACK RECEIVED from ${socketId} - READY TO PLAY`);
-      track.onmute = () => console.log(`🔇 Audio track muted from ${socketId}`);
-      track.onunmute = () => console.log(`🔊 Audio track unmuted from ${socketId}`);
-      
-      // Ensure track is enabled
-      if (!track.enabled) {
-        console.log(`⚠️ Audio track from ${socketId} is disabled, enabling...`);
-        track.enabled = true;
-      }
-    }
-
-    window.dispatchEvent(
-      new CustomEvent("webrtc:remote-stream", {
-        detail: {
-          socketId,
-          kind,
-          stream,
-        },
-      })
-    );
-
-    // Force UI update
-    setTimeout(() => {
-      window.dispatchEvent(new CustomEvent("webrtc:force-render"));
-    }, 100);
-  };
+  // Dispatch the event
+  window.dispatchEvent(
+    new CustomEvent("webrtc:remote-stream", {
+      detail: {
+        socketId,
+        kind,
+        stream,
+      },
+    })
+  );
+};
 
   // Handle connection state changes
   pc.onconnectionstatechange = () => {
