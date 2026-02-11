@@ -79,7 +79,7 @@ export default function ConferenceRoom() {
   const [adminMenuAnchor, setAdminMenuAnchor] = useState(null);
   const [selectedParticipantId, setSelectedParticipantId] = useState(null);
   const [participantsPanelOpen, setParticipantsPanelOpen] = useState(true);
-
+  const [remoteVersion, setRemoteVersion] = useState(0);
   const remoteStreamsRef = useRef({});
   const [, forceRender] = useState(0);
   const [layout, setLayout] = useState(LAYOUT.GRID);
@@ -586,9 +586,9 @@ const handleRemoteStream = useCallback((e) => {
   
   console.log(`🎯 Stored ${kind} stream for ${socketId}`);
   
-  // Force update
-  forceRender(v => v + 1);
-}, []);
+setRemoteVersion(v => v + 1);
+
+}, [remoteVersion]);
 
 useEffect(() => {
   console.log("🎯 Setting up webrtc:remote-stream listener");
