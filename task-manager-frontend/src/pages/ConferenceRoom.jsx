@@ -588,7 +588,7 @@ const handleRemoteStream = useCallback((e) => {
   
 setRemoteVersion(v => v + 1);
 
-}, [remoteVersion]);
+}, []);
 
 useEffect(() => {
   console.log("🎯 Setting up webrtc:remote-stream listener");
