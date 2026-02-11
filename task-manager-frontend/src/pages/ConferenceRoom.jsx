@@ -429,7 +429,6 @@ useEffect(() => {
   });
   
   console.log("🎧 Audio elements:", Object.keys(audioElsRef.current));
-  forceRender(v => v + 1);
 }, [remoteVersion]);
 
   useEffect(() => {
