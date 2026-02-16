@@ -67,11 +67,12 @@ export const joinConference = (conferenceId) => {
   socket.emit("conference:join", { conferenceId });
 
   // Event-based lock management
-  const handleJoined = ({ participants }) => {
+  const handleJoined = () => {
     locks.conference.joined = true; 
     locks.conference.joinInProgress = false;
     socket.off("conference:joined", handleJoined);
     socket.off("conference:error", handleError);
+    socket.off("conference:user-joined", handleUserJoined);
   };
 
   const handleError = () => {
@@ -80,16 +81,19 @@ export const joinConference = (conferenceId) => {
     locks.conference.currentConferenceId = null;
     socket.off("conference:joined", handleJoined);
     socket.off("conference:error", handleError);
+    socket.off("conference:user-joined", handleUserJoined);
   };
-socket.once("conference:user-joined", () => {
-  locks.conference.joined = true;
-  locks.conference.joinInProgress = false;
-});
-  socket.once("conference:error", () => {
-  locks.conference.joined = false;
-  locks.conference.joinInProgress = false;
-  locks.conference.currentConferenceId = null;
-});
+
+  const handleUserJoined = () => {
+    locks.conference.joined = true;
+    locks.conference.joinInProgress = false;
+    socket.off("conference:joined", handleJoined);
+    socket.off("conference:error", handleError);
+  };
+
+  socket.once("conference:joined", handleJoined);
+  socket.once("conference:error", handleError);
+  socket.once("conference:user-joined", handleUserJoined);
 
 
 

@@ -16,7 +16,7 @@ module.exports = function registerConferenceSocket(io, socket) {
   --------------------------------------------------- */
 
   const getUserFromSocket = () => socket.user;
-  const EMPTY_END_DELAY = 5; // 30 seconds
+  const EMPTY_END_DELAY = 30; // 30 seconds
   const getConferenceRoom = (conferenceId) =>
     `conference_${conferenceId}`;
 
@@ -24,6 +24,14 @@ module.exports = function registerConferenceSocket(io, socket) {
     const conference = getConference(conferenceId);
     if (!conference) return null;
     return conference.participants.get(socketId);
+  };
+
+  const canRelaySignal = (conferenceId, fromSocketId, targetSocketId) => {
+    const conference = getConference(conferenceId);
+    if (!conference) return false;
+    if (!conference.participants.has(fromSocketId)) return false;
+    if (!conference.participants.has(targetSocketId)) return false;
+    return true;
   };
 
   const clearSpeakerTimeout = (conference, socketId) => {
@@ -505,6 +513,9 @@ module.exports = function registerConferenceSocket(io, socket) {
      WEBRTC SIGNALING
   --------------------------------------------------- */
   socket.on("conference:offer", ({ to, offer }) => {
+    const conferenceId = socket.conferenceId;
+    if (!conferenceId || !canRelaySignal(conferenceId, socket.id, to)) return;
+
     socket.to(to).emit("conference:offer", {
       from: socket.id,
       offer,
@@ -512,6 +523,9 @@ module.exports = function registerConferenceSocket(io, socket) {
   });
 
   socket.on("conference:answer", ({ to, answer }) => {
+    const conferenceId = socket.conferenceId;
+    if (!conferenceId || !canRelaySignal(conferenceId, socket.id, to)) return;
+
     socket.to(to).emit("conference:answer", {
       from: socket.id,
       answer,
@@ -519,6 +533,9 @@ module.exports = function registerConferenceSocket(io, socket) {
   });
 
   socket.on("conference:ice-candidate", ({ to, candidate }) => {
+    const conferenceId = socket.conferenceId;
+    if (!conferenceId || !canRelaySignal(conferenceId, socket.id, to)) return;
+
     socket.to(to).emit("conference:ice-candidate", {
       from: socket.id,
       candidate,
@@ -548,13 +565,16 @@ module.exports = function registerConferenceSocket(io, socket) {
     const conference = getConference(conferenceId);
     if (!conference) return;
 
+    const participant = conference.participants.get(socket.id);
+    if (!participant) return;
+
     conference.raisedHands.delete(socket.id);
 
     io.to(getConferenceRoom(conferenceId)).emit("conference:hands-updated", {
       raisedHands: Array.from(conference.raisedHands),
     });
 
-    console.log(`👇 Hand lowered for socket ${socket.id}`);
+    console.log(`👇 ${participant.name} lowered hand`);
   });
 
   /* ---------------------------------------------------

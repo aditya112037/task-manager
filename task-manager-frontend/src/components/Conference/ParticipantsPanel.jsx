@@ -1,10 +1,10 @@
 import {
+  Avatar,
   Box,
-  Typography,
+  IconButton,
   Stack,
   Tooltip,
-  Avatar,
-  IconButton,
+  Typography,
 } from "@mui/material";
 import MicIcon from "@mui/icons-material/Mic";
 import MicOffIcon from "@mui/icons-material/MicOff";
@@ -13,27 +13,25 @@ import VideocamOffIcon from "@mui/icons-material/VideocamOff";
 import PanToolIcon from "@mui/icons-material/PanTool";
 import CloseIcon from "@mui/icons-material/Close";
 import VolumeUpIcon from "@mui/icons-material/VolumeUp";
-import { getAudioStream } from "../../services/webrtc";
 import AdminPanel from "./AdminPanel";
 
-
+const displayName = (participant) => participant?.name || participant?.userName || "Participant";
 
 export default function ParticipantsPanel({
   participants = [],
   raisedHands = [],
-  isAdminOrManager,
+  isAdminOrManager = false,
   onAdminAction,
-  currentUserId,
+  currentSocketId,
   onClose,
-  speakerModeEnabled,
-  activeSpeaker,
+  speakerModeEnabled = false,
+  activeSpeaker = null,
   onSetSpeaker,
-  onToggleSpeakerMode,
 }) {
   return (
     <Box
       sx={{
-        width: 280,
+        width: 300,
         background: "#111",
         color: "white",
         borderLeft: "1px solid #222",
@@ -42,9 +40,7 @@ export default function ParticipantsPanel({
       }}
     >
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
-        <Typography fontWeight={600}>
-          Participants ({participants.length})
-        </Typography>
+        <Typography fontWeight={600}>Participants ({participants.length})</Typography>
         {onClose && (
           <IconButton onClick={onClose} size="small" sx={{ color: "#aaa" }}>
             <CloseIcon />
@@ -52,18 +48,12 @@ export default function ParticipantsPanel({
         )}
       </Box>
 
-      <Stack spacing={1.5}>
+      <Stack spacing={1.25}>
         {participants.map((p) => {
+          const isCurrentUser = p.socketId === currentSocketId;
           const handRaised = raisedHands.includes(p.socketId);
-          const isCurrentUser = p.userId === currentUserId;
-          const roleLabel = p.role === "admin" ? "Host" : "Participant";
-          // ✅ Use the correct property names with fallbacks
-          const displayName = p.userName || p.name || "User";
-          const micOn = p.socketId === currentUserId
-  ? !!getAudioStream()
-  : Boolean(p.micOn);
-          const camOn = Boolean(p.camOn);
           const isActiveSpeaker = speakerModeEnabled && activeSpeaker === p.socketId;
+          const roleLabel = p.role === "admin" ? "Host" : p.role === "manager" ? "Manager" : "Participant";
 
           return (
             <Box
@@ -75,29 +65,24 @@ export default function ParticipantsPanel({
                 gap: 1,
                 p: 1,
                 borderRadius: 1,
-                background: isActiveSpeaker 
-                  ? "rgba(0, 230, 118, 0.15)" 
-                  : handRaised 
-                    ? "#1c1c1c" 
+                background: isActiveSpeaker
+                  ? "rgba(0, 230, 118, 0.15)"
+                  : handRaised
+                    ? "rgba(255, 202, 40, 0.1)"
                     : "transparent",
-                border: isActiveSpeaker 
-                  ? "1px solid rgba(0, 230, 118, 0.3)" 
+                border: isActiveSpeaker
+                  ? "1px solid rgba(0, 230, 118, 0.3)"
                   : "1px solid transparent",
               }}
             >
-              {/* USER INFO */}
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1, flex: 1 }}>
-                <Avatar sx={{ 
-                  width: 32, 
-                  height: 32,
-                  bgcolor: isCurrentUser ? "#1976d2" : "#333",
-                }}>
-                  {displayName[0]?.toUpperCase() || "U"}
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0, flex: 1 }}>
+                <Avatar sx={{ width: 32, height: 32, bgcolor: isCurrentUser ? "#1976d2" : "#333" }}>
+                  {displayName(p)[0]?.toUpperCase() || "U"}
                 </Avatar>
 
-                <Box sx={{ flex: 1 }}>
-                  <Typography fontSize="0.85rem" fontWeight={isCurrentUser ? 600 : 400}>
-                    {displayName} {isCurrentUser && "(You)"}
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography fontSize="0.85rem" fontWeight={isCurrentUser ? 700 : 500} noWrap>
+                    {displayName(p)} {isCurrentUser ? "(You)" : ""}
                   </Typography>
                   <Typography fontSize="0.7rem" color="#aaa">
                     {roleLabel}
@@ -105,48 +90,38 @@ export default function ParticipantsPanel({
                 </Box>
               </Box>
 
-              {/* STATUS INDICATORS */}
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                {/* Active Speaker Indicator */}
                 {isActiveSpeaker && (
-                  <Tooltip title="Active Speaker">
+                  <Tooltip title="Active speaker">
                     <VolumeUpIcon fontSize="small" sx={{ color: "#00e676" }} />
                   </Tooltip>
                 )}
-                
-                {/* Hand Raised Indicator */}
+
                 {handRaised && (
                   <Tooltip title="Hand raised">
-                    <PanToolIcon
-                      fontSize="small"
-                      sx={{ color: "#ffca28" }}
-                    />
+                    <PanToolIcon fontSize="small" sx={{ color: "#ffca28" }} />
                   </Tooltip>
                 )}
 
-                {/* Mic Status */}
-                {micOn ? (
+                {p.micOn ? (
                   <MicIcon fontSize="small" sx={{ color: "#4caf50" }} />
                 ) : (
                   <MicOffIcon fontSize="small" color="error" />
                 )}
 
-                {/* Camera Status */}
-                {camOn ? (
+                {p.camOn ? (
                   <VideocamIcon fontSize="small" sx={{ color: "#2196f3" }} />
                 ) : (
                   <VideocamOffIcon fontSize="small" color="error" />
                 )}
 
-                {/* Admin Actions */}
                 {isAdminOrManager && !isCurrentUser && (
                   <AdminPanel
-                    participantSocketId={p.socketId}
-                    onLowerHand={() => onAdminAction("lower-hand", p.socketId)}
-                    onMute={() => onAdminAction("mute", p.socketId)}
-                    onCameraOff={() => onAdminAction("camera-off", p.socketId)}
-                    onSetSpeaker={() => onSetSpeaker && onSetSpeaker(p.socketId)}
-                    speakerModeEnabled={speakerModeEnabled}
+                    onLowerHand={() => onAdminAction?.("lower-hand", p.socketId)}
+                    onMute={() => onAdminAction?.("mute", p.socketId)}
+                    onCameraOff={() => onAdminAction?.("camera-off", p.socketId)}
+                    onRemove={() => onAdminAction?.("remove-from-conference", p.socketId)}
+                    onSetSpeaker={speakerModeEnabled ? () => onSetSpeaker?.(p.socketId) : null}
                   />
                 )}
               </Box>

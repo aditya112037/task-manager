@@ -1,597 +1,347 @@
 /* ====================================================
-   WEBRTC CORE — CLEAN & BORING v1
-   Audio / Camera / Screen are FULLY independent
+   WebRTC service (clean rewrite)
+   - mic = track.enabled switch (no stream destroy)
+   - camera/screen independent
+   - stable peer lifecycle
 ==================================================== */
 
-/* -----------------------------
-   LOCAL MEDIA STATE
------------------------------- */
+const peers = new Map(); // socketId -> { pc, senders: {audio,camera,screen} }
 
-let audioStream = null;    // mic only
-let cameraStream = null;   // camera only
-let screenStream = null;   // screen only
+let audioStream = null;
+let cameraStream = null;
+let screenStream = null;
 
-/* -----------------------------
-   PEER STATE
------------------------------- */
+const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
 
-const peers = {}; // socketId -> { pc, audioSender, cameraSender, screenSender }
+const emitRemoteMediaUpdate = (socketId) => {
+  const peer = peers.get(socketId);
+  if (!peer) return;
 
-/* -----------------------------
-   PEER CREATION
------------------------------- */
+  const receivers = peer.pc.getReceivers();
+  const audioTracks = [];
+  const cameraTracks = [];
+  const screenTracks = [];
 
-export const createPeer = (socketId, socket) => {
-  if (peers[socketId]) return peers[socketId].pc;
+  receivers.forEach((receiver) => {
+    const track = receiver.track;
+    if (!track || track.readyState !== "live") return;
 
-  console.log(`🔄 Creating peer for ${socketId}`);
-
-  const pc = new RTCPeerConnection({
-    iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-    sdpSemantics: 'unified-plan'
-  });
-
-  pc.onicecandidate = e => {
-    if (e.candidate) {
-      console.log(`❄️ ICE candidate for ${socketId}:`, e.candidate.type);
-      socket.emit("conference:ice-candidate", {
-        to: socketId,
-        candidate: e.candidate,
-      });
+    if (track.kind === "audio") {
+      audioTracks.push(track);
+      return;
     }
-  };
 
-pc.ontrack = (e) => {
-  const track = e.track;
-  if (!track) return;
+    if (track.kind === "video") {
+      const isScreen =
+        track.label?.toLowerCase().includes("screen") ||
+        track.label?.toLowerCase().includes("window") ||
+        track.getSettings?.().displaySurface;
 
-  let stream;
-
-  if (e.streams && e.streams[0]) {
-    stream = e.streams[0];
-  } else {
-    // Create a new stream
-    console.log(`📡 Creating new stream for ${track.kind} track`);
-    stream = new MediaStream([track]);
-  }
-
-  const kind = track.kind; // 'audio' or 'video'
-
-  console.log(`📡 Dispatching ${kind} track from ${socketId}:`, {
-    trackId: track.id,
-    streamId: stream.id,
-    enabled: track.enabled
+      if (isScreen) screenTracks.push(track);
+      else cameraTracks.push(track);
+    }
   });
 
-  // Dispatch the event
   window.dispatchEvent(
-    new CustomEvent("webrtc:remote-stream", {
+    new CustomEvent("webrtc:remote-media", {
       detail: {
         socketId,
-        kind,
-        stream,
+        audioStream: audioTracks.length ? new MediaStream(audioTracks) : null,
+        cameraStream: cameraTracks.length ? new MediaStream(cameraTracks) : null,
+        screenStream: screenTracks.length ? new MediaStream(screenTracks) : null,
       },
     })
   );
 };
 
-  // Handle connection state changes
+const createPeerConnection = (socketId, socket) => {
+  const pc = new RTCPeerConnection({
+    iceServers: ICE_SERVERS,
+    sdpSemantics: "unified-plan",
+  });
+
+  pc.onicecandidate = (e) => {
+    if (!e.candidate) return;
+    socket.emit("conference:ice-candidate", {
+      to: socketId,
+      candidate: e.candidate,
+    });
+  };
+
+  pc.ontrack = () => {
+    emitRemoteMediaUpdate(socketId);
+  };
+
   pc.onconnectionstatechange = () => {
-    console.log(`Peer ${socketId} connection state:`, pc.connectionState);
-    if (pc.connectionState === 'connected') {
-      console.log(`✅ Peer ${socketId} fully connected`);
-      // Force sync tracks when connection is established
-      setTimeout(() => {
-        if (peers[socketId]) {
-          syncPeerTracks(socketId);
-        }
-      }, 500);
+    if (["failed", "closed", "disconnected"].includes(pc.connectionState)) {
+      emitRemoteMediaUpdate(socketId);
     }
-  };
-
-  // Handle negotiation needed
-  pc.onnegotiationneeded = async () => {
-    console.log(`🤝 Negotiation needed for ${socketId}`);
-    try {
-      const offer = await pc.createOffer({
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: true,
-      });
-      await pc.setLocalDescription(offer);
-      socket.emit("conference:offer", {
-        to: socketId,
-        offer,
-      });
-      console.log(`📤 Offer sent to ${socketId} (renegotiation)`);
-    } catch (err) {
-      console.error("Renegotiation failed:", err);
-    }
-  };
-
-  peers[socketId] = {
-    pc,
-    audioSender: null,
-    cameraSender: null,
-    screenSender: null,
   };
 
   return pc;
 };
 
-/* -----------------------------
-   ADD TRACKS TO PEER
------------------------------- */
+const getOrCreatePeer = (socketId, socket) => {
+  const existing = peers.get(socketId);
+  if (existing) return existing;
 
-export const syncPeerTracks = (socketId) => {
-  const peer = peers[socketId];
-  if (!peer) {
-    console.warn(`No peer found for ${socketId}`);
+  const pc = createPeerConnection(socketId, socket);
+  const peer = {
+    pc,
+    senders: {
+      audio: null,
+      camera: null,
+      screen: null,
+    },
+  };
+  peers.set(socketId, peer);
+  return peer;
+};
+
+const upsertSender = async (peer, key, track, stream) => {
+  const existing = peer.senders[key];
+
+  if (!track) {
+    if (existing) {
+      try {
+        peer.pc.removeTrack(existing);
+      } catch {
+        // ignore stale sender removal errors
+      }
+      peer.senders[key] = null;
+    }
     return;
   }
 
-  const { pc } = peer;
+  if (existing) {
+    await existing.replaceTrack(track);
+    return;
+  }
 
-  console.log(`🔄 Syncing tracks for ${socketId}:`, {
-    hasAudioStream: !!audioStream,
-    audioTrack: audioStream?.getAudioTracks()[0]?.enabled,
-    hasCameraStream: !!cameraStream,
-    hasScreenStream: !!screenStream
+  peer.senders[key] = peer.pc.addTrack(track, stream);
+};
+
+export const syncPeerTracks = async (socketId) => {
+  const peer = peers.get(socketId);
+  if (!peer) return;
+
+  const audioTrack = audioStream?.getAudioTracks?.()[0] || null;
+  const cameraTrack = cameraStream?.getVideoTracks?.()[0] || null;
+  const screenTrack = screenStream?.getVideoTracks?.()[0] || null;
+
+  await upsertSender(peer, "audio", audioTrack, audioStream);
+  await upsertSender(peer, "camera", cameraTrack, cameraStream);
+  await upsertSender(peer, "screen", screenTrack, screenStream);
+};
+
+export const syncAllPeerTracks = async () => {
+  const ids = Array.from(peers.keys());
+  await Promise.all(ids.map((id) => syncPeerTracks(id)));
+};
+
+export const createPeer = async (socketId, socket) => {
+  const peer = getOrCreatePeer(socketId, socket);
+  await syncPeerTracks(socketId);
+  return peer.pc;
+};
+
+export const createOffer = async (socketId, socket) => {
+  const peer = getOrCreatePeer(socketId, socket);
+  await syncPeerTracks(socketId);
+
+  const offer = await peer.pc.createOffer({
+    offerToReceiveAudio: true,
+    offerToReceiveVideo: true,
   });
+  await peer.pc.setLocalDescription(offer);
 
-  // 🎤 AUDIO - CRITICAL: Only sync if we have audio stream
-  const audioTrack = audioStream?.getAudioTracks()[0];
-  
-  if (audioTrack && audioTrack.enabled) {
-    console.log(`🔊 Audio track available for ${socketId}:`, audioTrack.id, audioTrack.enabled);
-    
-    if (peer.audioSender) {
-      try {
-        console.log(`🔄 Replacing audio track for ${socketId}`);
-        peer.audioSender.replaceTrack(audioTrack).then(() => {
-          console.log(`✅ Audio track replaced for ${socketId}`);
-        }).catch(err => {
-          console.error(`❌ Error replacing audio track for ${socketId}:`, err);
-          // Fallback: remove and add new
-          if (peer.audioSender) {
-            pc.removeTrack(peer.audioSender);
-          }
-          peer.audioSender = pc.addTrack(audioTrack, audioStream);
-          console.log(`🔄 Added new audio track (fallback) for ${socketId}`);
-        });
-      } catch (err) {
-        console.error(`❌ Failed to replace audio track for ${socketId}:`, err);
-        peer.audioSender = pc.addTrack(audioTrack, audioStream);
-        console.log(`🔄 Added new audio track (catch) for ${socketId}`);
-      }
-    } else {
-      console.log(`➕ Adding new audio track for ${socketId}`);
-      peer.audioSender = pc.addTrack(audioTrack, audioStream);
-    }
+  socket.emit("conference:offer", {
+    to: socketId,
+    offer,
+  });
+};
+
+export const handleOffer = async ({ from, offer }, socket) => {
+  const peer = getOrCreatePeer(from, socket);
+
+  if (peer.pc.signalingState !== "stable") {
+    await Promise.allSettled([
+      peer.pc.setLocalDescription({ type: "rollback" }),
+      peer.pc.setRemoteDescription(offer),
+    ]);
   } else {
-    console.log(`🔇 No active audio track for ${socketId}`);
-    // No audio track - remove if exists
-    if (peer.audioSender) {
-      console.log(`🗑️ Removing audio sender for ${socketId}`);
-      try {
-        pc.removeTrack(peer.audioSender);
-      } catch (err) {
-        console.warn(`Could not remove audio sender:`, err);
-      }
-      peer.audioSender = null;
-    }
+    await peer.pc.setRemoteDescription(offer);
   }
 
-  // 🎥 CAMERA
-  const cameraTrack = cameraStream?.getVideoTracks()[0];
-  if (cameraTrack) {
-    if (!peer.cameraSender) {
-      peer.cameraSender = pc.addTrack(cameraTrack, cameraStream);
-    } else if (peer.cameraSender.track !== cameraTrack) {
-      peer.cameraSender.replaceTrack(cameraTrack);
-    }
-  } else if (peer.cameraSender) {
-    try {
-      pc.removeTrack(peer.cameraSender);
-    } catch (err) {
-      console.warn(`Could not remove camera sender:`, err);
-    }
-    peer.cameraSender = null;
-  }
+  await syncPeerTracks(from);
+  const answer = await peer.pc.createAnswer();
+  await peer.pc.setLocalDescription(answer);
 
-  // 🖥️ SCREEN
-  const screenTrack = screenStream?.getVideoTracks()[0];
-  if (screenTrack) {
-    screenTrack.contentHint = "detail";
-    if (!peer.screenSender) {
-      peer.screenSender = pc.addTrack(screenTrack, screenStream);
-    } else if (peer.screenSender.track !== screenTrack) {
-      peer.screenSender.replaceTrack(screenTrack);
-    }
-  } else if (peer.screenSender) {
-    try {
-      pc.removeTrack(peer.screenSender);
-    } catch (err) {
-      console.warn(`Could not remove screen sender:`, err);
-    }
-    peer.screenSender = null;
-  }
-};
-
-/* -----------------------------
-   AUDIO LIFECYCLE FIXES (CRITICAL)
-   Rule: NEVER stop() audio tracks during active call
------------------------------- */
-
-// 1️⃣ SAFE MUTE (most common)
-export const muteAudio = () => {
-  if (!audioStream) return;
-  console.log("🔇 Muting audio");
-  audioStream.getAudioTracks().forEach(t => {
-    t.enabled = false;
+  socket.emit("conference:answer", {
+    to: from,
+    answer,
   });
 };
 
-// 2️⃣ SAFE UNMUTE
-export const unmuteAudio = () => {
-  if (!audioStream) return;
-  console.log("🔊 Unmuting audio");
-  audioStream.getAudioTracks().forEach(t => {
-    t.enabled = true;
-  });
+export const handleAnswer = async ({ from, answer }) => {
+  const peer = peers.get(from);
+  if (!peer) return;
+  if (peer.pc.signalingState === "have-local-offer") {
+    await peer.pc.setRemoteDescription(answer);
+  }
 };
 
-// 3️⃣ HARD DESTROY (ONLY on leave/end)
-export const destroyAudio = () => {
-  if (!audioStream) {
-    console.log("No audio stream to destroy");
-    return;
+export const handleIceCandidate = async ({ from, candidate }) => {
+  const peer = peers.get(from);
+  if (!peer || !candidate) return;
+  try {
+    await peer.pc.addIceCandidate(candidate);
+  } catch {
+    // ignore race candidates
   }
-  
-  console.log("💀 Destroying audio (calling .stop() on tracks)");
-  const tracks = audioStream.getTracks();
-  tracks.forEach(t => {
-    console.log(`Stopping track: ${t.id}, kind: ${t.kind}`);
-    t.stop();
-  });
-  
-  audioStream = null;
-  console.log("✅ Audio destroyed");
 };
 
 export const removePeer = (socketId) => {
-  const peer = peers[socketId];
+  const peer = peers.get(socketId);
   if (!peer) return;
 
   try {
+    peer.pc.getSenders().forEach((sender) => {
+      try {
+        peer.pc.removeTrack(sender);
+      } catch {
+        // ignore
+      }
+    });
     peer.pc.close();
-  } catch (err) {
-    console.warn("Error closing peer connection:", err);
+  } catch {
+    // ignore
   }
 
-  delete peers[socketId];
+  peers.delete(socketId);
+
+  window.dispatchEvent(
+    new CustomEvent("webrtc:remote-media", {
+      detail: {
+        socketId,
+        audioStream: null,
+        cameraStream: null,
+        screenStream: null,
+      },
+    })
+  );
 };
 
-/* -----------------------------
-   ORIGINAL stopAudio - KEEP FOR COMPATIBILITY
-   But mark it as DEPRECATED
------------------------------- */
-export const stopAudio = () => {
-  console.warn("⚠️ stopAudio() called - use muteAudio() during call, destroyAudio() on leave");
-  muteAudio();
+export const closeAllPeers = () => {
+  Array.from(peers.keys()).forEach(removePeer);
 };
-
-/* -----------------------------
-   LOCAL MEDIA — AUDIO (UPDATED)
------------------------------- */
 
 export const startAudio = async () => {
-  // Always create new stream to ensure fresh tracks
-  if (audioStream) {
-    console.log("🔄 Recreating audio stream");
-    destroyAudio(); // Clean up old stream completely
-  }
+  if (audioStream) return audioStream;
 
-  try {
-    console.log("🎤 Requesting microphone permission...");
-    audioStream = await navigator.mediaDevices.getUserMedia({ 
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-        channelCount: 1
-      } 
-    });
-    
-    const audioTrack = audioStream.getAudioTracks()[0];
-    if (audioTrack) {
-      console.log("✅ Microphone acquired:", {
-        id: audioTrack.id,
-        label: audioTrack.label,
-        enabled: audioTrack.enabled
-      });
-      
-      // Ensure track is enabled
-      audioTrack.enabled = true;
-      
-      // 🔥 CRITICAL: Add ended listener to detect premature stops
-      audioTrack.onended = () => {
-        console.error("❌ CRITICAL: Audio track ENDED unexpectedly");
-        console.trace("Track ended stack trace");
-      };
-      
-      // Add other event listeners
-      audioTrack.onmute = () => console.log("🔇 Audio track muted");
-      audioTrack.onunmute = () => console.log("🔊 Audio track unmuted");
-    }
-    
-    return audioStream;
-  } catch (error) {
-    console.error("❌ Failed to start audio:", error);
-    throw error;
-  }
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: {
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+    },
+  });
+
+  const track = stream.getAudioTracks()[0];
+  if (track) track.enabled = true;
+
+  audioStream = stream;
+  await syncAllPeerTracks();
+  return audioStream;
 };
 
-/* -----------------------------
-   LOCAL MEDIA — CAMERA
------------------------------- */
+export const setMicEnabled = async (enabled) => {
+  if (!audioStream) {
+    if (!enabled) return false;
+    await startAudio();
+  }
+
+  const track = audioStream?.getAudioTracks?.()[0];
+  if (!track) return false;
+
+  track.enabled = Boolean(enabled);
+  return track.enabled;
+};
+
+export const muteAudio = () => setMicEnabled(false);
+export const unmuteAudio = () => setMicEnabled(true);
+
+export const destroyAudio = async () => {
+  if (!audioStream) return;
+  audioStream.getTracks().forEach((t) => t.stop());
+  audioStream = null;
+  await syncAllPeerTracks();
+};
 
 export const startCamera = async () => {
   if (cameraStream) return cameraStream;
 
-  try {
-    cameraStream = await navigator.mediaDevices.getUserMedia({ 
-      video: {
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-        frameRate: { ideal: 30 }
-      } 
-    });
-    return cameraStream;
-  } catch (error) {
-    console.error("Failed to start camera:", error);
-    throw error;
-  }
+  cameraStream = await navigator.mediaDevices.getUserMedia({
+    video: {
+      width: { ideal: 1280 },
+      height: { ideal: 720 },
+      frameRate: { ideal: 24, max: 30 },
+    },
+    audio: false,
+  });
+
+  await syncAllPeerTracks();
+  return cameraStream;
 };
 
-export const stopCamera = () => {
-  if (cameraStream) {
-    cameraStream.getTracks().forEach(t => t.stop());
-    cameraStream = null;
-  }
+export const stopCamera = async () => {
+  if (!cameraStream) return;
+  cameraStream.getTracks().forEach((t) => t.stop());
+  cameraStream = null;
+  await syncAllPeerTracks();
 };
-
-/* -----------------------------
-   LOCAL MEDIA — SCREEN
------------------------------- */
 
 export const startScreen = async () => {
   if (screenStream) return screenStream;
 
-  try {
-    screenStream = await navigator.mediaDevices.getDisplayMedia({ 
-      video: { 
-        displaySurface: "monitor",
-        frameRate: { ideal: 30 },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 }
-      },
-      audio: false // Screen share typically doesn't include audio
-    });
-
-    const track = screenStream.getVideoTracks()[0];
-    if (track) {
-      track.contentHint = "detail";
-      track.onended = () => {
-        console.log("🖥️ Screen share ended by user");
-        stopScreen();
-      };
-    }
-
-    return screenStream;
-  } catch (error) {
-    console.error("Failed to start screen sharing:", error);
-    throw error;
-  }
-};
-
-export const stopScreen = () => {
-  if (screenStream) {
-    screenStream.getTracks().forEach(t => t.stop());
-    screenStream = null;
-  }
-};
-
-/* -----------------------------
-   TOGGLES (NO SIDE EFFECTS)
-   These only change enabled state, never stop tracks
------------------------------- */
-
-export const setAudioEnabled = (enabled) => {
-  if (audioStream) {
-    console.log(enabled ? "🔊 Enabling audio" : "🔇 Disabling audio");
-    audioStream.getAudioTracks().forEach(t => {
-      if (t.enabled !== enabled) {
-        t.enabled = enabled;
-      }
-    });
-  }
-};
-
-export const setCameraEnabled = (enabled) => {
-  if (cameraStream) {
-    cameraStream.getVideoTracks().forEach(t => {
-      if (t.enabled !== enabled) {
-        t.enabled = enabled;
-      }
-    });
-  }
-};
-
-/* -----------------------------
-   STREAM GETTERS
------------------------------- */
-
-export const getAudioStream = () => audioStream;
-
-export const getCameraStream = () => cameraStream;
-
-export const getScreenStream = () => screenStream;
-
-/* -----------------------------
-   UTILITIES
------------------------------- */
-
-export const getLocalState = () => ({
-  audio: !!audioStream,
-  audioEnabled: audioStream?.getAudioTracks()[0]?.enabled || false,
-  camera: !!cameraStream,
-  screen: !!screenStream,
-  peers: Object.keys(peers).length,
-});
-
-export const getPeerIds = () => Object.keys(peers);
-
-export const getPeers = () => peers;
-
-export const getLocalStream = () => {
-  return (
-    screenStream ||
-    cameraStream ||
-    audioStream ||
-    null
-  );
-};
-
-export const isAudioActive = () => {
-  return audioStream && audioStream.getAudioTracks().some(t => t.enabled);
-};
-
-export const isCameraActive = () => {
-  return cameraStream && cameraStream.getVideoTracks().some(t => t.enabled);
-};
-
-export const isScreenActive = () => {
-  return screenStream && screenStream.getVideoTracks().some(t => t.readyState === 'live');
-};
-
-/* -----------------------------
-   OFFER/ANSWER HELPERS
------------------------------- */
-
-export const createOffer = async (socketId) => {
-  const pc = createPeer(socketId);
-  const offer = await pc.createOffer({
-    offerToReceiveAudio: true,
-    offerToReceiveVideo: true,
+  screenStream = await navigator.mediaDevices.getDisplayMedia({
+    video: {
+      frameRate: { ideal: 24, max: 30 },
+    },
+    audio: false,
   });
-  await pc.setLocalDescription(offer);
-  return offer;
-};
 
-export const handleOffer = async (socketId, offer) => {
-  const pc = createPeer(socketId);
-  await pc.setRemoteDescription(offer);
-  const answer = await pc.createAnswer();
-  await pc.setLocalDescription(answer);
-  return answer;
-};
-
-export const handleAnswer = async (socketId, answer) => {
-  const pc = peers[socketId]?.pc;
-  if (pc) {
-    await pc.setRemoteDescription(answer);
-  }
-};
-
-export const addIceCandidate = async (socketId, candidate) => {
-  const pc = peers[socketId]?.pc;
-  if (pc) {
-    await pc.addIceCandidate(candidate);
-  }
-};
-
-/* -----------------------------
-   CLEANUP
-   IMPORTANT: Use destroyAudio() for audio, not stopAudio()
------------------------------- */
-
-export const cleanup = () => {
-  console.log("🧹 Cleaning up WebRTC resources");
-  destroyAudio(); // Use destroyAudio, not stopAudio
-  stopCamera();
-  stopScreen();
-  Object.keys(peers).forEach(removePeer);
-};
-
-/* -----------------------------
-   DEBUGGING
------------------------------- */
-
-export const debugPeers = () => {
-  console.group("🔍 WebRTC Debug Info");
-  console.log("Audio Stream:", audioStream?.id || "null");
-  if (audioStream) {
-    const audioTrack = audioStream.getAudioTracks()[0];
-    console.log("Audio Track:", {
-      id: audioTrack?.id,
-      enabled: audioTrack?.enabled,
-      readyState: audioTrack?.readyState,
-      muted: audioTrack?.muted
-    });
-  }
-  console.log("Camera Stream:", cameraStream?.id || "null");
-  console.log("Screen Stream:", screenStream?.id || "null");
-  console.log("Peers:", Object.keys(peers).length);
-  Object.entries(peers).forEach(([id, peer]) => {
-    console.log(`  Peer ${id}:`, {
-      connectionState: peer.pc.connectionState,
-      audioSender: !!peer.audioSender,
-      cameraSender: !!peer.cameraSender,
-      screenSender: !!peer.screenSender
-    });
-  });
-  console.groupEnd();
-};
-
-/* -----------------------------
-   NEW: Force sync all peers (for debugging)
------------------------------- */
-
-export const forceResyncAllPeers = () => {
-  console.log("🔄 Force re-syncing all peers");
-  const peerIds = getPeerIds();
-  console.log(`Re-syncing ${peerIds.length} peers`);
-  
-  peerIds.forEach(socketId => {
-    console.log(`Syncing tracks for ${socketId}`);
-    syncPeerTracks(socketId);
-  });
-  
-  return peerIds.length;
-};
-
-/* -----------------------------
-   NEW: Check audio health
------------------------------- */
-
-export const checkAudioHealth = () => {
-  const state = {
-    hasAudioStream: !!audioStream,
-    audioTrack: null,
-    peers: Object.keys(peers).length,
-    peerAudioSenders: Object.values(peers).filter(p => p.audioSender).length
-  };
-  
-  if (audioStream) {
-    const track = audioStream.getAudioTracks()[0];
-    state.audioTrack = {
-      id: track?.id,
-      enabled: track?.enabled,
-      readyState: track?.readyState,
-      muted: track?.muted
+  const screenTrack = screenStream.getVideoTracks()[0];
+  if (screenTrack) {
+    screenTrack.onended = () => {
+      stopScreen();
     };
   }
-  
-  console.log("🔊 Audio Health Check:", state);
-  return state;
+
+  await syncAllPeerTracks();
+  return screenStream;
+};
+
+export const stopScreen = async () => {
+  if (!screenStream) return;
+  screenStream.getTracks().forEach((t) => t.stop());
+  screenStream = null;
+  await syncAllPeerTracks();
+};
+
+export const getAudioStream = () => audioStream;
+export const getCameraStream = () => cameraStream;
+export const getScreenStream = () => screenStream;
+export const getPeerIds = () => Array.from(peers.keys());
+
+export const getMicEnabled = () => {
+  const track = audioStream?.getAudioTracks?.()[0];
+  return Boolean(track?.enabled);
+};
+
+export const cleanupWebRTC = async () => {
+  closeAllPeers();
+  await stopScreen();
+  await stopCamera();
+  await destroyAudio();
 };
