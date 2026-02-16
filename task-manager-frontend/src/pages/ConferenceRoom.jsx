@@ -509,6 +509,7 @@ export default function ConferenceRoom() {
       role: me?.role || "member",
       isLocal: true,
       media: {
+          media: {
         cameraStream: getCameraStream(),
         screenStream: getScreenStream(),
       },
@@ -516,6 +517,7 @@ export default function ConferenceRoom() {
 
     return [localTile, ...remoteTiles];
   }, [mySocketId, user?.name, me?.role, remoteTiles]);
+  }, [mySocketId, user?.name, me?.role, micOn, camOn, remoteTiles]);
 
   const activeTileId = activeSpeaker || allTiles[0]?.socketId;
 
