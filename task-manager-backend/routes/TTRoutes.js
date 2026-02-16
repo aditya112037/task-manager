@@ -82,6 +82,8 @@ router.get("/:teamId/extensions/pending", protect, async (req, res) => {
 router.post("/:teamId", protect, async (req, res) => {
   try {
     const team = await Team.findById(req.params.teamId);
+    if (!team) return res.status(404).json({ message: "Team not found" });
+
     const member = findMember(team, req.user._id);
 
     if (!member || !["admin", "manager"].includes(member.role))
