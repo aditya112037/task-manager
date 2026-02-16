@@ -508,8 +508,6 @@ export default function ConferenceRoom() {
       }
     };
 
-    const onPeerState = () => {};
-
     const onUserJoined = async ({ socketId }) => {
       if (!socketId || socketId === socket.id) return;
       await createOffer(socketId, socket);
@@ -600,7 +598,6 @@ export default function ConferenceRoom() {
     };
 
     window.addEventListener("webrtc:remote-media", onRemoteMedia);
-    window.addEventListener("webrtc:peer-state", onPeerState);
 
     socket.on("conference:user-joined", onUserJoined);
     socket.on("conference:offer", onOffer);
@@ -621,7 +618,6 @@ export default function ConferenceRoom() {
 
     return () => {
       window.removeEventListener("webrtc:remote-media", onRemoteMedia);
-      window.removeEventListener("webrtc:peer-state", onPeerState);
 
       socket.off("conference:user-joined", onUserJoined);
       socket.off("conference:offer", onOffer);
