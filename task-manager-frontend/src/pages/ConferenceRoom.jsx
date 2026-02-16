@@ -179,6 +179,7 @@ export default function ConferenceRoom() {
   const joinedRef = useRef(false);
   const endedRef = useRef(false);
   const speakingRef = useRef(false);
+  const endFallbackTimerRef = useRef(null);
 
   const showNotification = useCallback((message, severity = "info") => {
     setNotification({ open: true, message, severity });
@@ -235,13 +236,6 @@ export default function ConferenceRoom() {
     () => Object.entries(remoteMedia).filter(([, media]) => media?.audioStream),
     [remoteMedia]
   );
-  const receivingAudioPeerCount = useMemo(
-    () =>
-      remoteAudioEntries.filter(([, media]) =>
-        media?.audioStream?.getAudioTracks?.().some((t) => t.readyState === "live")
-      ).length,
-    [remoteAudioEntries]
-  );
 
   const leaveConferenceLocally = useCallback(
     async (navigateBack = true) => {
@@ -267,6 +261,10 @@ export default function ConferenceRoom() {
   const handleConferenceEnded = useCallback(async () => {
     if (endedRef.current) return;
     endedRef.current = true;
+    if (endFallbackTimerRef.current) {
+      clearTimeout(endFallbackTimerRef.current);
+      endFallbackTimerRef.current = null;
+    }
 
     cleanupConference();
     await cleanupWebRTC();
@@ -275,6 +273,26 @@ export default function ConferenceRoom() {
     showNotification("Conference has ended", "info");
     navigate("/teams");
   }, [navigate, showNotification]);
+
+  const handleEndConference = useCallback(() => {
+    if (!isAdminOrManager) {
+      leaveConferenceLocally();
+      return;
+    }
+
+    if (!socket || !conferenceId) return;
+    socket.emit("conference:end", { conferenceId });
+
+    if (endFallbackTimerRef.current) {
+      clearTimeout(endFallbackTimerRef.current);
+    }
+
+    endFallbackTimerRef.current = setTimeout(() => {
+      if (!endedRef.current) {
+        handleConferenceEnded();
+      }
+    }, 2500);
+  }, [conferenceId, handleConferenceEnded, isAdminOrManager, leaveConferenceLocally, socket]);
 
   const handleToggleMic = useCallback(async () => {
     try {
@@ -286,10 +304,6 @@ export default function ConferenceRoom() {
       const enabled = await setMicEnabled(nextMic);
       setMicOn(Boolean(enabled));
       emitMediaUpdate(Boolean(enabled), camOn);
-
-      const track = getAudioStream()?.getAudioTracks?.()[0];
-      console.log("Mic track enabled:", track?.enabled);
-      console.log("Mic readyState:", track?.readyState);
     } catch (error) {
       console.error("Microphone toggle failed", error);
       showNotification("Microphone access failed", "error");
@@ -404,6 +418,16 @@ export default function ConferenceRoom() {
     setSelectedParticipantId(null);
   }, []);
 
+  useEffect(
+    () => () => {
+      if (endFallbackTimerRef.current) {
+        clearTimeout(endFallbackTimerRef.current);
+        endFallbackTimerRef.current = null;
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     if (!conferenceId) {
       showNotification("Conference ID is missing", "error");
@@ -484,16 +508,7 @@ export default function ConferenceRoom() {
       }
     };
 
-    const onPeerState = (event) => {
-      const { socketId, connectionState, iceConnectionState, signalingState } = event.detail || {};
-      if (!socketId || socketId === mySocketId) return;
-      console.log("[webrtc] peer-state", {
-        socketId,
-        connectionState,
-        iceConnectionState,
-        signalingState,
-      });
-    };
+    const onPeerState = () => {};
 
     const onUserJoined = async ({ socketId }) => {
       if (!socketId || socketId === socket.id) return;
@@ -653,8 +668,6 @@ export default function ConferenceRoom() {
     }
 
     const stream = getAudioStream();
-    console.log("Audio stream:", stream);
-    console.log("Tracks:", stream?.getAudioTracks?.());
     if (!stream) return;
 
     let rafId = null;
@@ -667,9 +680,6 @@ export default function ConferenceRoom() {
       analyser.getByteFrequencyData(data);
 
       const avg = data.reduce((sum, value) => sum + value, 0) / data.length;
-      if (Math.random() < 0.02) {
-        console.log("Mic avg level:", avg);
-      }
       setMicLevel((prev) => {
         const smooth = avg * 0.25 + prev * 0.75;
         const speakingNow = smooth > 5;
@@ -1141,14 +1151,7 @@ export default function ConferenceRoom() {
 
           <Tooltip title={isAdminOrManager ? "End conference" : "Leave conference"}>
             <IconButton
-              onClick={() => {
-                if (isAdminOrManager && socket && conferenceId) {
-                  socket.emit("conference:end", { conferenceId });
-                  return;
-                }
-
-                leaveConferenceLocally();
-              }}
+              onClick={handleEndConference}
               sx={{ background: "#d32f2f", color: "white" }}
             >
               <CallEndIcon />
@@ -1178,12 +1181,6 @@ export default function ConferenceRoom() {
               Screen Sharing
             </Typography>
           )}
-          <Typography color={micOn ? "#4caf50" : "#ff9800"} variant="caption">
-            Audio TX: {micOn ? "On" : "Off"}
-          </Typography>
-          <Typography color={receivingAudioPeerCount > 0 ? "#4caf50" : "#ff9800"} variant="caption">
-            Audio RX Peers: {receivingAudioPeerCount}
-          </Typography>
         </Box>
       </Box>
 
