@@ -159,6 +159,102 @@ export default function ConferenceRoom() {
       // deterministic offer initiator to reduce collisions
       if (mySocketId > targetSocketId) {
         await createOffer(targetSocketId, socket);
+
+  const localVideoRef = useRef(null);
+  const localScreenRef = useRef(null);
+  const remoteAudioElsRef = useRef({});
+  const mountedRef = useRef(true);
+  const micOnRef = useRef(false);
+  const camOnRef = useRef(false);
+
+  const showToast = useCallback((message, severity = "info") => {
+    setToast({ open: true, severity, message });
+  }, []);
+
+  const mySocketId = socket?.id || null;
+
+  const me = useMemo(
+    () => participants.find((p) => p.socketId === mySocketId) || null,
+    [participants, mySocketId]
+  );
+
+  const isAdminOrManager = useMemo(
+    () => Boolean(me && ["admin", "manager"].includes(me.role)),
+    [me]
+  );
+
+  const screenSharer = useMemo(
+    () => participants.find((p) => p.socketId && remoteMedia[p.socketId]?.screenStream) || null,
+    [participants, remoteMedia]
+  );
+
+  const attachRemoteAudios = useCallback(() => {
+    Object.entries(remoteMedia).forEach(([socketId, media]) => {
+      const audioStream = media?.audioStream;
+      if (!audioStream) return;
+
+      if (!remoteAudioElsRef.current[socketId]) {
+        const audio = document.createElement("audio");
+        audio.autoplay = true;
+        audio.playsInline = true;
+        audio.volume = 1;
+        remoteAudioElsRef.current[socketId] = audio;
+      }
+
+      const audioEl = remoteAudioElsRef.current[socketId];
+      if (audioEl.srcObject !== audioStream) {
+        audioEl.srcObject = audioStream;
+        audioEl.play().catch(() => {});
+      }
+    },
+    [socket, mySocketId]
+  );
+
+  const syncPeersFromParticipants = useCallback(
+    async (list) => {
+      if (!mySocketId) return;
+      const others = (list || []).filter((p) => p.socketId && p.socketId !== mySocketId);
+      await Promise.all(others.map((p) => ensurePeerFor(p.socketId)));
+    },
+    [ensurePeerFor, mySocketId]
+  );
+
+    Object.keys(remoteAudioElsRef.current).forEach((socketId) => {
+      if (!remoteMedia[socketId]?.audioStream) {
+        const audioEl = remoteAudioElsRef.current[socketId];
+        if (audioEl) {
+          audioEl.srcObject = null;
+          delete remoteAudioElsRef.current[socketId];
+        }
+      }
+    });
+  }, [remoteMedia]);
+
+  useEffect(() => {
+    attachRemoteAudios();
+  }, [attachRemoteAudios]);
+
+  const applyParticipants = useCallback((incoming) => {
+    const unique = [];
+    const seen = new Set();
+
+    (incoming || []).forEach((p) => {
+      if (!p?.socketId || seen.has(p.socketId)) return;
+      seen.add(p.socketId);
+      unique.push(p);
+    });
+
+    setParticipants(unique);
+  }, []);
+
+  const ensurePeerFor = useCallback(
+    async (targetSocketId) => {
+      if (!socket || !mySocketId || !targetSocketId || targetSocketId === mySocketId) return;
+      await createPeer(targetSocketId, socket);
+
+      // deterministic offer initiator to reduce collisions
+      if (mySocketId > targetSocketId) {
+        await createOffer(targetSocketId, socket);
       }
     },
     [socket, mySocketId]
@@ -246,6 +342,21 @@ export default function ConferenceRoom() {
   useEffect(() => {
     camOnRef.current = camOn;
   }, [camOn]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // Setup conference + socket listeners
+  useEffect(() => {
+    if (!socket || !conferenceId) {
+      showToast("Socket not connected", "error");
+      return undefined;
+    }
+
 
   useEffect(() => {
     mountedRef.current = true;
@@ -514,6 +625,21 @@ export default function ConferenceRoom() {
   };
 
   const allTiles = [localTile, ...remoteTiles];
+  const allTiles = useMemo(() => {
+    const localTile = {
+      socketId: mySocketId || "local",
+      name: user?.name || "You",
+      role: me?.role || "member",
+      isLocal: true,
+          media: {
+        cameraStream: getCameraStream(),
+        screenStream: getScreenStream(),
+      },
+    };
+
+    return [localTile, ...remoteTiles];
+  }, [mySocketId, user?.name, me?.role, remoteTiles]);
+  }, [mySocketId, user?.name, me?.role, micOn, camOn, remoteTiles]);
 
   const activeTileId = activeSpeaker || allTiles[0]?.socketId;
 
