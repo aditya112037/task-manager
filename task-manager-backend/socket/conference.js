@@ -247,6 +247,12 @@ module.exports = function registerConferenceSocket(io, socket) {
         (m) => String(m.user) === String(user._id)
       );
 
+      if (!member) {
+        return socket.emit("conference:error", {
+          message: "Not authorized to create conference",
+        });
+      }
+
       if (!["admin", "manager"].includes(member.role)) {
         return socket.emit("conference:error", {
           message: "Only admin or manager can create a conference",
