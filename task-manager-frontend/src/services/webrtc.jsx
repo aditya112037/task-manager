@@ -52,7 +52,9 @@ const emitRemoteMediaUpdate = (socketId) => {
     }
   });
 
-  const liveAudioTracks = uniqueLiveTracks(audioTracks);
+  // Guard against renegotiation artifacts that can leave multiple live
+  // remote audio tracks for one peer and cause audible echo/doubling.
+  const liveAudioTracks = uniqueLiveTracks(audioTracks).slice(0, 1);
   const liveCameraTracks = uniqueLiveTracks(cameraTracks);
   const liveScreenTracks = uniqueLiveTracks(screenTracks);
 
@@ -276,7 +278,18 @@ export const startAudio = async () => {
   });
 
   const track = stream.getAudioTracks()[0];
-  if (track) track.enabled = true;
+  if (track) {
+    track.enabled = true;
+    try {
+      await track.applyConstraints({
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      });
+    } catch {
+      // Some browsers do not allow re-applying these constraints.
+    }
+  }
 
   audioStream = stream;
   await syncAllPeerTracks();
