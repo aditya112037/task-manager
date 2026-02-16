@@ -49,33 +49,44 @@ export const AuthProvider = ({ children }) => {
      SOCKET INITIALIZATION (CRITICAL FIX)
   --------------------------------------------------- */
   useEffect(() => {
-    if (!user?._id) return;
+    if (!user?._id) {
+      setSocketConnected(false);
+      return;
+    }
     if (socketInitializedRef.current) return;
 
     const socket = initSocket();
     if (!socket) return;
 
-    connectSocket();
-    socketInitializedRef.current = true;
-
-    socket.on("connect", () => {
+    const handleConnect = () => {
       console.log("✅ AuthContext: Socket connected");
       setSocketConnected(true);
-    });
+    };
 
-    socket.on("disconnect", () => {
+    const handleDisconnect = () => {
       console.log("⚠️ AuthContext: Socket disconnected");
       setSocketConnected(false);
-    });
+    };
 
-    socket.on("connect_error", (err) => {
+    const handleConnectError = (err) => {
       console.error("❌ AuthContext: Socket error:", err.message);
       setSocketConnected(false);
-    });
+    };
 
-    // 🔥 THIS WAS MISSING
+    socket.on("connect", handleConnect);
+    socket.on("disconnect", handleDisconnect);
+    socket.on("connect_error", handleConnectError);
+
+    socketInitializedRef.current = true;
     connectSocket();
-  }, [user]);
+
+    return () => {
+      socket.off("connect", handleConnect);
+      socket.off("disconnect", handleDisconnect);
+      socket.off("connect_error", handleConnectError);
+      socketInitializedRef.current = false;
+    };
+  }, [user?._id]);
 
   /* ---------------------------------------------------
      INITIAL AUTH CHECK
