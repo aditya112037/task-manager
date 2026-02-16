@@ -28,6 +28,12 @@ export default function ParticipantsPanel({
   activeSpeaker = null,
   onSetSpeaker,
 }) {
+  const orderedParticipants = [...participants].sort((a, b) => {
+    if (a.socketId === currentSocketId) return -1;
+    if (b.socketId === currentSocketId) return 1;
+    return displayName(a).localeCompare(displayName(b));
+  });
+
   return (
     <Box
       sx={{
@@ -49,11 +55,15 @@ export default function ParticipantsPanel({
       </Box>
 
       <Stack spacing={1.25}>
-        {participants.map((p) => {
+        {orderedParticipants.map((p) => {
           const isCurrentUser = p.socketId === currentSocketId;
           const handRaised = raisedHands.includes(p.socketId);
           const isActiveSpeaker = speakerModeEnabled && activeSpeaker === p.socketId;
-          const roleLabel = p.role === "admin" ? "Host" : p.role === "manager" ? "Manager" : "Participant";
+          const roleLabel = p.role === "admin" || (isCurrentUser && participants.length === 1)
+            ? "Host"
+            : p.role === "manager"
+              ? "Manager"
+              : "Participant";
 
           return (
             <Box
@@ -103,13 +113,13 @@ export default function ParticipantsPanel({
                   </Tooltip>
                 )}
 
-                {p.micOn ? (
+                {Boolean(p.micOn) ? (
                   <MicIcon fontSize="small" sx={{ color: "#4caf50" }} />
                 ) : (
                   <MicOffIcon fontSize="small" color="error" />
                 )}
 
-                {p.camOn ? (
+                {Boolean(p.camOn) ? (
                   <VideocamIcon fontSize="small" sx={{ color: "#2196f3" }} />
                 ) : (
                   <VideocamOffIcon fontSize="small" color="error" />

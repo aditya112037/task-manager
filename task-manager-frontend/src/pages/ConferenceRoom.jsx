@@ -1,67 +1,64 @@
-import React, { useEffect, useRef, useState, useMemo, useCallback } from "react";
-import { 
-  Box, 
-  Typography, 
-  IconButton, 
-  Tooltip, 
-  Menu, 
-  MenuItem, 
-  ListItemIcon,
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Alert,
+  Box,
   Divider,
-  Chip,
+  IconButton,
+  ListItemIcon,
+  Menu,
+  MenuItem,
   Snackbar,
-  Alert
+  Tooltip,
+  Typography,
 } from "@mui/material";
-import { useParams, useNavigate } from "react-router-dom";
-import PanToolIcon from "@mui/icons-material/PanTool";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import VolumeOffIcon from "@mui/icons-material/VolumeOff";
-import VideocamIcon from "@mui/icons-material/Videocam";
-import VideocamOffIcon from "@mui/icons-material/VideocamOff";
-import HandshakeIcon from "@mui/icons-material/Handshake";
-import PersonRemoveIcon from "@mui/icons-material/PersonRemove";
-import GroupsIcon from "@mui/icons-material/Groups";
-import VolumeUpIcon from "@mui/icons-material/VolumeUp";
-import MicExternalOnIcon from "@mui/icons-material/MicExternalOn";
-import { 
-  raiseHand, 
-  lowerHand, 
-  cleanupConference,
-  sendSpeakingStatus,
-  joinConference,
-} from "../services/conferenceSocket";
-import RaiseHandIndicator from "../components/Conference/RaiseHandIndicator";
-import ParticipantsPanel from "../components/Conference/ParticipantsPanel";
+import { useNavigate, useParams } from "react-router-dom";
 import CallEndIcon from "@mui/icons-material/CallEnd";
+import ClearAllIcon from "@mui/icons-material/ClearAll";
+import GroupsIcon from "@mui/icons-material/Groups";
+import HandshakeIcon from "@mui/icons-material/Handshake";
+import MicExternalOnIcon from "@mui/icons-material/MicExternalOn";
 import MicIcon from "@mui/icons-material/Mic";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
+import PanToolIcon from "@mui/icons-material/PanTool";
+import PersonIcon from "@mui/icons-material/Person";
+import PersonRemoveIcon from "@mui/icons-material/PersonRemove";
+import PresentToAllIcon from "@mui/icons-material/PresentToAll";
 import ScreenShareIcon from "@mui/icons-material/ScreenShare";
 import StopScreenShareIcon from "@mui/icons-material/StopScreenShare";
-import ClearAllIcon from "@mui/icons-material/ClearAll";
-import PersonIcon from "@mui/icons-material/Person";
-import PresentToAllIcon from "@mui/icons-material/PresentToAll";
-import { getSocket } from "../services/socket";
-import {
-  createPeer,
-  removePeer,
-  startAudio,
-  stopAudio,
-  startCamera,
-  stopCamera,
-  startScreen,
-  stopScreen,
-  syncPeerTracks,
-  renegotiatePeer,
-  startSpeakerDetection,
-  stopSpeakerDetection,
-  getCameraStream,
-  getScreenStream,
-  getPeerIds,
-  setAudioEnabled,
-  setCameraEnabled,
-  getAudioStream,
-} from "../services/webrtc";
+import VideocamIcon from "@mui/icons-material/Videocam";
+import VideocamOffIcon from "@mui/icons-material/VideocamOff";
+import VolumeOffIcon from "@mui/icons-material/VolumeOff";
+import VolumeUpIcon from "@mui/icons-material/VolumeUp";
+import RaiseHandIndicator from "../components/Conference/RaiseHandIndicator";
+import ParticipantsPanel from "../components/Conference/ParticipantsPanel";
 import VideoTile from "../components/Conference/VideoTile";
 import { useAuth } from "../context/AuthContext";
+import {
+  cleanupConference,
+  joinConference,
+  lowerHand,
+  raiseHand,
+  sendSpeakingStatus,
+} from "../services/conferenceSocket";
+import { getSocket } from "../services/socket";
+import {
+  cleanupWebRTC,
+  createOffer,
+  getAudioStream,
+  getCameraStream,
+  getMicEnabled,
+  getScreenStream,
+  handleAnswer as handleWebRTCAnswer,
+  handleIceCandidate as handleWebRTCIceCandidate,
+  handleOffer as handleWebRTCOffer,
+  removePeer,
+  setMicEnabled,
+  startAudio,
+  startCamera,
+  startScreen,
+  stopCamera,
+  stopScreen,
+} from "../services/webrtc";
 
 const LAYOUT = {
   GRID: "grid",
@@ -69,645 +66,274 @@ const LAYOUT = {
   SPEAKER: "speaker",
 };
 
+const getParticipantName = (participant) => {
+  if (!participant) return "Participant";
+  return participant.name || participant.userName || "Participant";
+};
+
+function RemoteAudioPlayer({ stream }) {
+  const audioRef = useRef(null);
+
+  useEffect(() => {
+    const element = audioRef.current;
+    if (!element) return;
+
+    if (stream) {
+      if (element.srcObject !== stream) {
+        element.srcObject = stream;
+      }
+      element.play().catch(() => {});
+      return;
+    }
+
+    element.srcObject = null;
+  }, [stream]);
+
+  return <audio ref={audioRef} autoPlay playsInline />;
+}
+
 export default function ConferenceRoom() {
   const { conferenceId } = useParams();
   const navigate = useNavigate();
   const socket = getSocket();
   const { user: currentUser } = useAuth();
 
-  const [adminMenuAnchor, setAdminMenuAnchor] = useState(null);
-  const [selectedParticipantId, setSelectedParticipantId] = useState(null);
-  const [participantsPanelOpen, setParticipantsPanelOpen] = useState(true);
-
-  const [remoteStreams, setRemoteStreams] = useState({});
   const [layout, setLayout] = useState(LAYOUT.GRID);
-  const [screenSharer, setScreenSharer] = useState(null);
-  const [raisedHands, setRaisedHands] = useState([]);
+  const [participantsPanelOpen, setParticipantsPanelOpen] = useState(true);
   const [participants, setParticipants] = useState([]);
+  const [raisedHands, setRaisedHands] = useState([]);
+  const [remoteMedia, setRemoteMedia] = useState({});
+
   const [handRaised, setHandRaised] = useState(false);
   const [micOn, setMicOn] = useState(false);
-  const [camOn, setCamOn] = useState(false);  
-  const micOnRef = useRef(micOn);
-  const camOnRef = useRef(camOn);
+  const [camOn, setCamOn] = useState(false);
   const [sharingScreen, setSharingScreen] = useState(false);
-  const [activeSpeaker, setActiveSpeaker] = useState(null);
+  const [screenSharer, setScreenSharer] = useState(null);
+
   const [speakerModeEnabled, setSpeakerModeEnabled] = useState(false);
-  const [notification, setNotification] = useState({ open: false, message: "", severity: "info" });
-
+  const [activeSpeaker, setActiveSpeaker] = useState(null);
   const [micLevel, setMicLevel] = useState(0);
-  const mountedRef = useRef(true);
-  const hasJoinedRef = useRef(false);
-  const conferenceEndedRef = useRef(false);
 
-  const myParticipant = useMemo(() => {
-    if (!currentUser?._id || !participants.length) return null;
-    return participants.find(
-      p => String(p.userId) === String(currentUser._id)
-    );
-  }, [participants, currentUser?._id]);
+  const [adminMenuAnchor, setAdminMenuAnchor] = useState(null);
+  const [selectedParticipantId, setSelectedParticipantId] = useState(null);
 
-  const isAdminOrManager = useMemo(() => {
-    if (!myParticipant) return false;
-    return myParticipant.role === "admin" || myParticipant.role === "manager";
-  }, [myParticipant]);
+  const [notification, setNotification] = useState({
+    open: false,
+    message: "",
+    severity: "info",
+  });
+
+  const joinedRef = useRef(false);
+  const endedRef = useRef(false);
+  const speakingRef = useRef(false);
 
   const showNotification = useCallback((message, severity = "info") => {
     setNotification({ open: true, message, severity });
   }, []);
 
-  const leaveAndCleanupLocal = useCallback(() => {
-    stopSpeakerDetection();
-    stopCamera();
-    stopAudio();
-    if (sharingScreen) {
-      stopScreen();
-    }
-    socket.emit("conference:leave");
-    cleanupConference();
-    setRemoteStreams({});
-    navigate(-1);
-  }, [socket, navigate, sharingScreen]);
+  const mySocketId = socket?.id || null;
 
-  const handleConferenceEnded = useCallback(() => {
-    if (conferenceEndedRef.current) return;
-    
-    conferenceEndedRef.current = true;
-    hasJoinedRef.current = false;
-    stopSpeakerDetection();
+  const emitMediaUpdate = useCallback(
+    (nextMic, nextCam) => {
+      if (!socket || !conferenceId) return;
+      socket.emit("conference:media-update", {
+        conferenceId,
+        micOn: Boolean(nextMic),
+        camOn: Boolean(nextCam),
+      });
+    },
+    [conferenceId, socket]
+  );
+
+  const participantsWithFallback = useMemo(() => {
+    if (!mySocketId || !currentUser) return participants;
+
+    const hasMe = participants.some((p) => p.socketId === mySocketId);
+    if (hasMe) return participants;
+
+    if (participants.length > 0) return participants;
+
+    return [
+      {
+        socketId: mySocketId,
+        userId: currentUser._id,
+        name: currentUser.name,
+        role: "admin",
+        micOn,
+        camOn,
+      },
+    ];
+  }, [participants, mySocketId, currentUser, micOn, camOn]);
+
+  const myParticipant = useMemo(() => {
+    if (!mySocketId) return null;
+    return participantsWithFallback.find((p) => p.socketId === mySocketId) || null;
+  }, [participantsWithFallback, mySocketId]);
+
+  const isAdminOrManager =
+    myParticipant?.role === "admin" || myParticipant?.role === "manager";
+
+  const remoteParticipants = useMemo(
+    () => participantsWithFallback.filter((p) => p.socketId !== mySocketId),
+    [participantsWithFallback, mySocketId]
+  );
+
+  const remoteAudioEntries = useMemo(
+    () => Object.entries(remoteMedia).filter(([, media]) => media?.audioStream),
+    [remoteMedia]
+  );
+
+  const leaveConferenceLocally = useCallback(
+    async (navigateBack = true) => {
+      try {
+        if (socket && conferenceId) {
+          socket.emit("conference:leave", { conferenceId });
+        }
+      } catch {
+        // no-op
+      }
+
+      cleanupConference();
+      await cleanupWebRTC();
+      setRemoteMedia({});
+
+      if (navigateBack) {
+        navigate(-1);
+      }
+    },
+    [conferenceId, navigate, socket]
+  );
+
+  const handleConferenceEnded = useCallback(async () => {
+    if (endedRef.current) return;
+    endedRef.current = true;
+
     cleanupConference();
-    setRemoteStreams({});
+    await cleanupWebRTC();
+    setRemoteMedia({});
+
     showNotification("Conference has ended", "info");
     navigate("/teams");
   }, [navigate, showNotification]);
 
-  // ✅ STEP 1: Fix Mic Toggle
   const handleToggleMic = useCallback(async () => {
-    if (speakerModeEnabled && activeSpeaker !== socket.id && !isAdminOrManager) {
+    if (speakerModeEnabled && activeSpeaker && activeSpeaker !== mySocketId && !isAdminOrManager) {
       showNotification("Only the active speaker can unmute", "warning");
       return;
     }
 
     try {
-      if (micOn) {
-        stopAudio();
-        setMicOn(false);
-      } else {
+      if (!getAudioStream()) {
         await startAudio();
-        setMicOn(true);
-
-        // 🔥 IMPORTANT - Sync with all peers
-        getPeerIds().forEach(id => {
-          syncPeerTracks(id);
-          renegotiatePeer(id, socket);
-        });
       }
 
-      socket.emit("conference:media-update", {
-        conferenceId,
-        micOn: !micOn,
-        camOn,
-      });
-
+      const nextMic = !micOn;
+      const enabled = await setMicEnabled(nextMic);
+      setMicOn(Boolean(enabled));
+      emitMediaUpdate(Boolean(enabled), camOn);
     } catch (error) {
-      console.error("Failed to toggle microphone:", error);
-      showNotification("Failed to toggle microphone", "error");
+      console.error("Microphone toggle failed", error);
+      showNotification("Microphone access failed", "error");
     }
-  }, [micOn, camOn, speakerModeEnabled, activeSpeaker, socket.id, isAdminOrManager, socket, conferenceId, showNotification]);
+  }, [activeSpeaker, camOn, emitMediaUpdate, isAdminOrManager, micOn, mySocketId, showNotification, speakerModeEnabled]);
 
-  // ✅ STEP 2: Fix Camera Toggle
   const handleToggleCam = useCallback(async () => {
     try {
-      if (camOn) {
-        stopCamera();
-        setCamOn(false);
-      } else {
-        await startCamera();
-        setCamOn(true);
+      const nextCam = !camOn;
 
-        // 🔥 IMPORTANT - Sync with all peers
-        getPeerIds().forEach(id => {
-          syncPeerTracks(id);
-          renegotiatePeer(id, socket);
-        });
+      if (nextCam) {
+        await startCamera();
+      } else {
+        await stopCamera();
       }
 
-      socket.emit("conference:media-update", {
-        conferenceId,
-        camOn: !camOn,
-        micOn,
-      });
-
+      setCamOn(nextCam);
+      emitMediaUpdate(micOn, nextCam);
     } catch (error) {
-      console.error("Failed to toggle camera:", error);
-      showNotification("Failed to toggle camera", "error");
+      console.error("Camera toggle failed", error);
+      showNotification("Camera access failed", "error");
     }
-  }, [camOn, micOn, socket, conferenceId, showNotification]);
+  }, [camOn, emitMediaUpdate, micOn, showNotification]);
 
-  const handleRaiseHand = useCallback(() => {
-    if (!handRaised) {
-      raiseHand();
-    } else {
-      lowerHand();
-    }
-    setHandRaised(v => !v);
-  }, [handRaised]);
-
-  // ✅ STEP 5: Fix Screen Share
   const handleScreenShare = useCallback(async () => {
     try {
       if (!sharingScreen) {
         await startScreen();
-        
-        // 🔥 IMPORTANT - Sync with all peers
-        getPeerIds().forEach(id => {
-          syncPeerTracks(id);
-          renegotiatePeer(id, socket);
-        });
-        
-        socket.emit("conference:screen-share", { 
-          active: true,
-          conferenceId 
-        });
-        
         setSharingScreen(true);
-        setScreenSharer(socket.id);
+        setScreenSharer(mySocketId);
         setLayout(LAYOUT.PRESENTATION);
       } else {
-        stopScreen();
-        
-        socket.emit("conference:screen-share", { 
-          active: false,
-          conferenceId 
-        });
-        
+        await stopScreen();
         setSharingScreen(false);
-        setScreenSharer(null);
+        if (screenSharer === mySocketId) {
+          setScreenSharer(null);
+        }
         setLayout(LAYOUT.GRID);
       }
     } catch (error) {
-      console.error("Screen share error:", error);
+      console.error("Screen share toggle failed", error);
       showNotification("Screen share failed", "error");
     }
-  }, [sharingScreen, socket, conferenceId, showNotification]);
+  }, [mySocketId, screenSharer, sharingScreen, showNotification]);
 
-  // Initialize and join conference
-  useEffect(() => {
-    if (!conferenceId) {
-      showNotification("No conference ID provided", "error");
-      navigate("/teams");
-      return;
-    }
-
-    if (hasJoinedRef.current) {
-      console.log("Already joined conference, skipping");
-      return;
-    }
-
-    const initializeConference = async () => {
-      if (!socket || !socket.connected) {
-        showNotification("Waiting for socket connection...", "info");
-        
-        let resolved = false;
-        const waitForSocket = () => new Promise(resolve => {
-          if (socket && socket.connected) {
-            resolved = true;
-            resolve();
-            return;
-          }
-          
-          const onConnect = () => {
-            if (resolved) return;
-            resolved = true;
-            socket.off("connect", onConnect);
-            resolve();
-          };
-          
-          socket.on("connect", onConnect);
-          
-          setTimeout(() => {
-            if (resolved) return;
-            resolved = true;
-            socket.off("connect", onConnect);
-            showNotification("Failed to connect to server", "error");
-            navigate("/teams");
-          }, 5000);
-        });
-        
-        await waitForSocket();
-      }
-
-      try {
-        hasJoinedRef.current = true;
-        const joinSuccess = joinConference(conferenceId);
-        if (!joinSuccess) {
-          showNotification("Failed to join conference", "error");
-        }
-
-        startAudio().catch(() => {
-          showNotification("Microphone permission denied", "warning");
-        });
-        
-        startCamera().catch(() => {
-          showNotification("Camera permission denied", "warning");
-        });
-        
-        showNotification("Joined conference successfully", "success");
-      } catch (error) {
-        console.error("Conference initialization error:", error);
-        showNotification(`Failed to join: ${error.message}`, "error");
-        navigate("/teams");
-      }
-    };
-
-    initializeConference();
-
-    return () => {
-      if (hasJoinedRef.current && !conferenceEndedRef.current) {
-        console.log("Component unmounting, cleaning up conference");
-        cleanupConference();
-      }
-    };
-  }, [conferenceId, socket, navigate, showNotification]);
-
-  useEffect(() => {
-    micOnRef.current = micOn;
-    camOnRef.current = camOn;
-  }, [micOn, camOn]);
-
-  // Audio analyser for mic level
-  useEffect(() => {
-    const audioStream = getAudioStream();
-    if (!audioStream || !micOn) {
-      setMicLevel(0);
-      return;
-    }
-    
-    try {
-      const audioCtx = new AudioContext();
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 256;
-
-      const source = audioCtx.createMediaStreamSource(audioStream);
-      source.connect(analyser);
-
-      const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-      let rafId;
-
-      const update = () => {
-        analyser.getByteFrequencyData(dataArray);
-        const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
-        setMicLevel(prev => prev * 0.75 + avg * 0.25);
-        rafId = requestAnimationFrame(update);
-      };
-
-      update();
-
-      return () => {
-        cancelAnimationFrame(rafId);
-        analyser.disconnect();
-        source.disconnect();
-        audioCtx.close();
-      };
-    } catch (error) {
-      console.error("Mic level detection error:", error);
-      setMicLevel(0);
-    }
-  }, [micOn]);
-
-  useEffect(() => {
-    const handler = (e) => {
-      const { socketId, kind, stream } = e.detail;
-      setRemoteStreams(prev => ({
-        ...prev,
-        [socketId]: {
-          ...prev[socketId],
-          [kind]: stream
-        }
-      }));
-    };
-
-    window.addEventListener("webrtc:remote-stream", handler);
-    return () => window.removeEventListener("webrtc:remote-stream", handler);
-  }, []);
-
-  // ✅ STEP 4: Fix handleUserJoined
-  const handleUserJoined = useCallback(
-    async ({ socketId }) => {
-      if (!mountedRef.current) return;
-
-      console.log("User joined, creating offer for:", socketId);
-
-      if (socketId === socket.id) return;
-
-      if (!hasJoinedRef.current) return;
-
-      const pc = createPeer(socketId, socket);
-
-      syncPeerTracks(socketId);
-      await renegotiatePeer(socketId, socket);
-
-      try {
-        const offer = await pc.createOffer({
-          offerToReceiveAudio: true,
-          offerToReceiveVideo: true,
-        });
-
-        await pc.setLocalDescription(offer);
-
-        socket.emit("conference:offer", {
-          to: socketId,
-          offer,
-        });
-
-        console.log("Offer sent to:", socketId);
-      } catch (err) {
-        console.error("Offer creation failed:", err);
-      }
-    },
-    [socket]
-  );
-
-  useEffect(() => {
-    if (!currentUser || !socket?.id) return;
-
-    setParticipants(prev => {
-      if (prev.some(p => p.socketId === socket.id)) return prev;
-
-      return [{
-        userId: currentUser._id,
-        socketId: socket.id,
-        name: currentUser.name,
-        role: "participant",
-        micOn,
-        camOn,
-      }];
-    });
-  }, [currentUser, socket?.id, camOn, micOn]);
-
-  const handleOffer = useCallback(
-    async ({ from, offer }) => {
-      if (!mountedRef.current) return;
-
-      console.log("Received offer from:", from);
-
-      const pc = createPeer(from, socket);
-
-      try {
-        await pc.setRemoteDescription(offer);
-        
-        syncPeerTracks(from);
-        await renegotiatePeer(from, socket);
-
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-
-        socket.emit("conference:answer", {
-          to: from,
-          answer,
-        });
-
-        console.log("Answer sent to:", from);
-      } catch (err) {
-        console.error("Error handling offer:", err);
-      }
-    },
-    [socket]
-  );
-
-  const handleAnswer = useCallback(async ({ from, answer }) => {
-    if (!mountedRef.current) return;
-    
-    console.log("Received answer from:", from);
-    
-    const pc = createPeer(from, socket);
-    try {
-      await pc.setRemoteDescription(answer);
-    } catch (error) {
-      console.error("Error handling answer:", error);
-    }
-  }, [socket]);
-
-  const handleIceCandidate = useCallback(({ from, candidate }) => {
-    if (!mountedRef.current) return;
-    
-    const pc = createPeer(from, socket);
-    try {
-      pc.addIceCandidate(candidate);
-    } catch (error) {
-      console.error("Error adding ICE candidate:", error);
-    }
-  }, [socket]);
-
-  const handleUserLeft = useCallback(({ socketId, userId }) => {
-    if (!mountedRef.current) return;
-    
-    console.log("User left:", socketId);
-    
-    removePeer(socketId);
-    setRemoteStreams(prev => {
-      const copy = { ...prev };
-      delete copy[socketId];
-      return copy;
-    });
-    
-    if (screenSharer === socketId) {
-      setScreenSharer(null);
-      setLayout(LAYOUT.GRID);
-    }
-    
-    if (activeSpeaker === socketId) {
-      console.log("Active speaker left, clearing speaker");
-      setActiveSpeaker(null);
-    }
-  }, [activeSpeaker, screenSharer]);
-
-  const handleScreenShareUpdate = useCallback(({ socketId, active }) => {
-    if (!mountedRef.current) return;
-    
-    console.log("Screen share update:", socketId, active);
-    
-    if (active) {
-      setScreenSharer(socketId);
-      setLayout(LAYOUT.PRESENTATION);
+  const handleRaiseHand = useCallback(() => {
+    if (handRaised) {
+      lowerHand();
     } else {
-      if (screenSharer === socketId) {
-        setScreenSharer(null);
-        setLayout(LAYOUT.GRID);
-      }
-    }
-  }, [screenSharer]);
-
-  useEffect(() => {
-    mountedRef.current = true;
-    const mounted = () => mountedRef.current;
-
-    const handleParticipantsUpdate = ({ participants }) => {
-      if (!mounted()) return;
-      setParticipants(participants || []);
-    };
-
-    const handleHandsUpdated = ({ raisedHands }) => {
-      if (!mounted()) return;
-      setRaisedHands(raisedHands);
-    };
-
-    const handleActiveSpeakerUpdate = ({ socketId }) => {
-      if (!mounted()) return;
-      console.log("Active speaker updated:", socketId);
-      setActiveSpeaker(socketId);
-      
-      if (socketId === socket.id) {
-        showNotification("You are now the active speaker", "success");
-      }
-    };
-
-    const handleSpeakerModeToggled = ({ enabled }) => {
-      if (!mounted()) return;
-      console.log("Speaker mode toggled:", enabled);
-      setSpeakerModeEnabled(enabled);
-      
-      if (!enabled) {
-        setActiveSpeaker(null);
-      }
-      
-      showNotification(`Speaker mode ${enabled ? "enabled" : "disabled"}`, "info");
-    };
-
-    const handleSpeakerAssigned = ({ socketId }) => {
-      if (!mounted()) return;
-      console.log("Speaker assigned by admin:", socketId);
-      setActiveSpeaker(socketId);
-      
-      if (socketId === socket.id) {
-        showNotification("You have been assigned as speaker by admin", "success");
-      }
-    };
-
-    const handleForceMute = () => {
-      if (!mounted()) return;
-      console.log("Admin forced mute");
-      stopAudio();
-      setMicOn(false);
-      showNotification("Admin has muted your microphone", "warning");
-    };
-
-    const handleForceCameraOff = () => {
-      if (!mounted()) return;
-      console.log("Admin turned off camera");
-      stopCamera();
-      setCamOn(false);
-      showNotification("Admin has turned off your camera", "warning");
-    };
-
-    const handleRemovedByAdmin = () => {
-      if (!mounted()) return;
-      console.log("Removed by admin");
-      leaveAndCleanupLocal();
-      showNotification("You have been removed from the conference by the admin", "error");
-    };
-
-    socket.on("conference:user-joined", handleUserJoined);
-    socket.on("conference:offer", handleOffer);
-    socket.on("conference:answer", handleAnswer);
-    socket.on("conference:ice-candidate", handleIceCandidate);
-    socket.on("conference:user-left", handleUserLeft);
-    socket.on("conference:participants", handleParticipantsUpdate);
-    socket.on("conference:hands-updated", handleHandsUpdated);
-    socket.on("conference:ended", handleConferenceEnded);
-    socket.on("conference:active-speaker", handleActiveSpeakerUpdate);
-    socket.on("conference:speaker-mode-toggled", handleSpeakerModeToggled);
-    socket.on("conference:speaker-assigned", handleSpeakerAssigned);
-    socket.on("conference:force-mute", handleForceMute);
-    socket.on("conference:force-camera-off", handleForceCameraOff);
-    socket.on("conference:removed-by-admin", handleRemovedByAdmin);
-    socket.on("conference:screen-share-update", handleScreenShareUpdate);
-    
-    return () => {
-      mountedRef.current = false;      
-      stopSpeakerDetection();
-      
-      socket.off("conference:user-joined", handleUserJoined);
-      socket.off("conference:offer", handleOffer);
-      socket.off("conference:answer", handleAnswer);
-      socket.off("conference:ice-candidate", handleIceCandidate);
-      socket.off("conference:user-left", handleUserLeft);
-      socket.off("conference:participants", handleParticipantsUpdate);
-      socket.off("conference:hands-updated", handleHandsUpdated);
-      socket.off("conference:ended", handleConferenceEnded);
-      socket.off("conference:active-speaker", handleActiveSpeakerUpdate);
-      socket.off("conference:speaker-mode-toggled", handleSpeakerModeToggled);
-      socket.off("conference:speaker-assigned", handleSpeakerAssigned);
-      socket.off("conference:force-mute", handleForceMute);
-      socket.off("conference:force-camera-off", handleForceCameraOff);
-      socket.off("conference:removed-by-admin", handleRemovedByAdmin);
-      socket.off("conference:screen-share-update", handleScreenShareUpdate);
-    };
-  }, [
-    conferenceId, 
-    currentUser, 
-    socket, 
-    showNotification, 
-    leaveAndCleanupLocal, 
-    handleConferenceEnded,
-    handleUserJoined, 
-    handleOffer, 
-    handleAnswer, 
-    handleIceCandidate, 
-    handleUserLeft,
-    handleScreenShareUpdate,
-  ]);
-  
-  // Speaker detection with guard
-  useEffect(() => {
-    if (!speakerModeEnabled || !micOn) return;
-
-    const cleanup = startSpeakerDetection((speaking) => {
-      if (!speakerModeEnabled) return;
-      sendSpeakingStatus(speaking);
-    });
-
-    return cleanup;
-  }, [speakerModeEnabled, micOn]);
-
-  // Admin override effect for speaker mode
-  useEffect(() => {
-    if (!speakerModeEnabled || !activeSpeaker) return;
-    
-    const shouldSpeak = activeSpeaker === socket.id || isAdminOrManager;
-    
-    if (shouldSpeak && !micOn) {
-      startAudio().then(() => setMicOn(true)).catch(console.error);
-    } else if (!shouldSpeak && micOn) {
-      stopAudio();
-      setMicOn(false);
-    }
-  }, [activeSpeaker, speakerModeEnabled, socket.id, isAdminOrManager, micOn]);
-
-  const handleAdminAction = useCallback((action, targetSocketId) => {
-    const socket = getSocket();
-
-    if (!socket || !socket.connected) {
-      console.warn("Socket not connected, admin action blocked");
-      return;
+      raiseHand();
     }
 
-    socket.emit("conference:admin-action", {
-      action,
-      targetSocketId,
+    setHandRaised((prev) => !prev);
+  }, [handRaised]);
+
+  const handleAdminAction = useCallback(
+    (action, targetSocketId) => {
+      if (!socket || !conferenceId) return;
+      socket.emit("conference:admin-action", {
+        conferenceId,
+        action,
+        targetSocketId,
+      });
+    },
+    [conferenceId, socket]
+  );
+
+  const toggleSpeakerMode = useCallback(() => {
+    if (!socket || !conferenceId) return;
+
+    const next = !speakerModeEnabled;
+    setSpeakerModeEnabled(next);
+
+    if (!next) {
+      setActiveSpeaker(null);
+      sendSpeakingStatus(false);
+      speakingRef.current = false;
+    }
+
+    socket.emit("conference:toggle-speaker-mode", {
       conferenceId,
+      enabled: next,
     });
-  }, [conferenceId]);
+  }, [conferenceId, socket, speakerModeEnabled]);
 
-  const handleClearAllHands = useCallback(() => {
-    const socket = getSocket();
-    if (!socket || !socket.connected) return;
+  const setAsSpeaker = useCallback(
+    (targetSocketId) => {
+      if (!socket || !conferenceId || !targetSocketId) return;
 
-    socket.emit("conference:admin-action", {
-      action: "clear-hands",
-      conferenceId,
-    });
-  }, [conferenceId]);
+      socket.emit("conference:set-speaker", {
+        conferenceId,
+        targetSocketId,
+      });
+    },
+    [conferenceId, socket]
+  );
+
+  const clearSpeaker = useCallback(() => {
+    if (!socket || !conferenceId) return;
+
+    socket.emit("conference:clear-speaker", { conferenceId });
+    setActiveSpeaker(null);
+  }, [conferenceId, socket]);
 
   const handleOpenAdminMenu = useCallback((event, participantId) => {
     setAdminMenuAnchor(event.currentTarget);
@@ -719,151 +345,435 @@ export default function ConferenceRoom() {
     setSelectedParticipantId(null);
   }, []);
 
-  const toggleParticipantsPanel = useCallback(() => {
-    setParticipantsPanelOpen(!participantsPanelOpen);
-  }, [participantsPanelOpen]);
-
-  const toggleSpeakerMode = useCallback(() => {
-    const newMode = !speakerModeEnabled;
-    setSpeakerModeEnabled(newMode);
-    
-    if (!newMode) {
-      setActiveSpeaker(null);
-      if (!micOn) {
-        startAudio().then(() => setMicOn(true)).catch(console.error);
-      }
+  useEffect(() => {
+    if (!conferenceId) {
+      showNotification("Conference ID is missing", "error");
+      navigate("/teams");
+      return;
     }
-    
-    socket.emit("conference:toggle-speaker-mode", {
-      conferenceId,
-      enabled: newMode,
-    });
-    
-    showNotification(`Speaker mode ${newMode ? "enabled" : "disabled"}`, "info");
-  }, [speakerModeEnabled, micOn, conferenceId, socket, showNotification]);
 
-  const setAsSpeaker = useCallback((socketId) => {
-    socket.emit("conference:set-speaker", {
-      conferenceId,
-      targetSocketId: socketId,
-    });
-    setActiveSpeaker(socketId);
-    showNotification(`Set as active speaker`, "success");
-  }, [conferenceId, socket, showNotification]);
+    if (!socket) {
+      showNotification("Socket is not initialized", "error");
+      navigate("/teams");
+      return;
+    }
 
-  const clearSpeaker = useCallback(() => {
-    setActiveSpeaker(null);
-    socket.emit("conference:clear-speaker", { conferenceId });
-    showNotification("Speaker cleared", "info");
-  }, [conferenceId, socket, showNotification]);
+    if (joinedRef.current) return;
+    joinedRef.current = true;
 
-  const toggleLayout = useCallback((newLayout) => {
-    setLayout(newLayout);
-  }, []);
+    const join = async () => {
+      if (!socket.connected) {
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            socket.off("connect", onConnect);
+            reject(new Error("Socket connection timeout"));
+          }, 5000);
 
-  const allCameraStreams = useMemo(() => {
-    return Object.entries(remoteStreams)
-      .filter(([socketId, streams]) => streams?.camera)
-      .map(([socketId, streams]) => [socketId, streams.camera]);
-  }, [remoteStreams]);
+          const onConnect = () => {
+            clearTimeout(timeout);
+            socket.off("connect", onConnect);
+            resolve();
+          };
 
-  const getRemoteScreenStream = (socketId) => {
-    return remoteStreams[socketId]?.screen;
-  };
+          socket.on("connect", onConnect);
+        }).catch((error) => {
+          showNotification(error.message, "error");
+          navigate("/teams");
+        });
+      }
 
-  const activeSpeakerParticipant = participants.find(p => p.socketId === activeSpeaker);
-  const activeSpeakerName = activeSpeakerParticipant?.userName || 
-    (activeSpeaker === socket.id ? "You" : `User ${activeSpeaker?.slice(0, 4)}`);
+      const joined = joinConference(conferenceId);
+      if (!joined) {
+        showNotification("Unable to join conference", "error");
+      }
 
-  const participantsLoaded = Array.isArray(participants);
-  const inConference = Boolean(conferenceId);
+      try {
+        await startAudio();
+        const enabled = getMicEnabled();
+        setMicOn(enabled);
+      } catch {
+        setMicOn(false);
+        showNotification("Microphone permission denied", "warning");
+      }
 
-  // The rest of the JSX remains exactly the same...
-  // (I'll include it but it's unchanged from your working version)
+      try {
+        await startCamera();
+        setCamOn(true);
+      } catch {
+        setCamOn(false);
+        showNotification("Camera permission denied", "warning");
+      }
+    };
+
+    join();
+
+    return () => {
+      cleanupConference();
+      cleanupWebRTC();
+    };
+  }, [conferenceId, navigate, showNotification, socket]);
+
+  useEffect(() => {
+    if (!socket || !conferenceId) return;
+
+    const onRemoteMedia = (event) => {
+      const { socketId, audioStream, cameraStream, screenStream } = event.detail || {};
+      if (!socketId) return;
+
+      setRemoteMedia((prev) => ({
+        ...prev,
+        [socketId]: {
+          audioStream: audioStream || null,
+          cameraStream: cameraStream || null,
+          screenStream: screenStream || null,
+        },
+      }));
+
+      if (screenStream) {
+        setScreenSharer(socketId);
+      } else {
+        setScreenSharer((prev) => (prev === socketId ? null : prev));
+      }
+    };
+
+    const onUserJoined = async ({ socketId }) => {
+      if (!socketId || socketId === socket.id) return;
+      await createOffer(socketId, socket);
+    };
+
+    const onOffer = async (payload) => {
+      await handleWebRTCOffer(payload, socket);
+    };
+
+    const onAnswer = async (payload) => {
+      await handleWebRTCAnswer(payload);
+    };
+
+    const onIceCandidate = async (payload) => {
+      await handleWebRTCIceCandidate(payload);
+    };
+
+    const onUserLeft = ({ socketId }) => {
+      removePeer(socketId);
+
+      setRemoteMedia((prev) => {
+        const copy = { ...prev };
+        delete copy[socketId];
+        return copy;
+      });
+
+      setActiveSpeaker((prev) => (prev === socketId ? null : prev));
+      setScreenSharer((prev) => (prev === socketId ? null : prev));
+    };
+
+    const onParticipants = ({ participants: nextParticipants = [] }) => {
+      setParticipants(nextParticipants);
+    };
+
+    const onHandsUpdated = ({ raisedHands: nextRaisedHands = [] }) => {
+      setRaisedHands(nextRaisedHands);
+      setHandRaised(Boolean(mySocketId && nextRaisedHands.includes(mySocketId)));
+    };
+
+    const onMediaUpdate = ({ socketId, micOn: nextMicOn, camOn: nextCamOn }) => {
+      setParticipants((prev) =>
+        prev.map((participant) =>
+          participant.socketId === socketId
+            ? { ...participant, micOn: nextMicOn, camOn: nextCamOn }
+            : participant
+        )
+      );
+    };
+
+    const onSpeakerModeToggled = ({ enabled }) => {
+      setSpeakerModeEnabled(Boolean(enabled));
+      if (!enabled) {
+        setActiveSpeaker(null);
+      }
+    };
+
+    const onActiveSpeaker = ({ socketId }) => {
+      setActiveSpeaker(socketId || null);
+    };
+
+    const onSpeakerAssigned = ({ socketId }) => {
+      setActiveSpeaker(socketId || null);
+    };
+
+    const onForceMute = async () => {
+      await setMicEnabled(false);
+      setMicOn(false);
+      emitMediaUpdate(false, camOn);
+      showNotification("Admin muted your microphone", "warning");
+    };
+
+    const onForceCameraOff = async () => {
+      await stopCamera();
+      setCamOn(false);
+      emitMediaUpdate(micOn, false);
+      showNotification("Admin turned off your camera", "warning");
+    };
+
+    const onRemovedByAdmin = async () => {
+      showNotification("You were removed from the conference", "error");
+      await leaveConferenceLocally();
+    };
+
+    const onConferenceError = ({ message }) => {
+      if (message) {
+        showNotification(message, "error");
+      }
+    };
+
+    window.addEventListener("webrtc:remote-media", onRemoteMedia);
+
+    socket.on("conference:user-joined", onUserJoined);
+    socket.on("conference:offer", onOffer);
+    socket.on("conference:answer", onAnswer);
+    socket.on("conference:ice-candidate", onIceCandidate);
+    socket.on("conference:user-left", onUserLeft);
+    socket.on("conference:participants", onParticipants);
+    socket.on("conference:hands-updated", onHandsUpdated);
+    socket.on("conference:media-update", onMediaUpdate);
+    socket.on("conference:active-speaker", onActiveSpeaker);
+    socket.on("conference:speaker-mode-toggled", onSpeakerModeToggled);
+    socket.on("conference:speaker-assigned", onSpeakerAssigned);
+    socket.on("conference:force-mute", onForceMute);
+    socket.on("conference:force-camera-off", onForceCameraOff);
+    socket.on("conference:removed-by-admin", onRemovedByAdmin);
+    socket.on("conference:ended", handleConferenceEnded);
+    socket.on("conference:error", onConferenceError);
+
+    return () => {
+      window.removeEventListener("webrtc:remote-media", onRemoteMedia);
+
+      socket.off("conference:user-joined", onUserJoined);
+      socket.off("conference:offer", onOffer);
+      socket.off("conference:answer", onAnswer);
+      socket.off("conference:ice-candidate", onIceCandidate);
+      socket.off("conference:user-left", onUserLeft);
+      socket.off("conference:participants", onParticipants);
+      socket.off("conference:hands-updated", onHandsUpdated);
+      socket.off("conference:media-update", onMediaUpdate);
+      socket.off("conference:active-speaker", onActiveSpeaker);
+      socket.off("conference:speaker-mode-toggled", onSpeakerModeToggled);
+      socket.off("conference:speaker-assigned", onSpeakerAssigned);
+      socket.off("conference:force-mute", onForceMute);
+      socket.off("conference:force-camera-off", onForceCameraOff);
+      socket.off("conference:removed-by-admin", onRemovedByAdmin);
+      socket.off("conference:ended", handleConferenceEnded);
+      socket.off("conference:error", onConferenceError);
+    };
+  }, [camOn, conferenceId, emitMediaUpdate, handleConferenceEnded, leaveConferenceLocally, micOn, mySocketId, showNotification, socket]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      const hasScreen = Boolean(getScreenStream());
+      setSharingScreen(hasScreen);
+
+      if (hasScreen && mySocketId) {
+        setScreenSharer(mySocketId);
+      } else if (!hasScreen) {
+        setScreenSharer((prev) => (prev === mySocketId ? null : prev));
+      }
+    }, 300);
+
+    return () => window.clearInterval(interval);
+  }, [mySocketId]);
+
+  useEffect(() => {
+    if (!speakerModeEnabled || !micOn) {
+      if (speakingRef.current) {
+        sendSpeakingStatus(false);
+        speakingRef.current = false;
+      }
+      setMicLevel(0);
+      return;
+    }
+
+    const stream = getAudioStream();
+    if (!stream) return;
+
+    let rafId = null;
+    let analyser;
+    let source;
+    let audioContext;
+
+    const evaluate = () => {
+      const data = new Uint8Array(analyser.frequencyBinCount);
+      analyser.getByteFrequencyData(data);
+
+      const avg = data.reduce((sum, value) => sum + value, 0) / data.length;
+      setMicLevel((prev) => {
+        const smooth = avg * 0.25 + prev * 0.75;
+        const speakingNow = smooth > 12;
+
+        if (speakingNow !== speakingRef.current) {
+          speakingRef.current = speakingNow;
+          sendSpeakingStatus(speakingNow);
+        }
+
+        return smooth;
+      });
+
+      rafId = window.requestAnimationFrame(evaluate);
+    };
+
+    try {
+      audioContext = new window.AudioContext();
+      analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+
+      source = audioContext.createMediaStreamSource(stream);
+      source.connect(analyser);
+
+      rafId = window.requestAnimationFrame(evaluate);
+    } catch (error) {
+      console.error("Speaker detection failed", error);
+    }
+
+    return () => {
+      if (rafId) {
+        window.cancelAnimationFrame(rafId);
+      }
+
+      if (source) {
+        source.disconnect();
+      }
+
+      if (analyser) {
+        analyser.disconnect();
+      }
+
+      if (audioContext) {
+        audioContext.close();
+      }
+    };
+  }, [micOn, speakerModeEnabled]);
+
+  const remoteTileItems = useMemo(
+    () =>
+      remoteParticipants.map((participant) => ({
+        participant,
+        media: remoteMedia[participant.socketId] || {},
+      })),
+    [remoteMedia, remoteParticipants]
+  );
+
+  const presenterTile = useMemo(() => {
+    if (screenSharer === mySocketId && getScreenStream()) {
+      return {
+        stream: getScreenStream(),
+        label: "You",
+        isLocal: true,
+        isScreen: true,
+      };
+    }
+
+    if (screenSharer && remoteMedia[screenSharer]?.screenStream) {
+      const presenter = participantsWithFallback.find((p) => p.socketId === screenSharer);
+      return {
+        stream: remoteMedia[screenSharer].screenStream,
+        label: getParticipantName(presenter),
+        isLocal: false,
+        isScreen: true,
+      };
+    }
+
+    return {
+      stream: getCameraStream(),
+      label: "No one is presenting",
+      isLocal: true,
+      isScreen: false,
+    };
+  }, [mySocketId, participantsWithFallback, remoteMedia, screenSharer]);
+
+  const tileCount = remoteParticipants.length + 1;
+  const gridColumns = `repeat(${Math.min(4, Math.max(1, Math.ceil(Math.sqrt(tileCount))))}, minmax(220px, 1fr))`;
+
+  const footerParticipantsCount = participantsWithFallback.length;
+
   return (
     <Box sx={{ display: "flex", height: "100vh", background: "#000" }}>
-      <Box sx={{ 
-        flex: 1, 
-        display: "flex", 
-        flexDirection: "column",
-        p: 2 
-      }}>
+      {remoteAudioEntries.map(([socketId, media]) => (
+        <RemoteAudioPlayer key={`remote-audio-${socketId}`} stream={media.audioStream} />
+      ))}
+
+      <Box
+        sx={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          p: 2,
+          minWidth: 0,
+        }}
+      >
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
           <Typography color="white" fontWeight={600}>
-            Conference Room: {conferenceId}
-            {inConference && isAdminOrManager && (
+            Conference Room
+            {isAdminOrManager && (
               <Typography component="span" color="#4caf50" fontSize="0.8rem" ml={1}>
                 (Admin)
               </Typography>
             )}
           </Typography>
-          
+
           <Box sx={{ display: "flex", gap: 1 }}>
-            <Tooltip title="Grid Layout">
+            <Tooltip title="Grid layout">
               <IconButton
-                onClick={() => toggleLayout(LAYOUT.GRID)}
+                onClick={() => setLayout(LAYOUT.GRID)}
                 sx={{
-                  background: layout === LAYOUT.GRID ? "#2196f3" : "#424242",
+                  background: layout === LAYOUT.GRID ? "#1976d2" : "#303030",
                   color: "white",
-                  "&:hover": { background: layout === LAYOUT.GRID ? "#1976d2" : "#303030" },
                 }}
               >
                 <GroupsIcon />
               </IconButton>
             </Tooltip>
-            
-            <Tooltip title="Speaker Layout">
+
+            <Tooltip title="Speaker layout">
               <IconButton
-                onClick={() => toggleLayout(LAYOUT.SPEAKER)}
+                onClick={() => setLayout(LAYOUT.SPEAKER)}
                 sx={{
-                  background: layout === LAYOUT.SPEAKER ? "#2196f3" : "#424242",
+                  background: layout === LAYOUT.SPEAKER ? "#1976d2" : "#303030",
                   color: "white",
-                  "&:hover": { background: layout === LAYOUT.SPEAKER ? "#1976d2" : "#303030" },
                 }}
               >
                 <PresentToAllIcon />
               </IconButton>
             </Tooltip>
-            
-            {participantsLoaded && participants.length > 0 && (
-              <Tooltip title={speakerModeEnabled ? "Disable Speaker Mode" : "Enable Speaker Mode"}>
+
+            {isAdminOrManager && (
+              <Tooltip title={speakerModeEnabled ? "Disable speaker mode" : "Enable speaker mode"}>
                 <IconButton
                   onClick={toggleSpeakerMode}
                   sx={{
-                    background: speakerModeEnabled ? "#00e676" : "#424242",
+                    background: speakerModeEnabled ? "#00e676" : "#303030",
                     color: speakerModeEnabled ? "#000" : "white",
-                    "&:hover": {
-                      background: speakerModeEnabled ? "#00c853" : "#303030",
-                    },
                   }}
                 >
                   <VolumeUpIcon />
                 </IconButton>
               </Tooltip>
             )}
-            
-            {inConference && isAdminOrManager && raisedHands.length > 0 && (
-              <Tooltip title="Clear All Raised Hands">
+
+            {isAdminOrManager && raisedHands.length > 0 && (
+              <Tooltip title="Clear all raised hands">
                 <IconButton
-                  onClick={handleClearAllHands}
-                  sx={{
-                    background: "#ff9800",
-                    color: "white",
-                    "&:hover": { background: "#f57c00" },
-                  }}
+                  onClick={() => handleAdminAction("clear-hands")}
+                  sx={{ background: "#ff9800", color: "white" }}
                 >
                   <ClearAllIcon />
                 </IconButton>
               </Tooltip>
             )}
-            
-            <Tooltip title={participantsPanelOpen ? "Hide Participants" : "Show Participants"}>
+
+            <Tooltip title={participantsPanelOpen ? "Hide participants" : "Show participants"}>
               <IconButton
-                onClick={toggleParticipantsPanel}
+                onClick={() => setParticipantsPanelOpen((prev) => !prev)}
                 sx={{
-                  background: participantsPanelOpen ? "#2196f3" : "#424242",
+                  background: participantsPanelOpen ? "#1976d2" : "#303030",
                   color: "white",
-                  "&:hover": { background: participantsPanelOpen ? "#1976d2" : "#303030" },
                 }}
               >
                 <PersonIcon />
@@ -873,341 +783,236 @@ export default function ConferenceRoom() {
         </Box>
 
         {speakerModeEnabled && (
-          <Box sx={{ 
-            mb: 2, 
-            p: 1, 
-            background: "rgba(0, 230, 118, 0.1)", 
-            borderRadius: 1,
-            border: "1px solid rgba(0, 230, 118, 0.3)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between"
-          }}>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              <VolumeUpIcon sx={{ color: "#00e676", fontSize: 20 }} />
-              <Typography color="#00e676" fontWeight={500}>
-                Speaker Mode Active
-              </Typography>
-            </Box>
-            
-            {activeSpeaker && (
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                <Typography color="white" variant="body2">
-                  Current Speaker:
-                </Typography>
-                <Chip 
-                  label={activeSpeakerName}
-                  size="small"
-                  sx={{ 
-                    background: "#00e676", 
-                    color: "#000", 
-                    fontWeight: "bold" 
-                  }}
-                />
-                {inConference && isAdminOrManager && (
-                  <IconButton 
-                    size="small" 
-                    onClick={clearSpeaker}
-                    sx={{ color: "#ff4444" }}
-                  >
-                    <ClearAllIcon fontSize="small" />
-                  </IconButton>
-                )}
-              </Box>
-            )}
-            
-            {!activeSpeaker && (
-              <Typography color="#aaa" variant="body2">
-                Waiting for speaker...
-              </Typography>
+          <Box
+            sx={{
+              mb: 2,
+              p: 1,
+              border: "1px solid rgba(0, 230, 118, 0.35)",
+              borderRadius: 1,
+              background: "rgba(0, 230, 118, 0.12)",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <Typography color="#00e676" fontWeight={600}>
+              Speaker Mode: {activeSpeaker ? getParticipantName(participantsWithFallback.find((p) => p.socketId === activeSpeaker)) : "Waiting"}
+            </Typography>
+            {isAdminOrManager && activeSpeaker && (
+              <IconButton size="small" onClick={clearSpeaker} sx={{ color: "#ff5252" }}>
+                <ClearAllIcon fontSize="small" />
+              </IconButton>
             )}
           </Box>
         )}
 
-        {layout === LAYOUT.PRESENTATION ? (
+        {layout === LAYOUT.PRESENTATION && (
           <>
-            <Box sx={{ flex: 1, mb: 2 }}>
-              {screenSharer === socket.id ? (
-                <VideoTile
-                  stream={getScreenStream() || getCameraStream()}
-                  label="You (Presenting)"
-                  isScreen={!!getScreenStream()}
-                  isLocal
-                  isActiveSpeaker={speakerModeEnabled && activeSpeaker === socket.id}
-                />
-              ) : screenSharer && getRemoteScreenStream(screenSharer) ? (
-                <VideoTile
-                  stream={getRemoteScreenStream(screenSharer)}
-                  label={`${participants.find(p => p.socketId === screenSharer)?.userName || 'Presenter'} (Presenting)`}
-                  isScreen
-                  isActiveSpeaker={speakerModeEnabled && activeSpeaker === screenSharer}
-                />
-              ) : (
+            <Box sx={{ flex: 1, mb: 2, minHeight: 0 }}>
+              <VideoTile
+                stream={presenterTile.stream}
+                label={presenterTile.label}
+                isLocal={presenterTile.isLocal}
+                isScreen={presenterTile.isScreen}
+                isActiveSpeaker={speakerModeEnabled && activeSpeaker === (screenSharer || mySocketId)}
+              />
+            </Box>
+
+            <Box sx={{ display: "flex", gap: 1.25, overflowX: "auto", pb: 1 }}>
+              <Box sx={{ width: 240, flexShrink: 0 }}>
                 <VideoTile
                   stream={getCameraStream()}
-                  label="No one is presenting"
-                  isActiveSpeaker={speakerModeEnabled && activeSpeaker === socket.id}
-                />
-              )}
-            </Box>
-
-            <Box sx={{ display: "flex", gap: 2, overflowX: "auto", height: "200px" }}>
-              {allCameraStreams
-                .filter(([socketId]) => socketId !== screenSharer)
-                .map(([socketId, stream]) => {
-                  const participant = participants.find(p => p.socketId === socketId);
-                  const userName = participant?.userName || `User ${socketId.slice(0, 4)}`;
-                  
-                  return (
-                    <Box key={socketId} sx={{ position: "relative" }}>
-                      <VideoTile 
-                        stream={stream} 
-                        label={userName} 
-                        small
-                        isActiveSpeaker={speakerModeEnabled && activeSpeaker === socketId}
-                      />
-                      {inConference && isAdminOrManager && socketId !== socket.id && (
-                        <IconButton
-                          size="small"
-                          onClick={(e) => handleOpenAdminMenu(e, socketId)}
-                          sx={{
-                            position: "absolute",
-                            top: 4,
-                            right: 4,
-                            background: "rgba(0,0,0,0.7)",
-                            color: "white",
-                            "&:hover": { background: "rgba(0,0,0,0.9)" },
-                          }}
-                        >
-                          <MoreVertIcon fontSize="small" />
-                        </IconButton>
-                      )}
-                    </Box>
-                  );
-                })}
-            </Box>
-          </>
-        ) : layout === LAYOUT.SPEAKER ? (
-          <Box sx={{ flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
-            {activeSpeaker && (
-              <Box sx={{ flex: 2, minHeight: "60%" }}>
-                {activeSpeaker === socket.id ? (
-                  <VideoTile 
-                    stream={getCameraStream()}
-                    label="You (Speaking)"
-                    isLocal
-                    isActiveSpeaker={true}
-                    large
-                  >
-                    {handRaised && <RaiseHandIndicator label="Your Hand is Raised" />}
-                  </VideoTile>
-                ) : (
-                  allCameraStreams
-                    .filter(([socketId]) => socketId === activeSpeaker)
-                    .map(([socketId, stream]) => {
-                      const participant = participants.find(p => p.socketId === socketId);
-                      const userName = participant?.userName || `User ${socketId.slice(0, 4)}`;
-                      
-                      return (
-                        <VideoTile 
-                          key={socketId}
-                          stream={stream} 
-                          label={`${userName} (Speaking)`}
-                          isActiveSpeaker={true}
-                          large
-                        />
-                      );
-                    })
-                )}
+                  label="You"
+                  isLocal
+                  small
+                  isActiveSpeaker={speakerModeEnabled && activeSpeaker === mySocketId}
+                >
+                  {handRaised && <RaiseHandIndicator label="Hand Raised" />}
+                </VideoTile>
               </Box>
-            )}
-            
-            <Box sx={{ 
-              flex: 1, 
-              display: "grid", 
-              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-              gap: 1
-            }}>
-              {activeSpeaker !== socket.id && (
-                <Box sx={{ position: "relative" }}>
-                  <VideoTile 
-                    stream={getCameraStream()}
-                    label="You"
-                    isLocal
-                    small
-                    isActiveSpeaker={false}
-                  />
-                </Box>
-              )}
-              
-              {allCameraStreams
-                .filter(([socketId]) => socketId !== activeSpeaker)
-                .map(([socketId, stream]) => {
-                  const participant = participants.find(p => p.socketId === socketId);
-                  const userName = participant?.userName || `User ${socketId.slice(0, 4)}`;
-                  
-                  return (
-                    <Box key={socketId} sx={{ position: "relative" }}>
-                      <VideoTile 
-                        stream={stream} 
-                        label={userName}
-                        small
-                        isActiveSpeaker={false}
-                      />
-                      
-                      {inConference && isAdminOrManager && socketId !== socket.id && (
-                        <IconButton
-                          size="small"
-                          onClick={(e) => handleOpenAdminMenu(e, socketId)}
-                          sx={{
-                            position: "absolute",
-                            top: 4,
-                            right: 4,
-                            background: "rgba(0,0,0,0.7)",
-                            color: "white",
-                            "&:hover": { background: "rgba(0,0,0,0.9)" },
-                          }}
-                        >
-                          <MoreVertIcon fontSize="small" />
-                        </IconButton>
-                      )}
-                    </Box>
-                  );
-                })}
-            </Box>
-          </Box>
-        ) : (
-          <Box sx={{
-            flex: 1,
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-            gap: 2,
-            overflow: "auto",
-          }}>
-            <Box sx={{ position: "relative" }}>
-              <VideoTile 
-                stream={getCameraStream()}
-                label="You"
-                isLocal
-                isActiveSpeaker={speakerModeEnabled && activeSpeaker === socket.id}
-              >
-                {handRaised && <RaiseHandIndicator label="Your Hand is Raised" />}
-              </VideoTile>
-            </Box>
 
-            {allCameraStreams.map(([socketId, stream]) => {
-              const participant = participants.find(p => p.socketId === socketId);
-              const userName = participant?.userName || `User ${socketId.slice(0, 4)}`;
-              const isHandRaised = raisedHands.includes(socketId);
-              
-              return (
-                <Box key={socketId} sx={{ position: "relative" }}>
-                  <VideoTile 
-                    stream={stream} 
-                    label={userName}
-                    isActiveSpeaker={speakerModeEnabled && activeSpeaker === socketId}
-                  >
-                    {isHandRaised && <RaiseHandIndicator label="Hand Raised" />}
-                  </VideoTile>
-                  
-                  {inConference && isAdminOrManager && socketId !== socket.id && (
-                    <>
+              {remoteTileItems
+                .filter(({ participant }) => participant.socketId !== screenSharer)
+                .map(({ participant, media }) => (
+                  <Box key={participant.socketId} sx={{ width: 240, flexShrink: 0, position: "relative" }}>
+                    <VideoTile
+                      stream={media.cameraStream}
+                      label={getParticipantName(participant)}
+                      small
+                      isActiveSpeaker={speakerModeEnabled && activeSpeaker === participant.socketId}
+                    >
+                      {raisedHands.includes(participant.socketId) && <RaiseHandIndicator label="Hand Raised" />}
+                    </VideoTile>
+
+                    {isAdminOrManager && (
                       <IconButton
                         size="small"
-                        onClick={(e) => handleOpenAdminMenu(e, socketId)}
+                        onClick={(event) => handleOpenAdminMenu(event, participant.socketId)}
                         sx={{
                           position: "absolute",
-                          top: 8,
-                          right: 8,
+                          top: 4,
+                          right: 4,
                           background: "rgba(0,0,0,0.7)",
                           color: "white",
-                          "&:hover": { background: "rgba(0,0,0,0.9)" },
                         }}
                       >
                         <MoreVertIcon fontSize="small" />
                       </IconButton>
-                      
-                      {isHandRaised && isAdminOrManager && (
-                        <IconButton
-                          size="small"
-                          onClick={() => handleAdminAction("lower-hand", socketId)}
-                          sx={{
-                            position: "absolute",
-                            top: 40,
-                            right: 8,
-                            background: "rgba(255, 152, 0, 0.8)",
-                            color: "white",
-                            "&:hover": { background: "rgba(255, 152, 0, 1)" },
-                          }}
-                          title="Lower Hand"
-                        >
-                          <HandshakeIcon fontSize="small" />
-                        </IconButton>
-                      )}
-                      
-                      {speakerModeEnabled && (
-                        <IconButton
-                          size="small"
-                          onClick={() => setAsSpeaker(socketId)}
-                          sx={{
-                            position: "absolute",
-                            top: 72,
-                            right: 8,
-                            background: "rgba(0, 230, 118, 0.8)",
-                            color: "black",
-                            "&:hover": { background: "rgba(0, 230, 118, 1)" },
-                          }}
-                          title="Set as Speaker"
-                        >
-                          <VolumeUpIcon fontSize="small" />
-                        </IconButton>
-                      )}
-                    </>
-                  )}
-                </Box>
-              );
-            })}
+                    )}
+                  </Box>
+                ))}
+            </Box>
+          </>
+        )}
+
+        {layout === LAYOUT.SPEAKER && (
+          <Box sx={{ flex: 1, display: "flex", flexDirection: "column", gap: 1.5, minHeight: 0 }}>
+            <Box sx={{ flex: 2, minHeight: 0 }}>
+              {activeSpeaker === mySocketId ? (
+                <VideoTile
+                  stream={getCameraStream()}
+                  label="You"
+                  isLocal
+                  large
+                  isActiveSpeaker
+                >
+                  {handRaised && <RaiseHandIndicator label="Hand Raised" />}
+                </VideoTile>
+              ) : (
+                <VideoTile
+                  stream={remoteMedia[activeSpeaker]?.cameraStream || null}
+                  label={getParticipantName(participantsWithFallback.find((p) => p.socketId === activeSpeaker))}
+                  large
+                  isActiveSpeaker={Boolean(activeSpeaker)}
+                />
+              )}
+            </Box>
+
+            <Box
+              sx={{
+                flex: 1,
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                gap: 1,
+                minHeight: 180,
+              }}
+            >
+              {activeSpeaker !== mySocketId && (
+                <VideoTile
+                  stream={getCameraStream()}
+                  label="You"
+                  isLocal
+                  small
+                  isActiveSpeaker={false}
+                />
+              )}
+
+              {remoteTileItems
+                .filter(({ participant }) => participant.socketId !== activeSpeaker)
+                .map(({ participant, media }) => (
+                  <Box key={participant.socketId} sx={{ position: "relative" }}>
+                    <VideoTile
+                      stream={media.cameraStream}
+                      label={getParticipantName(participant)}
+                      small
+                    />
+
+                    {isAdminOrManager && (
+                      <IconButton
+                        size="small"
+                        onClick={(event) => handleOpenAdminMenu(event, participant.socketId)}
+                        sx={{
+                          position: "absolute",
+                          top: 4,
+                          right: 4,
+                          background: "rgba(0,0,0,0.7)",
+                          color: "white",
+                        }}
+                      >
+                        <MoreVertIcon fontSize="small" />
+                      </IconButton>
+                    )}
+                  </Box>
+                ))}
+            </Box>
           </Box>
         )}
 
-        <Box sx={{
-          display: "flex",
-          justifyContent: "center",
-          gap: 2,
-          mt: 2,
-          pt: 2,
-          borderTop: "1px solid #333",
-        }}>
-          <Tooltip title={micOn ? "Mute Microphone" : "Unmute Microphone"}>
+        {layout === LAYOUT.GRID && (
+          <Box
+            sx={{
+              flex: 1,
+              minHeight: 0,
+              display: "grid",
+              gridTemplateColumns: gridColumns,
+              gap: 1.5,
+              overflow: "auto",
+              alignContent: "start",
+            }}
+          >
+            <VideoTile
+              stream={getCameraStream()}
+              label="You"
+              isLocal
+              isActiveSpeaker={speakerModeEnabled && activeSpeaker === mySocketId}
+            >
+              {handRaised && <RaiseHandIndicator label="Hand Raised" />}
+            </VideoTile>
+
+            {remoteTileItems.map(({ participant, media }) => (
+              <Box key={participant.socketId} sx={{ position: "relative" }}>
+                <VideoTile
+                  stream={media.cameraStream}
+                  label={getParticipantName(participant)}
+                  isActiveSpeaker={speakerModeEnabled && activeSpeaker === participant.socketId}
+                >
+                  {raisedHands.includes(participant.socketId) && <RaiseHandIndicator label="Hand Raised" />}
+                </VideoTile>
+
+                {isAdminOrManager && (
+                  <IconButton
+                    size="small"
+                    onClick={(event) => handleOpenAdminMenu(event, participant.socketId)}
+                    sx={{
+                      position: "absolute",
+                      top: 8,
+                      right: 8,
+                      background: "rgba(0,0,0,0.7)",
+                      color: "white",
+                    }}
+                  >
+                    <MoreVertIcon fontSize="small" />
+                  </IconButton>
+                )}
+              </Box>
+            ))}
+          </Box>
+        )}
+
+        <Box
+          sx={{
+            display: "flex",
+            justifyContent: "center",
+            gap: 1.25,
+            mt: 2,
+            pt: 2,
+            borderTop: "1px solid #333",
+          }}
+        >
+          <Tooltip title={micOn ? "Mute microphone" : "Unmute microphone"}>
             <span>
               <IconButton
                 onClick={handleToggleMic}
-                disabled={speakerModeEnabled && activeSpeaker !== socket.id && !isAdminOrManager}
+                disabled={speakerModeEnabled && activeSpeaker && activeSpeaker !== mySocketId && !isAdminOrManager}
                 sx={{
                   position: "relative",
                   backgroundColor: "#1e1e1e",
-                  color: micOn
-                    ? `rgba(0, 230, 118, ${Math.min(micLevel / 60, 1)})`
-                    : "#9e9e9e",
-                  border:
-                    micOn && micLevel > 12
-                      ? "1px solid #00e676"
-                      : "1px solid #444",
-                  boxShadow:
-                    micOn && micLevel > 15
-                      ? "0 0 14px rgba(0, 230, 118, 0.8)"
-                      : "none",
-                  transition: "all 0.12s ease-out",
-                  "&:hover": { backgroundColor: "#2a2a2a" },
-                  "&.Mui-disabled": {
-                    backgroundColor: "#222",
-                    color: "#555",
-                    boxShadow: "none",
-                  },
+                  color: micOn ? `rgba(0, 230, 118, ${Math.min(micLevel / 60, 1)})` : "#9e9e9e",
+                  border: micOn && micLevel > 12 ? "1px solid #00e676" : "1px solid #444",
+                  boxShadow: micOn && micLevel > 15 ? "0 0 12px rgba(0, 230, 118, 0.75)" : "none",
                 }}
               >
                 <MicIcon />
-
                 {!micOn && (
                   <Box
                     sx={{
@@ -1223,94 +1028,60 @@ export default function ConferenceRoom() {
             </span>
           </Tooltip>
 
-          <Tooltip title={camOn ? "Turn Camera Off" : "Turn Camera On"}>
+          <Tooltip title={camOn ? "Turn camera off" : "Turn camera on"}>
             <IconButton
               onClick={handleToggleCam}
-              sx={{
-                background: camOn ? "#1565c0" : "#424242",
-                color: "white",
-                "&:hover": {
-                  background: camOn ? "#0d47a1" : "#303030",
-                },
-              }}
+              sx={{ background: camOn ? "#1565c0" : "#424242", color: "white" }}
             >
               {camOn ? <VideocamIcon /> : <VideocamOffIcon />}
             </IconButton>
           </Tooltip>
 
-          <Tooltip title={sharingScreen ? "Stop Screen Share" : "Start Screen Share"}>
+          <Tooltip title={sharingScreen ? "Stop screen share" : "Start screen share"}>
             <IconButton
               onClick={handleScreenShare}
-              sx={{
-                background: sharingScreen ? "#6a1b9a" : "#424242",
-                color: "white",
-                "&:hover": {
-                  background: sharingScreen ? "#4a148c" : "#303030",
-                },
-              }}
+              sx={{ background: sharingScreen ? "#6a1b9a" : "#424242", color: "white" }}
             >
               {sharingScreen ? <StopScreenShareIcon /> : <ScreenShareIcon />}
             </IconButton>
           </Tooltip>
 
-          <Tooltip title={handRaised ? "Lower Hand" : "Raise Hand"}>
+          <Tooltip title={handRaised ? "Lower hand" : "Raise hand"}>
             <IconButton
               onClick={handleRaiseHand}
-              sx={{
-                background: handRaised ? "#f9a825" : "#424242",
-                color: "white",
-                "&:hover": {
-                  background: handRaised ? "#f57f17" : "#303030",
-                },
-              }}
+              sx={{ background: handRaised ? "#f9a825" : "#424242", color: "white" }}
             >
               <PanToolIcon />
             </IconButton>
           </Tooltip>
 
-          {inConference && isAdminOrManager && speakerModeEnabled && (
+          {isAdminOrManager && speakerModeEnabled && (
             <>
-              <Tooltip title="Clear Speaker">
-                <IconButton
-                  onClick={clearSpeaker}
-                  sx={{
-                    background: "#ff4444",
-                    color: "white",
-                    "&:hover": { background: "#cc0000" },
-                  }}
-                >
+              <Tooltip title="Clear speaker">
+                <IconButton onClick={clearSpeaker} sx={{ background: "#ff4444", color: "white" }}>
                   <ClearAllIcon />
                 </IconButton>
               </Tooltip>
-              
-              <Tooltip title="Set Yourself as Speaker">
-                <IconButton
-                  onClick={() => setAsSpeaker(socket.id)}
-                  sx={{
-                    background: "#00e676",
-                    color: "black",
-                    "&:hover": { background: "#00c853" },
-                  }}
-                >
+
+              <Tooltip title="Set yourself as speaker">
+                <IconButton onClick={() => setAsSpeaker(mySocketId)} sx={{ background: "#00e676", color: "#000" }}>
                   <MicExternalOnIcon />
                 </IconButton>
               </Tooltip>
             </>
           )}
-          <Tooltip title={isAdminOrManager ? "End Conference" : "Leave Conference"}>
+
+          <Tooltip title={isAdminOrManager ? "End conference" : "Leave conference"}>
             <IconButton
               onClick={() => {
-                if (isAdminOrManager) {
+                if (isAdminOrManager && socket && conferenceId) {
                   socket.emit("conference:end", { conferenceId });
-                } else {
-                  leaveAndCleanupLocal();
+                  return;
                 }
+
+                leaveConferenceLocally();
               }}
-              sx={{
-                background: "#d32f2f",
-                color: "white",
-                "&:hover": { background: "#c62828" },
-              }}
+              sx={{ background: "#d32f2f", color: "white" }}
             >
               <CallEndIcon />
             </IconButton>
@@ -1319,29 +1090,24 @@ export default function ConferenceRoom() {
 
         <Box sx={{ mt: 1, display: "flex", justifyContent: "center", alignItems: "center", gap: 1 }}>
           <Typography color="#aaa" variant="caption">
-            Participants: {participants.length}
+            Participants: {footerParticipantsCount}
           </Typography>
           <Typography color="#aaa" variant="caption">
-            • Hands Raised: {raisedHands.length}
+            Hands Raised: {raisedHands.length}
           </Typography>
           {speakerModeEnabled && (
-            <Typography color="#00e676" variant="caption" ml={1}>
-              • Speaker Mode
+            <Typography color="#00e676" variant="caption">
+              Speaker Mode
             </Typography>
           )}
-          {inConference && isAdminOrManager && (
-            <Typography color="#4caf50" variant="caption" ml={1}>
-              • Admin Mode
+          {isAdminOrManager && (
+            <Typography color="#4caf50" variant="caption">
+              Admin Mode
             </Typography>
           )}
-          {!micOn && !camOn && (
-            <Typography color="#ff9800" variant="caption" ml={1}>
-              • Media Disabled
-            </Typography>
-          )}
-          {screenSharer && (
-            <Typography color="#9c27b0" variant="caption" ml={1}>
-              • Screen Sharing
+          {sharingScreen && (
+            <Typography color="#9c27b0" variant="caption">
+              Screen Sharing
             </Typography>
           )}
         </Box>
@@ -1349,16 +1115,15 @@ export default function ConferenceRoom() {
 
       {participantsPanelOpen && (
         <ParticipantsPanel
-          participants={participants}
+          participants={participantsWithFallback}
           raisedHands={raisedHands}
-          isAdminOrManager={participantsLoaded && isAdminOrManager}
+          isAdminOrManager={isAdminOrManager}
           onAdminAction={handleAdminAction}
-          currentUserId={currentUser?._id}
+          currentSocketId={mySocketId}
           onClose={() => setParticipantsPanelOpen(false)}
           speakerModeEnabled={speakerModeEnabled}
           activeSpeaker={activeSpeaker}
           onSetSpeaker={setAsSpeaker}
-          onToggleSpeakerMode={toggleSpeakerMode}
         />
       )}
 
@@ -1366,57 +1131,67 @@ export default function ConferenceRoom() {
         anchorEl={adminMenuAnchor}
         open={Boolean(adminMenuAnchor)}
         onClose={handleCloseAdminMenu}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        transformOrigin={{ vertical: "top", horizontal: "right" }}
       >
-        <MenuItem onClick={() => {
-          handleAdminAction("mute", selectedParticipantId);
-          handleCloseAdminMenu();
-        }}>
+        <MenuItem
+          onClick={() => {
+            handleAdminAction("mute", selectedParticipantId);
+            handleCloseAdminMenu();
+          }}
+        >
           <ListItemIcon>
             <VolumeOffIcon fontSize="small" />
           </ListItemIcon>
           Force Mute
         </MenuItem>
-        
-        <MenuItem onClick={() => {
-          handleAdminAction("camera-off", selectedParticipantId);
-          handleCloseAdminMenu();
-        }}>
+
+        <MenuItem
+          onClick={() => {
+            handleAdminAction("camera-off", selectedParticipantId);
+            handleCloseAdminMenu();
+          }}
+        >
           <ListItemIcon>
             <VideocamOffIcon fontSize="small" />
           </ListItemIcon>
           Turn Camera Off
         </MenuItem>
-        
+
         {speakerModeEnabled && (
-          <MenuItem onClick={() => {
-            setAsSpeaker(selectedParticipantId);
-            handleCloseAdminMenu();
-          }}>
+          <MenuItem
+            onClick={() => {
+              setAsSpeaker(selectedParticipantId);
+              handleCloseAdminMenu();
+            }}
+          >
             <ListItemIcon>
               <VolumeUpIcon fontSize="small" color="success" />
             </ListItemIcon>
             <Typography color="success.main">Set as Speaker</Typography>
           </MenuItem>
         )}
-        
-        <MenuItem onClick={() => {
-          handleAdminAction("lower-hand", selectedParticipantId);
-          handleCloseAdminMenu();
-        }}>
+
+        <MenuItem
+          onClick={() => {
+            handleAdminAction("lower-hand", selectedParticipantId);
+            handleCloseAdminMenu();
+          }}
+        >
           <ListItemIcon>
             <HandshakeIcon fontSize="small" />
           </ListItemIcon>
           Lower Hand
         </MenuItem>
-        
+
         <Divider />
-        
-        <MenuItem onClick={() => {
-          handleAdminAction("remove-from-conference", selectedParticipantId);
-          handleCloseAdminMenu();
-        }}>
+
+        <MenuItem
+          onClick={() => {
+            handleAdminAction("remove-from-conference", selectedParticipantId);
+            handleCloseAdminMenu();
+          }}
+        >
           <ListItemIcon>
             <PersonRemoveIcon fontSize="small" color="error" />
           </ListItemIcon>
@@ -1427,13 +1202,13 @@ export default function ConferenceRoom() {
       <Snackbar
         open={notification.open}
         autoHideDuration={4000}
-        onClose={() => setNotification({ ...notification, open: false })}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        onClose={() => setNotification((prev) => ({ ...prev, open: false }))}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       >
-        <Alert 
-          onClose={() => setNotification({ ...notification, open: false })} 
+        <Alert
+          onClose={() => setNotification((prev) => ({ ...prev, open: false }))}
           severity={notification.severity}
-          sx={{ width: '100%' }}
+          sx={{ width: "100%" }}
         >
           {notification.message}
         </Alert>
