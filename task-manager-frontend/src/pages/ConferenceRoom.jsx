@@ -515,6 +515,7 @@ export default function ConferenceRoom() {
     };
 
     return [localTile, ...remoteTiles];
+  }, [mySocketId, user?.name, me?.role, remoteTiles]);
   }, [mySocketId, user?.name, me?.role, micOn, camOn, remoteTiles]);
 
   const activeTileId = activeSpeaker || allTiles[0]?.socketId;
