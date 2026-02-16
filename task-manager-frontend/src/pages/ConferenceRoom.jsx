@@ -508,6 +508,7 @@ export default function ConferenceRoom() {
       name: user?.name || "You",
       role: me?.role || "member",
       isLocal: true,
+      media: {
           media: {
         cameraStream: getCameraStream(),
         screenStream: getScreenStream(),
