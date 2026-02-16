@@ -37,18 +37,22 @@ const getSafeSocket = () => {
 /**
  * Joins a conference with atomic locking
  * @param {string} conferenceId - Conference ID to join
- * @returns {boolean} True if join was attempted, false if blocked
+ * @returns {boolean} True if join was attempted or already in-progress for same conference
  */
 export const joinConference = (conferenceId) => {
-  // SAFETY CHECK: Already joined this conference? Stop.
+  // SAFETY CHECK: Already joined this conference? Treat as success.
   if (locks.conference.joined && locks.conference.currentConferenceId === conferenceId) {
     console.warn("Already joined conference:", conferenceId);
-    return false;
+    return true;
   }
 
-  // ATOMIC LOCK: Join in progress? Stop.
+  // ATOMIC LOCK: Join in progress for same conference? Treat as success.
   if (locks.conference.joinInProgress) {
-    console.warn("Conference join already in progress. Skipping duplicate.");
+    if (locks.conference.currentConferenceId === conferenceId) {
+      console.warn("Conference join already in progress. Treating duplicate as success.");
+      return true;
+    }
+    console.warn("Conference join already in progress for another conference. Skipping.");
     return false;
   }
 
@@ -89,6 +93,7 @@ export const joinConference = (conferenceId) => {
     locks.conference.joinInProgress = false;
     socket.off("conference:joined", handleJoined);
     socket.off("conference:error", handleError);
+    socket.off("conference:user-joined", handleUserJoined);
   };
 
   socket.once("conference:joined", handleJoined);
@@ -338,6 +343,11 @@ export const cleanupConference = () => {
 
   if (locks.conference.joined) {
     leaveConference();
+  } else {
+    // Always clear lock state so stale in-progress joins do not block next room.
+    locks.conference.joined = false;
+    locks.conference.joinInProgress = false;
+    locks.conference.currentConferenceId = null;
   }
 
   console.log("Conference socket cleanup complete");

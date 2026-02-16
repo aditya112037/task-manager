@@ -384,7 +384,7 @@ export default function ConferenceRoom() {
 
       const joined = joinConference(conferenceId);
       if (!joined) {
-        showNotification("Unable to join conference", "error");
+        console.warn("Conference join request skipped by lock state");
       }
 
       try {
