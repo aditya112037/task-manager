@@ -81,7 +81,7 @@ function RemoteAudioPlayer({ stream }) {
       if (element.srcObject !== stream) {
         element.srcObject = stream;
       }
-      element.volume = 0.9;
+      element.volume = 1;
       element.play().catch(() => {});
       return;
     }

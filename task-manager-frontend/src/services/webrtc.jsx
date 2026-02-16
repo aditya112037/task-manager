@@ -10,6 +10,17 @@ const peers = new Map(); // socketId -> { pc, socket, senders: {audio,camera,scr
 let audioStream = null;
 let cameraStream = null;
 let screenStream = null;
+let renegotiateTimeout = null;
+
+const scheduleRenegotiation = () => {
+  if (renegotiateTimeout) return;
+
+  renegotiateTimeout = setTimeout(async () => {
+    renegotiateTimeout = null;
+    scheduleRenegotiation();
+  }, 150);
+};
+
 
 const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
 
@@ -302,32 +313,32 @@ export const startAudio = async () => {
     audio: {
       echoCancellation: true,
       noiseSuppression: true,
-      autoGainControl: true,
-      channelCount: 1,
-      sampleRate: 48000,
-      sampleSize: 16,
+      autoGainControl: false,
     },
   });
 
   const track = stream.getAudioTracks()[0];
+
   if (track) {
     track.enabled = true;
+
     try {
       await track.applyConstraints({
         echoCancellation: true,
         noiseSuppression: true,
-        autoGainControl: true,
+        autoGainControl: false,
       });
-    } catch {
-      // Some browsers do not allow re-applying these constraints.
-    }
+    } catch {}
   }
 
   audioStream = stream;
+
   await syncAllPeerTracks();
-  await renegotiateAllPeers();
+  scheduleRenegotiation(); // 👈 throttle (see below)
+
   return audioStream;
 };
+
 
 export const setMicEnabled = async (enabled) => {
   if (!audioStream) {
@@ -350,7 +361,7 @@ export const destroyAudio = async () => {
   audioStream.getTracks().forEach((t) => t.stop());
   audioStream = null;
   await syncAllPeerTracks();
-  await renegotiateAllPeers();
+  scheduleRenegotiation();
 };
 
 export const startCamera = async () => {
@@ -366,7 +377,7 @@ export const startCamera = async () => {
   });
 
   await syncAllPeerTracks();
-  await renegotiateAllPeers();
+  scheduleRenegotiation();
   return cameraStream;
 };
 
@@ -375,7 +386,7 @@ export const stopCamera = async () => {
   cameraStream.getTracks().forEach((t) => t.stop());
   cameraStream = null;
   await syncAllPeerTracks();
-  await renegotiateAllPeers();
+  scheduleRenegotiation();
 };
 
 export const startScreen = async () => {
@@ -396,7 +407,7 @@ export const startScreen = async () => {
   }
 
   await syncAllPeerTracks();
-  await renegotiateAllPeers();
+  scheduleRenegotiation();
   return screenStream;
 };
 
@@ -405,7 +416,7 @@ export const stopScreen = async () => {
   screenStream.getTracks().forEach((t) => t.stop());
   screenStream = null;
   await syncAllPeerTracks();
-  await renegotiateAllPeers();
+  scheduleRenegotiation();
 };
 
 export const getAudioStream = () => audioStream;
