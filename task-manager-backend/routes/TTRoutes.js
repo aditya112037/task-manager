@@ -34,6 +34,24 @@ function findMember(team, userId) {
   });
 }
 
+const ALLOWED_TASK_UPDATE_FIELDS = [
+  "title",
+  "description",
+  "priority",
+  "status",
+  "dueDate",
+  "assignedTo",
+  "color",
+  "icon",
+  "isPinned",
+];
+
+const isValidDate = (value) => {
+  if (!value) return false;
+  const d = new Date(value);
+  return !Number.isNaN(d.getTime());
+};
+
 /* ---------------- GET ALL TEAM TASKS ---------------- */
 router.get("/:teamId", protect, async (req, res) => {
   try {
@@ -126,32 +144,74 @@ router.put("/:taskId", protect, async (req, res) => {
     const member = findMember(task.team, req.user._id);
     if (!member) return res.status(403).json({ message: "Not authorized" });
 
+    const isAdminOrManager = ["admin", "manager"].includes(member.role);
+
+    const updates = {};
+    for (const field of ALLOWED_TASK_UPDATE_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(req.body, field)) {
+        updates[field] = req.body[field];
+      }
+    }
+
+    if (!isAdminOrManager) {
+      const memberAllowedKeys = ["status"];
+      const updateKeys = Object.keys(updates);
+
+      if (String(task.assignedTo) !== String(req.user._id)) {
+        return res.status(403).json({ message: "Only assignee can update task status" });
+      }
+
+      const hasForbiddenMemberUpdate = updateKeys.some(
+        (key) => !memberAllowedKeys.includes(key)
+      );
+      if (hasForbiddenMemberUpdate) {
+        return res.status(403).json({
+          message: "Members can only update task status",
+        });
+      }
+    }
+
+    if (
+      Object.prototype.hasOwnProperty.call(updates, "dueDate") &&
+      updates.dueDate &&
+      !isValidDate(updates.dueDate)
+    ) {
+      return res.status(400).json({ message: "Invalid due date" });
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, "assignedTo") && updates.assignedTo) {
+      const assignedMember = findMember(task.team, updates.assignedTo);
+      if (!assignedMember) {
+        return res.status(400).json({ message: "Assigned user must be a team member" });
+      }
+    }
+
     const oldStatus = task.status;
     const oldAssigned = task.assignedTo?.toString() || null;
 
-    Object.assign(task, req.body);
+    Object.assign(task, updates);
     await task.save();
 
-    if (req.body.status && oldStatus !== req.body.status) {
+    if (updates.status && oldStatus !== updates.status) {
       await TaskComment.create({
         task: task._id,
         team: task.team._id,
         type: "system",
         action: "status_changed",
-        meta: { from: oldStatus, to: req.body.status },
+        meta: { from: oldStatus, to: updates.status },
       });
     }
 
     if (
-      req.body.assignedTo !== undefined &&
-      oldAssigned !== String(req.body.assignedTo || null)
+      Object.prototype.hasOwnProperty.call(updates, "assignedTo") &&
+      oldAssigned !== String(updates.assignedTo || null)
     ) {
       await TaskComment.create({
         task: task._id,
         team: task.team._id,
         type: "system",
-        action: "assigned",
-        meta: { to: req.body.assignedTo },
+        action: updates.assignedTo ? "assigned" : "unassigned",
+        meta: { to: updates.assignedTo || null },
       });
 
       // assignment affects visibility → invalidate team too
@@ -198,11 +258,27 @@ router.post("/:taskId/request-extension", protect, async (req, res) => {
     if (String(task.assignedTo) !== String(req.user._id))
       return res.status(403).json({ message: "Not allowed" });
 
+    const reason = String(req.body.reason || "").trim();
+    if (!reason) {
+      return res.status(400).json({ message: "Extension reason is required" });
+    }
+
+    if (!isValidDate(req.body.requestedDueDate)) {
+      return res.status(400).json({ message: "Valid requested due date is required" });
+    }
+
+    const requestedDueDate = new Date(req.body.requestedDueDate);
+    if (task.dueDate && requestedDueDate <= new Date(task.dueDate)) {
+      return res
+        .status(400)
+        .json({ message: "Requested due date must be after current due date" });
+    }
+
     task.extensionRequest = {
       requested: true,
       requestedBy: req.user._id,
-      reason: req.body.reason,
-      requestedDueDate: new Date(req.body.requestedDueDate),
+      reason,
+      requestedDueDate,
       requestedAt: new Date(),
       status: "pending",
     };
@@ -241,6 +317,7 @@ router.post("/:taskId/extension/approve", protect, async (req, res) => {
       return res.status(400).json({ message: "No pending request" });
 
     task.dueDate = task.extensionRequest.requestedDueDate;
+    task.extensionRequest.requested = false;
     task.extensionRequest.status = "approved";
     task.extensionRequest.reviewedBy = req.user._id;
     task.extensionRequest.reviewedAt = new Date();
@@ -277,6 +354,7 @@ router.post("/:taskId/extension/reject", protect, async (req, res) => {
     if (task.extensionRequest?.status !== "pending")
       return res.status(400).json({ message: "No pending request" });
 
+    task.extensionRequest.requested = false;
     task.extensionRequest.status = "rejected";
     task.extensionRequest.reviewedBy = req.user._id;
     task.extensionRequest.reviewedAt = new Date();

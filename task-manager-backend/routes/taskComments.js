@@ -52,11 +52,16 @@ router.post("/:taskId", protect, async (req, res) => {
     const member = findMember(task.team, req.user._id);
     if (!member) return res.status(403).json({ message: "Not authorized" });
 
+    const content = String(req.body.content || "").trim();
+    if (!content) {
+      return res.status(400).json({ message: "Comment content is required" });
+    }
+
     const comment = await TaskComment.create({
       task: task._id,
       team: task.team._id,
       author: req.user._id,
-      content: req.body.content,
+      content,
       type: "comment",
     });
 
