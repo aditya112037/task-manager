@@ -284,6 +284,10 @@ export default function ConferenceRoom() {
       const enabled = await setMicEnabled(nextMic);
       setMicOn(Boolean(enabled));
       emitMediaUpdate(Boolean(enabled), camOn);
+
+      const track = getAudioStream()?.getAudioTracks?.()[0];
+      console.log("Mic track enabled:", track?.enabled);
+      console.log("Mic readyState:", track?.readyState);
     } catch (error) {
       console.error("Microphone toggle failed", error);
       showNotification("Microphone access failed", "error");
@@ -670,6 +674,8 @@ export default function ConferenceRoom() {
     }
 
     const stream = getAudioStream();
+    console.log("Audio stream:", stream);
+    console.log("Tracks:", stream?.getAudioTracks?.());
     if (!stream) return;
 
     let rafId = null;
@@ -682,9 +688,10 @@ export default function ConferenceRoom() {
       analyser.getByteFrequencyData(data);
 
       const avg = data.reduce((sum, value) => sum + value, 0) / data.length;
+      console.log("Mic avg level:", avg);
       setMicLevel((prev) => {
         const smooth = avg * 0.25 + prev * 0.75;
-        const speakingNow = smooth > 12;
+        const speakingNow = smooth > 5;
 
         if (speakingNow !== speakingRef.current) {
           speakingRef.current = speakingNow;
@@ -699,6 +706,9 @@ export default function ConferenceRoom() {
 
     try {
       audioContext = new window.AudioContext();
+      if (audioContext.state === "suspended") {
+        audioContext.resume().catch(() => {});
+      }
       analyser = audioContext.createAnalyser();
       analyser.fftSize = 256;
 
