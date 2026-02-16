@@ -159,6 +159,339 @@ export default function ConferenceRoom() {
       // deterministic offer initiator to reduce collisions
       if (mySocketId > targetSocketId) {
         await createOffer(targetSocketId, socket);
+      }
+    },
+    [socket, mySocketId]
+  );
+
+  const syncPeersFromParticipants = useCallback(
+    async (list) => {
+      if (!mySocketId) return;
+      const others = (list || []).filter((p) => p.socketId && p.socketId !== mySocketId);
+      await Promise.all(others.map((p) => ensurePeerFor(p.socketId)));
+    },
+    [ensurePeerFor, mySocketId]
+  );
+
+  const updateLocalVideoRefs = useCallback(() => {
+    const camera = getCameraStream();
+    if (localVideoRef.current) {
+      localVideoRef.current.srcObject = camera || null;
+      if (camera) localVideoRef.current.play().catch(() => {});
+    }
+
+    const screen = getScreenStream();
+    if (localScreenRef.current) {
+      localScreenRef.current.srcObject = screen || null;
+      if (screen) localScreenRef.current.play().catch(() => {});
+    }
+  }, []);
+
+  const emitMyMediaState = useCallback(
+    (nextMic, nextCam) => {
+      if (!socket || !conferenceId) return;
+      socket.emit("conference:media-update", {
+        conferenceId,
+        micOn: Boolean(nextMic),
+        camOn: Boolean(nextCam),
+      });
+    },
+    [socket, conferenceId]
+  );
+
+  const handleAdminAction = useCallback(
+    (action, targetSocketId) => {
+      if (!socket || !conferenceId || !targetSocketId) return;
+      socket.emit("conference:admin-action", {
+        conferenceId,
+        action,
+        targetSocketId,
+      });
+    },
+    [socket, conferenceId]
+  );
+
+  const toggleSpeakerMode = useCallback(() => {
+    if (!socket || !conferenceId || !isAdminOrManager) return;
+    socket.emit("conference:toggle-speaker-mode", {
+      conferenceId,
+      enabled: !speakerModeEnabled,
+    });
+  }, [socket, conferenceId, isAdminOrManager, speakerModeEnabled]);
+
+  const setAsSpeaker = useCallback(
+    (targetSocketId) => {
+      if (!socket || !conferenceId || !isAdminOrManager || !targetSocketId) return;
+      socket.emit("conference:set-speaker", { conferenceId, targetSocketId });
+    },
+    [socket, conferenceId, isAdminOrManager]
+  );
+
+  const leaveRoom = useCallback(
+    async (navigateAway = true) => {
+      try {
+        leaveConference();
+        await cleanupWebRTC();
+      } finally {
+        if (navigateAway) navigate("/teams");
+      }
+    },
+    [navigate]
+  );
+
+  useEffect(() => {
+    micOnRef.current = micOn;
+  }, [micOn]);
+
+  useEffect(() => {
+    camOnRef.current = camOn;
+  }, [camOn]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
+  // Setup conference + socket listeners
+  useEffect(() => {
+    if (!socket || !conferenceId) {
+      showToast("Socket not connected", "error");
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    const init = async () => {
+      try {
+        await startAudio();
+        if (cancelled || !mountedRef.current) return;
+
+        const enabled = getMicEnabled();
+        setMicOn(enabled);
+        emitMyMediaState(enabled, false);
+
+        updateLocalVideoRefs();
+        joinConference(conferenceId);
+      } catch (err) {
+        console.error("Conference init failed", err);
+        showToast("Could not access microphone", "error");
+      }
+    };
+
+    const onParticipants = async ({ participants: list }) => {
+      applyParticipants(list || []);
+      await syncPeersFromParticipants(list || []);
+    };
+
+    const onUserJoined = async ({ participant }) => {
+      setParticipants((prev) => {
+        const merged = [...prev.filter((p) => p.socketId !== participant?.socketId), participant].filter(Boolean);
+        return merged;
+      });
+      if (participant?.socketId) await ensurePeerFor(participant.socketId);
+    };
+
+    const onUserLeft = ({ socketId }) => {
+      if (!socketId) return;
+      setParticipants((prev) => prev.filter((p) => p.socketId !== socketId));
+      setRaisedHands((prev) => prev.filter((id) => id !== socketId));
+      setRemoteMedia((prev) => {
+        const next = { ...prev };
+        delete next[socketId];
+        return next;
+      });
+      removePeer(socketId);
+    };
+
+    const onMediaUpdate = ({ socketId, micOn: nextMic, camOn: nextCam }) => {
+      setParticipants((prev) =>
+        prev.map((p) => (p.socketId === socketId ? { ...p, micOn: nextMic, camOn: nextCam } : p))
+      );
+    };
+
+    const onRemoteMedia = ({ detail }) => {
+      if (!detail?.socketId) return;
+      setRemoteMedia((prev) => ({
+        ...prev,
+        [detail.socketId]: {
+          audioStream: detail.audioStream,
+          cameraStream: detail.cameraStream,
+          screenStream: detail.screenStream,
+        },
+      }));
+    };
+
+    const onConferenceState = ({ active, conference }) => {
+      if (!active || !conference) return;
+      setSpeakerModeEnabled(Boolean(conference.speakerMode?.enabled));
+      setActiveSpeaker(conference.speakerMode?.activeSpeaker || null);
+    };
+
+    const onConferenceEnded = () => {
+      showToast("Conference ended", "info");
+      leaveRoom(true);
+    };
+
+    const onForceMute = async () => {
+      await muteAudio();
+      setMicOn(false);
+      emitMyMediaState(false, camOnRef.current);
+      showToast("You were muted by host", "warning");
+    };
+
+    const onForceCameraOff = async () => {
+      await stopCamera();
+      setCamOn(false);
+      emitMyMediaState(micOnRef.current, false);
+      updateLocalVideoRefs();
+      showToast("Your camera was turned off by host", "warning");
+    };
+
+    const onRemovedByAdmin = () => {
+      showToast("You were removed from conference", "warning");
+      leaveRoom(true);
+    };
+
+    const onError = ({ message }) => {
+      showToast(message || "Conference error", "error");
+    };
+
+    const onOffer = async (payload) => {
+      try {
+        await handleOffer(payload, socket);
+      } catch (err) {
+        console.error("handleOffer failed", err);
+      }
+    };
+
+    const onAnswer = async (payload) => {
+      try {
+        await handleAnswer(payload);
+      } catch (err) {
+        console.error("handleAnswer failed", err);
+      }
+    };
+
+    const onIce = async (payload) => {
+      try {
+        await handleIceCandidate(payload);
+      } catch (err) {
+        console.error("handleIceCandidate failed", err);
+      }
+    };
+
+    socket.on("conference:participants", onParticipants);
+    socket.on("conference:user-joined", onUserJoined);
+    socket.on("conference:user-left", onUserLeft);
+    socket.on("conference:media-update", onMediaUpdate);
+    const onHandsUpdated = ({ raisedHands: hands }) => setRaisedHands(hands || []);
+    const onActiveSpeaker = ({ socketId }) => setActiveSpeaker(socketId || null);
+    const onSpeakerToggled = ({ enabled }) => setSpeakerModeEnabled(Boolean(enabled));
+
+    socket.on("conference:hands-updated", onHandsUpdated);
+    socket.on("conference:active-speaker", onActiveSpeaker);
+    socket.on("conference:speaker-mode-toggled", onSpeakerToggled);
+    socket.on("conference:state", onConferenceState);
+    socket.on("conference:ended", onConferenceEnded);
+    socket.on("conference:force-mute", onForceMute);
+    socket.on("conference:force-camera-off", onForceCameraOff);
+    socket.on("conference:removed-by-admin", onRemovedByAdmin);
+    socket.on("conference:error", onError);
+    socket.on("conference:offer", onOffer);
+    socket.on("conference:answer", onAnswer);
+    socket.on("conference:ice-candidate", onIce);
+
+    window.addEventListener("webrtc:remote-media", onRemoteMedia);
+
+    init();
+
+
+  const localVideoRef = useRef(null);
+  const localScreenRef = useRef(null);
+  const remoteAudioElsRef = useRef({});
+  const mountedRef = useRef(true);
+  const micOnRef = useRef(false);
+  const camOnRef = useRef(false);
+
+  const showToast = useCallback((message, severity = "info") => {
+    setToast({ open: true, severity, message });
+  }, []);
+
+  const mySocketId = socket?.id || null;
+
+  const me = useMemo(
+    () => participants.find((p) => p.socketId === mySocketId) || null,
+    [participants, mySocketId]
+  );
+
+  const isAdminOrManager = useMemo(
+    () => Boolean(me && ["admin", "manager"].includes(me.role)),
+    [me]
+  );
+
+  const screenSharer = useMemo(
+    () => participants.find((p) => p.socketId && remoteMedia[p.socketId]?.screenStream) || null,
+    [participants, remoteMedia]
+  );
+
+  const attachRemoteAudios = useCallback(() => {
+    Object.entries(remoteMedia).forEach(([socketId, media]) => {
+      const audioStream = media?.audioStream;
+      if (!audioStream) return;
+
+      if (!remoteAudioElsRef.current[socketId]) {
+        const audio = document.createElement("audio");
+        audio.autoplay = true;
+        audio.playsInline = true;
+        audio.volume = 1;
+        remoteAudioElsRef.current[socketId] = audio;
+      }
+
+      const audioEl = remoteAudioElsRef.current[socketId];
+      if (audioEl.srcObject !== audioStream) {
+        audioEl.srcObject = audioStream;
+        audioEl.play().catch(() => {});
+      }
+    });
+
+    Object.keys(remoteAudioElsRef.current).forEach((socketId) => {
+      if (!remoteMedia[socketId]?.audioStream) {
+        const audioEl = remoteAudioElsRef.current[socketId];
+        if (audioEl) {
+          audioEl.srcObject = null;
+          delete remoteAudioElsRef.current[socketId];
+        }
+      }
+    });
+  }, [remoteMedia]);
+
+  useEffect(() => {
+    attachRemoteAudios();
+  }, [attachRemoteAudios]);
+
+  const applyParticipants = useCallback((incoming) => {
+    const unique = [];
+    const seen = new Set();
+
+    (incoming || []).forEach((p) => {
+      if (!p?.socketId || seen.has(p.socketId)) return;
+      seen.add(p.socketId);
+      unique.push(p);
+    });
+
+    setParticipants(unique);
+  }, []);
+
+  const ensurePeerFor = useCallback(
+    async (targetSocketId) => {
+      if (!socket || !mySocketId || !targetSocketId || targetSocketId === mySocketId) return;
+      await createPeer(targetSocketId, socket);
+
+      // deterministic offer initiator to reduce collisions
+      if (mySocketId > targetSocketId) {
+        await createOffer(targetSocketId, socket);
 
   const localVideoRef = useRef(null);
   const localScreenRef = useRef(null);
@@ -624,6 +957,43 @@ export default function ConferenceRoom() {
     },
   };
 
+  const tiles = [localTile, ...remoteTiles];
+
+  const activeTileId = activeSpeaker || tiles[0]?.socketId;
+
+  const gridColumns = tiles.length <= 1 ? "1fr" : tiles.length <= 4 ? "repeat(2, 1fr)" : "repeat(3, 1fr)";
+
+  // simple speaking pulse for speaker mode
+  useEffect(() => {
+    if (!micOn) return undefined;
+    const id = setInterval(() => {
+      sendSpeakingStatus(micOn);
+    }, 1200);
+    return () => clearInterval(id);
+  }, [micOn]);
+
+  const remoteTiles = useMemo(
+    () =>
+      participants
+        .filter((p) => p.socketId && p.socketId !== mySocketId)
+        .map((p) => ({
+          ...p,
+          media: remoteMedia[p.socketId] || {},
+        })),
+    [participants, mySocketId, remoteMedia]
+  );
+
+  const localTile = {
+    socketId: mySocketId || "local",
+    name: user?.name || "You",
+    role: me?.role || "member",
+    isLocal: true,
+    media: {
+      cameraStream: getCameraStream(),
+      screenStream: getScreenStream(),
+    },
+  };
+
   const allTiles = [localTile, ...remoteTiles];
   const allTiles = useMemo(() => {
     const localTile = {
@@ -666,6 +1036,7 @@ export default function ConferenceRoom() {
           {layout === LAYOUTS.SPEAKER ? (
             <Box sx={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 2, height: "100%" }}>
               <Box sx={{ minHeight: 320 }}>
+                {tiles
                 {allTiles
                   .filter((t) => t.socketId === activeTileId)
                   .map((tile) => (
@@ -684,6 +1055,7 @@ export default function ConferenceRoom() {
                   ))}
               </Box>
               <Box sx={{ display: "grid", gridTemplateRows: "repeat(auto-fill, minmax(140px, 1fr))", gap: 1.5, overflow: "auto" }}>
+                {tiles
                 {allTiles
                   .filter((t) => t.socketId !== activeTileId)
                   .map((tile) => (
@@ -703,6 +1075,7 @@ export default function ConferenceRoom() {
             </Box>
           ) : (
             <Box sx={{ display: "grid", gridTemplateColumns: gridColumns, gap: 2, alignItems: "stretch" }}>
+              {tiles.map((tile) => (
               {allTiles.map((tile) => (
                 <VideoTile
                   key={tile.socketId}
