@@ -21,6 +21,8 @@ const invalidateTasks = (teamId) => {
   io.to(`team_${teamId}`).emit("invalidate:tasks", { teamId });
 };
 
+const validMemberRoles = new Set(["admin", "manager", "member"]);
+
 // ----------------------------------------------------
 // CREATE TEAM ✓
 // ----------------------------------------------------
@@ -224,7 +226,18 @@ router.put("/:teamId/members/:userId/role", protect, async (req, res) => {
     if (!member)
       return res.status(404).json({ message: "Member not found" });
 
-    member.role = req.body.role;
+    const nextRole = String(req.body.role || "").trim();
+    if (!validMemberRoles.has(nextRole)) {
+      return res.status(400).json({ message: "Invalid role" });
+    }
+
+    if (String(req.params.userId) === String(team.admin) && nextRole !== "admin") {
+      return res.status(400).json({
+        message: "Cannot change current admin role here. Transfer admin first.",
+      });
+    }
+
+    member.role = nextRole;
     await team.save();
 
     invalidateTeam(team._id);
@@ -253,6 +266,13 @@ router.post("/:teamId/leave", protect, async (req, res) => {
       return res
         .status(400)
         .json({ message: "Admin cannot leave. Transfer admin role first." });
+    }
+
+    const isMember = team.members.some(
+      (m) => String(m.user) === String(req.user._id)
+    );
+    if (!isMember) {
+      return res.status(400).json({ message: "You are not a member of this team" });
     }
 
     team.members = team.members.filter(
