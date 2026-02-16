@@ -13,6 +13,16 @@ let screenStream = null;
 
 const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
 
+const uniqueLiveTracks = (tracks) => {
+  const seen = new Set();
+  return tracks.filter((track) => {
+    if (!track || track.readyState !== "live") return false;
+    if (seen.has(track.id)) return false;
+    seen.add(track.id);
+    return true;
+  });
+};
+
 const emitRemoteMediaUpdate = (socketId) => {
   const peer = peers.get(socketId);
   if (!peer) return;
@@ -24,7 +34,7 @@ const emitRemoteMediaUpdate = (socketId) => {
 
   receivers.forEach((receiver) => {
     const track = receiver.track;
-    if (!track || track.readyState !== "live") return;
+    if (!track) return;
 
     if (track.kind === "audio") {
       audioTracks.push(track);
@@ -42,13 +52,17 @@ const emitRemoteMediaUpdate = (socketId) => {
     }
   });
 
+  const liveAudioTracks = uniqueLiveTracks(audioTracks);
+  const liveCameraTracks = uniqueLiveTracks(cameraTracks);
+  const liveScreenTracks = uniqueLiveTracks(screenTracks);
+
   window.dispatchEvent(
     new CustomEvent("webrtc:remote-media", {
       detail: {
         socketId,
-        audioStream: audioTracks.length ? new MediaStream(audioTracks) : null,
-        cameraStream: cameraTracks.length ? new MediaStream(cameraTracks) : null,
-        screenStream: screenTracks.length ? new MediaStream(screenTracks) : null,
+        audioStream: liveAudioTracks.length ? new MediaStream(liveAudioTracks) : null,
+        cameraStream: liveCameraTracks.length ? new MediaStream(liveCameraTracks) : null,
+        screenStream: liveScreenTracks.length ? new MediaStream(liveScreenTracks) : null,
       },
     })
   );
@@ -73,6 +87,17 @@ const createPeerConnection = (socketId, socket) => {
   };
 
   pc.onconnectionstatechange = () => {
+    window.dispatchEvent(
+      new CustomEvent("webrtc:peer-state", {
+        detail: {
+          socketId,
+          connectionState: pc.connectionState,
+          iceConnectionState: pc.iceConnectionState,
+          signalingState: pc.signalingState,
+        },
+      })
+    );
+
     if (["failed", "closed", "disconnected"].includes(pc.connectionState)) {
       emitRemoteMediaUpdate(socketId);
     }
@@ -244,6 +269,9 @@ export const startAudio = async () => {
       echoCancellation: true,
       noiseSuppression: true,
       autoGainControl: true,
+      channelCount: 1,
+      sampleRate: 48000,
+      sampleSize: 16,
     },
   });
 

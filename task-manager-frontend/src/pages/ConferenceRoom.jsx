@@ -82,6 +82,7 @@ function RemoteAudioPlayer({ stream }) {
       if (element.srcObject !== stream) {
         element.srcObject = stream;
       }
+      element.volume = 0.9;
       element.play().catch(() => {});
       return;
     }
@@ -419,6 +420,7 @@ export default function ConferenceRoom() {
     const onRemoteMedia = (event) => {
       const { socketId, audioStream, cameraStream, screenStream } = event.detail || {};
       if (!socketId) return;
+      if (socketId === mySocketId) return;
 
       setRemoteMedia((prev) => ({
         ...prev,
@@ -434,6 +436,17 @@ export default function ConferenceRoom() {
       } else {
         setScreenSharer((prev) => (prev === socketId ? null : prev));
       }
+    };
+
+    const onPeerState = (event) => {
+      const { socketId, connectionState, iceConnectionState, signalingState } = event.detail || {};
+      if (!socketId || socketId === mySocketId) return;
+      console.log("[webrtc] peer-state", {
+        socketId,
+        connectionState,
+        iceConnectionState,
+        signalingState,
+      });
     };
 
     const onUserJoined = async ({ socketId }) => {
@@ -526,6 +539,7 @@ export default function ConferenceRoom() {
     };
 
     window.addEventListener("webrtc:remote-media", onRemoteMedia);
+    window.addEventListener("webrtc:peer-state", onPeerState);
 
     socket.on("conference:user-joined", onUserJoined);
     socket.on("conference:offer", onOffer);
@@ -546,6 +560,7 @@ export default function ConferenceRoom() {
 
     return () => {
       window.removeEventListener("webrtc:remote-media", onRemoteMedia);
+      window.removeEventListener("webrtc:peer-state", onPeerState);
 
       socket.off("conference:user-joined", onUserJoined);
       socket.off("conference:offer", onOffer);
@@ -565,6 +580,29 @@ export default function ConferenceRoom() {
       socket.off("conference:error", onConferenceError);
     };
   }, [camOn, conferenceId, emitMediaUpdate, handleConferenceEnded, leaveConferenceLocally, micOn, mySocketId, showNotification, socket]);
+
+  useEffect(() => {
+    if (!socket || !mySocketId) return;
+
+    const retries = [];
+    remoteParticipants.forEach((participant) => {
+      const media = remoteMedia[participant.socketId];
+      const hasAudio = Boolean(media?.audioStream);
+      const hasVideo = Boolean(media?.cameraStream || media?.screenStream);
+
+      if (hasAudio || hasVideo) return;
+
+      const timeoutId = window.setTimeout(() => {
+        createOffer(participant.socketId, socket).catch((error) => {
+          console.warn("Retry offer failed", participant.socketId, error);
+        });
+      }, 1500);
+
+      retries.push(timeoutId);
+    });
+
+    return () => retries.forEach((id) => window.clearTimeout(id));
+  }, [mySocketId, remoteMedia, remoteParticipants, socket]);
 
   useEffect(() => {
     const interval = window.setInterval(() => {
