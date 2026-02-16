@@ -163,11 +163,6 @@ const renegotiatePeer = async (socketId) => {
   }
 };
 
-const renegotiateAllPeers = async () => {
-  const ids = Array.from(peers.keys());
-  await Promise.all(ids.map((id) => renegotiatePeer(id)));
-};
-
 const upsertSender = async (peer, key, track, stream) => {
   const existing = peer.senders[key];
 
