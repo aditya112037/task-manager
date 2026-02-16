@@ -50,8 +50,15 @@ function getCreateTaskHandler(router) {
   return layer.route.stack[layer.route.stack.length - 1].handle;
 }
 
-test('POST /:teamId returns 404 when team does not exist', async () => {
-  const router = loadRouterWithMocks({ teamFindById: async () => null });
+test('POST /:teamId returns 404 when teamId is malformed', async () => {
+  let findByIdCalls = 0;
+  const router = loadRouterWithMocks({
+    teamFindById: async () => {
+      findByIdCalls += 1;
+      return null;
+    },
+  });
+
   const handler = getCreateTaskHandler(router);
 
   const req = {
@@ -77,4 +84,5 @@ test('POST /:teamId returns 404 when team does not exist', async () => {
 
   assert.equal(statusCode, 404);
   assert.deepEqual(body, { message: 'Team not found' });
+  assert.equal(findByIdCalls, 0);
 });

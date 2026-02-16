@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const TTask = require("../models/TTask");
 const Team = require("../models/team");
+const mongoose = require("mongoose");
 const TaskComment = require("../models/TaskComment");
 const { protect } = require("../middleware/auth");
 
@@ -81,6 +82,9 @@ router.get("/:teamId/extensions/pending", protect, async (req, res) => {
 /* ---------------- CREATE TASK ---------------- */
 router.post("/:teamId", protect, async (req, res) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.teamId))
+      return res.status(404).json({ message: "Team not found" });
+
     const team = await Team.findById(req.params.teamId);
     if (!team) return res.status(404).json({ message: "Team not found" });
 
