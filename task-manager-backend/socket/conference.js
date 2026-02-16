@@ -295,8 +295,8 @@ module.exports = function registerConferenceSocket(io, socket) {
         role: member.role,
         name: user.name,
         socketId: socket.id,
-        micOn: true,
-        camOn: true,
+        micOn: false,
+        camOn: false,
       });
 
       // ✅ FIXED: Cancel any pending empty timeout (should be none, but safe)
@@ -417,8 +417,8 @@ module.exports = function registerConferenceSocket(io, socket) {
         role: member.role,
         name: user.name,
         socketId: socket.id,
-        micOn: true,
-        camOn: true,
+        micOn: false,
+        camOn: false,
       });
 
       // Notify others

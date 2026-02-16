@@ -46,7 +46,6 @@ import {
   createOffer,
   getAudioStream,
   getCameraStream,
-  getMicEnabled,
   getScreenStream,
   handleAnswer as handleWebRTCAnswer,
   handleIceCandidate as handleWebRTCIceCandidate,
@@ -388,22 +387,10 @@ export default function ConferenceRoom() {
         console.warn("Conference join request skipped by lock state");
       }
 
-      try {
-        await startAudio();
-        const enabled = getMicEnabled();
-        setMicOn(enabled);
-      } catch {
-        setMicOn(false);
-        showNotification("Microphone permission denied", "warning");
-      }
-
-      try {
-        await startCamera();
-        setCamOn(true);
-      } catch {
-        setCamOn(false);
-        showNotification("Camera permission denied", "warning");
-      }
+      // Conference starts with mic and camera off by default.
+      setMicOn(false);
+      setCamOn(false);
+      emitMediaUpdate(false, false);
     };
 
     join();
@@ -412,7 +399,7 @@ export default function ConferenceRoom() {
       cleanupConference();
       cleanupWebRTC();
     };
-  }, [conferenceId, navigate, showNotification, socket]);
+  }, [conferenceId, emitMediaUpdate, navigate, showNotification, socket]);
 
   useEffect(() => {
     if (!socket || !conferenceId) return;

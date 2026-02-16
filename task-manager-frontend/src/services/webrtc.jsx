@@ -5,7 +5,7 @@
    - stable peer lifecycle
 ==================================================== */
 
-const peers = new Map(); // socketId -> { pc, senders: {audio,camera,screen} }
+const peers = new Map(); // socketId -> { pc, socket, senders: {audio,camera,screen}, makingOffer }
 
 let audioStream = null;
 let cameraStream = null;
@@ -115,6 +115,8 @@ const getOrCreatePeer = (socketId, socket) => {
   const pc = createPeerConnection(socketId, socket);
   const peer = {
     pc,
+    socket,
+    makingOffer: false,
     senders: {
       audio: null,
       camera: null,
@@ -123,6 +125,36 @@ const getOrCreatePeer = (socketId, socket) => {
   };
   peers.set(socketId, peer);
   return peer;
+};
+
+const renegotiatePeer = async (socketId) => {
+  const peer = peers.get(socketId);
+  if (!peer || !peer.socket) return;
+  if (peer.makingOffer) return;
+  if (peer.pc.signalingState !== "stable") return;
+
+  try {
+    peer.makingOffer = true;
+    const offer = await peer.pc.createOffer({
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: true,
+    });
+    await peer.pc.setLocalDescription(offer);
+
+    peer.socket.emit("conference:offer", {
+      to: socketId,
+      offer,
+    });
+  } catch {
+    // ignore renegotiation races
+  } finally {
+    peer.makingOffer = false;
+  }
+};
+
+const renegotiateAllPeers = async () => {
+  const ids = Array.from(peers.keys());
+  await Promise.all(ids.map((id) => renegotiatePeer(id)));
 };
 
 const upsertSender = async (peer, key, track, stream) => {
@@ -293,6 +325,7 @@ export const startAudio = async () => {
 
   audioStream = stream;
   await syncAllPeerTracks();
+  await renegotiateAllPeers();
   return audioStream;
 };
 
@@ -317,6 +350,7 @@ export const destroyAudio = async () => {
   audioStream.getTracks().forEach((t) => t.stop());
   audioStream = null;
   await syncAllPeerTracks();
+  await renegotiateAllPeers();
 };
 
 export const startCamera = async () => {
@@ -332,6 +366,7 @@ export const startCamera = async () => {
   });
 
   await syncAllPeerTracks();
+  await renegotiateAllPeers();
   return cameraStream;
 };
 
@@ -340,6 +375,7 @@ export const stopCamera = async () => {
   cameraStream.getTracks().forEach((t) => t.stop());
   cameraStream = null;
   await syncAllPeerTracks();
+  await renegotiateAllPeers();
 };
 
 export const startScreen = async () => {
@@ -360,6 +396,7 @@ export const startScreen = async () => {
   }
 
   await syncAllPeerTracks();
+  await renegotiateAllPeers();
   return screenStream;
 };
 
@@ -368,6 +405,7 @@ export const stopScreen = async () => {
   screenStream.getTracks().forEach((t) => t.stop());
   screenStream = null;
   await syncAllPeerTracks();
+  await renegotiateAllPeers();
 };
 
 export const getAudioStream = () => audioStream;

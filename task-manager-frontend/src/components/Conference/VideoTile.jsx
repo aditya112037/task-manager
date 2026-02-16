@@ -91,7 +91,7 @@ useEffect(() => {
         ref={ref}
         autoPlay
         playsInline
-        muted={isLocal}
+        muted
         style={{
           width: "100%",
           height: "100%",
