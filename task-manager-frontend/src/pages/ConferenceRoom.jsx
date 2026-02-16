@@ -50,6 +50,7 @@ import {
   startScreen,
   stopScreen,
   syncPeerTracks,
+  renegotiatePeer,
   startSpeakerDetection,
   stopSpeakerDetection,
   getCameraStream,
@@ -78,10 +79,9 @@ export default function ConferenceRoom() {
   const [selectedParticipantId, setSelectedParticipantId] = useState(null);
   const [participantsPanelOpen, setParticipantsPanelOpen] = useState(true);
 
-  // ✅ ISSUE 2: Fix remoteStreams structure
-  const [remoteStreams, setRemoteStreams] = useState({}); // { socketId: { camera?: MediaStream, screen?: MediaStream } }
+  const [remoteStreams, setRemoteStreams] = useState({});
   const [layout, setLayout] = useState(LAYOUT.GRID);
-  const [screenSharer, setScreenSharer] = useState(null); // socketId of who's sharing screen
+  const [screenSharer, setScreenSharer] = useState(null);
   const [raisedHands, setRaisedHands] = useState([]);
   const [participants, setParticipants] = useState([]);
   const [handRaised, setHandRaised] = useState(false);
@@ -99,7 +99,6 @@ export default function ConferenceRoom() {
   const hasJoinedRef = useRef(false);
   const conferenceEndedRef = useRef(false);
 
-  // ✅ FIX 3: Proper role detection with memoization
   const myParticipant = useMemo(() => {
     if (!currentUser?._id || !participants.length) return null;
     return participants.find(
@@ -141,12 +140,13 @@ export default function ConferenceRoom() {
     navigate("/teams");
   }, [navigate, showNotification]);
 
+  // ✅ STEP 1: Fix Mic Toggle
   const handleToggleMic = useCallback(async () => {
     if (speakerModeEnabled && activeSpeaker !== socket.id && !isAdminOrManager) {
       showNotification("Only the active speaker can unmute", "warning");
       return;
     }
-    
+
     try {
       if (micOn) {
         stopAudio();
@@ -154,19 +154,27 @@ export default function ConferenceRoom() {
       } else {
         await startAudio();
         setMicOn(true);
+
+        // 🔥 IMPORTANT - Sync with all peers
+        getPeerIds().forEach(id => {
+          syncPeerTracks(id);
+          renegotiatePeer(id, socket);
+        });
       }
-      
+
       socket.emit("conference:media-update", {
         conferenceId,
         micOn: !micOn,
         camOn,
       });
+
     } catch (error) {
       console.error("Failed to toggle microphone:", error);
       showNotification("Failed to toggle microphone", "error");
     }
-  }, [speakerModeEnabled, activeSpeaker, socket.id, isAdminOrManager, micOn, camOn, conferenceId, showNotification]);
+  }, [micOn, camOn, speakerModeEnabled, activeSpeaker, socket.id, isAdminOrManager, socket, conferenceId, showNotification]);
 
+  // ✅ STEP 2: Fix Camera Toggle
   const handleToggleCam = useCallback(async () => {
     try {
       if (camOn) {
@@ -175,18 +183,25 @@ export default function ConferenceRoom() {
       } else {
         await startCamera();
         setCamOn(true);
+
+        // 🔥 IMPORTANT - Sync with all peers
+        getPeerIds().forEach(id => {
+          syncPeerTracks(id);
+          renegotiatePeer(id, socket);
+        });
       }
-      
+
       socket.emit("conference:media-update", {
         conferenceId,
         camOn: !camOn,
         micOn,
       });
+
     } catch (error) {
       console.error("Failed to toggle camera:", error);
       showNotification("Failed to toggle camera", "error");
     }
-  }, [camOn, micOn, conferenceId, socket, showNotification]);
+  }, [camOn, micOn, socket, conferenceId, showNotification]);
 
   const handleRaiseHand = useCallback(() => {
     if (!handRaised) {
@@ -197,15 +212,18 @@ export default function ConferenceRoom() {
     setHandRaised(v => !v);
   }, [handRaised]);
 
+  // ✅ STEP 5: Fix Screen Share
   const handleScreenShare = useCallback(async () => {
     try {
       if (!sharingScreen) {
         await startScreen();
         
-        // ✅ ISSUE 3: Sync with all peers, not just streams
-        getPeerIds().forEach(syncPeerTracks);
+        // 🔥 IMPORTANT - Sync with all peers
+        getPeerIds().forEach(id => {
+          syncPeerTracks(id);
+          renegotiatePeer(id, socket);
+        });
         
-        // ✅ ISSUE 5: Notify server about screen share
         socket.emit("conference:screen-share", { 
           active: true,
           conferenceId 
@@ -217,7 +235,6 @@ export default function ConferenceRoom() {
       } else {
         stopScreen();
         
-        // ✅ ISSUE 5: Notify server about screen share stop
         socket.emit("conference:screen-share", { 
           active: false,
           conferenceId 
@@ -280,14 +297,12 @@ export default function ConferenceRoom() {
       }
 
       try {
-        // ✅ Join conference FIRST (Zoom-style)
         hasJoinedRef.current = true;
         const joinSuccess = joinConference(conferenceId);
         if (!joinSuccess) {
           showNotification("Failed to join conference", "error");
         }
 
-        // Start media independently (non-blocking)
         startAudio().catch(() => {
           showNotification("Microphone permission denied", "warning");
         });
@@ -360,7 +375,6 @@ export default function ConferenceRoom() {
     }
   }, [micOn]);
 
-  // ✅ ISSUE 2: Updated remote stream handler
   useEffect(() => {
     const handler = (e) => {
       const { socketId, kind, stream } = e.detail;
@@ -377,25 +391,22 @@ export default function ConferenceRoom() {
     return () => window.removeEventListener("webrtc:remote-stream", handler);
   }, []);
 
+  // ✅ STEP 4: Fix handleUserJoined
   const handleUserJoined = useCallback(
     async ({ socketId }) => {
       if (!mountedRef.current) return;
 
       console.log("User joined, creating offer for:", socketId);
 
-      // 🚫 DO NOT offer to yourself
       if (socketId === socket.id) return;
 
-      // ✅ Only if I was already in the room
       if (!hasJoinedRef.current) return;
 
-      // 1️⃣ Create peer
       const pc = createPeer(socketId, socket);
 
-      // ✅ Sync tracks with this peer
       syncPeerTracks(socketId);
+      await renegotiatePeer(socketId, socket);
 
-      // 2️⃣ Create offer
       try {
         const offer = await pc.createOffer({
           offerToReceiveAudio: true,
@@ -420,7 +431,6 @@ export default function ConferenceRoom() {
   useEffect(() => {
     if (!currentUser || !socket?.id) return;
 
-    // Inject local participant immediately (UI truth)
     setParticipants(prev => {
       if (prev.some(p => p.socketId === socket.id)) return prev;
 
@@ -428,7 +438,7 @@ export default function ConferenceRoom() {
         userId: currentUser._id,
         socketId: socket.id,
         name: currentUser.name,
-        role: "participant", // will be corrected by server
+        role: "participant",
         micOn,
         camOn,
       }];
@@ -446,8 +456,8 @@ export default function ConferenceRoom() {
       try {
         await pc.setRemoteDescription(offer);
         
-        // ✅ Sync tracks with this peer
         syncPeerTracks(from);
+        await renegotiatePeer(from, socket);
 
         const answer = await pc.createAnswer();
         await pc.setLocalDescription(answer);
@@ -512,7 +522,6 @@ export default function ConferenceRoom() {
     }
   }, [activeSpeaker, screenSharer]);
 
-  // ✅ ISSUE 5: Handle screen share updates from others
   const handleScreenShareUpdate = useCallback(({ socketId, active }) => {
     if (!mountedRef.current) return;
     
@@ -598,7 +607,6 @@ export default function ConferenceRoom() {
       showNotification("You have been removed from the conference by the admin", "error");
     };
 
-    // Setup socket listeners
     socket.on("conference:user-joined", handleUserJoined);
     socket.on("conference:offer", handleOffer);
     socket.on("conference:answer", handleAnswer);
@@ -650,7 +658,7 @@ export default function ConferenceRoom() {
     handleScreenShareUpdate,
   ]);
   
-  // ✅ ISSUE 4: Speaker detection with guard
+  // Speaker detection with guard
   useEffect(() => {
     if (!speakerModeEnabled || !micOn) return;
 
@@ -753,14 +761,12 @@ export default function ConferenceRoom() {
     setLayout(newLayout);
   }, []);
 
-  // Helper to get all camera streams for display
   const allCameraStreams = useMemo(() => {
     return Object.entries(remoteStreams)
       .filter(([socketId, streams]) => streams?.camera)
       .map(([socketId, streams]) => [socketId, streams.camera]);
   }, [remoteStreams]);
 
-  // Helper to get screen stream if available
   const getRemoteScreenStream = (socketId) => {
     return remoteStreams[socketId]?.screen;
   };
@@ -772,6 +778,8 @@ export default function ConferenceRoom() {
   const participantsLoaded = Array.isArray(participants);
   const inConference = Boolean(conferenceId);
 
+  // The rest of the JSX remains exactly the same...
+  // (I'll include it but it's unchanged from your working version)
   return (
     <Box sx={{ display: "flex", height: "100vh", background: "#000" }}>
       <Box sx={{ 
