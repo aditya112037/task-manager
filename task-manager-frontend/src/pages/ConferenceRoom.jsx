@@ -235,6 +235,13 @@ export default function ConferenceRoom() {
     () => Object.entries(remoteMedia).filter(([, media]) => media?.audioStream),
     [remoteMedia]
   );
+  const receivingAudioPeerCount = useMemo(
+    () =>
+      remoteAudioEntries.filter(([, media]) =>
+        media?.audioStream?.getAudioTracks?.().some((t) => t.readyState === "live")
+      ).length,
+    [remoteAudioEntries]
+  );
 
   const leaveConferenceLocally = useCallback(
     async (navigateBack = true) => {
@@ -270,11 +277,6 @@ export default function ConferenceRoom() {
   }, [navigate, showNotification]);
 
   const handleToggleMic = useCallback(async () => {
-    if (speakerModeEnabled && activeSpeaker && activeSpeaker !== mySocketId && !isAdminOrManager) {
-      showNotification("Only the active speaker can unmute", "warning");
-      return;
-    }
-
     try {
       if (!getAudioStream()) {
         await startAudio();
@@ -292,7 +294,7 @@ export default function ConferenceRoom() {
       console.error("Microphone toggle failed", error);
       showNotification("Microphone access failed", "error");
     }
-  }, [activeSpeaker, camOn, emitMediaUpdate, isAdminOrManager, micOn, mySocketId, showNotification, speakerModeEnabled]);
+  }, [camOn, emitMediaUpdate, micOn, showNotification]);
 
   const handleToggleCam = useCallback(async () => {
     try {
@@ -626,29 +628,6 @@ export default function ConferenceRoom() {
   }, [camOn, conferenceId, emitMediaUpdate, handleConferenceEnded, leaveConferenceLocally, micOn, mySocketId, showNotification, socket]);
 
   useEffect(() => {
-    if (!socket || !mySocketId) return;
-
-    const retries = [];
-    remoteParticipants.forEach((participant) => {
-      const media = remoteMedia[participant.socketId];
-      const hasAudio = Boolean(media?.audioStream);
-      const hasVideo = Boolean(media?.cameraStream || media?.screenStream);
-
-      if (hasAudio || hasVideo) return;
-
-      const timeoutId = window.setTimeout(() => {
-        createOffer(participant.socketId, socket).catch((error) => {
-          console.warn("Retry offer failed", participant.socketId, error);
-        });
-      }, 1500);
-
-      retries.push(timeoutId);
-    });
-
-    return () => retries.forEach((id) => window.clearTimeout(id));
-  }, [mySocketId, remoteMedia, remoteParticipants, socket]);
-
-  useEffect(() => {
     const interval = window.setInterval(() => {
       const hasScreen = Boolean(getScreenStream());
       setSharingScreen(hasScreen);
@@ -664,11 +643,11 @@ export default function ConferenceRoom() {
   }, [mySocketId]);
 
   useEffect(() => {
-    if (!speakerModeEnabled || !micOn) {
-      if (speakingRef.current) {
+    if (!micOn) {
+      if (speakingRef.current && speakerModeEnabled) {
         sendSpeakingStatus(false);
-        speakingRef.current = false;
       }
+      speakingRef.current = false;
       setMicLevel(0);
       return;
     }
@@ -688,12 +667,14 @@ export default function ConferenceRoom() {
       analyser.getByteFrequencyData(data);
 
       const avg = data.reduce((sum, value) => sum + value, 0) / data.length;
-      console.log("Mic avg level:", avg);
+      if (Math.random() < 0.02) {
+        console.log("Mic avg level:", avg);
+      }
       setMicLevel((prev) => {
         const smooth = avg * 0.25 + prev * 0.75;
         const speakingNow = smooth > 5;
 
-        if (speakingNow !== speakingRef.current) {
+        if (speakerModeEnabled && speakingNow !== speakingRef.current) {
           speakingRef.current = speakingNow;
           sendSpeakingStatus(speakingNow);
         }
@@ -1091,7 +1072,6 @@ export default function ConferenceRoom() {
             <span>
               <IconButton
                 onClick={handleToggleMic}
-                disabled={speakerModeEnabled && activeSpeaker && activeSpeaker !== mySocketId && !isAdminOrManager}
                 sx={{
                   position: "relative",
                   backgroundColor: "#1e1e1e",
@@ -1198,6 +1178,12 @@ export default function ConferenceRoom() {
               Screen Sharing
             </Typography>
           )}
+          <Typography color={micOn ? "#4caf50" : "#ff9800"} variant="caption">
+            Audio TX: {micOn ? "On" : "Off"}
+          </Typography>
+          <Typography color={receivingAudioPeerCount > 0 ? "#4caf50" : "#ff9800"} variant="caption">
+            Audio RX Peers: {receivingAudioPeerCount}
+          </Typography>
         </Box>
       </Box>
 
