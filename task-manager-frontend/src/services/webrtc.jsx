@@ -12,16 +12,6 @@ let cameraStream = null;
 let screenStream = null;
 let renegotiateTimeout = null;
 
-const scheduleRenegotiation = () => {
-  if (renegotiateTimeout) return;
-
-  renegotiateTimeout = setTimeout(async () => {
-    renegotiateTimeout = null;
-    scheduleRenegotiation();
-  }, 150);
-};
-
-
 const ICE_SERVERS = [{ urls: "stun:stun.l.google.com:19302" }];
 
 const uniqueLiveTracks = (tracks) => {
@@ -138,6 +128,49 @@ const getOrCreatePeer = (socketId, socket) => {
   return peer;
 };
 
+const renegotiatePeer = async (socketId) => {
+  const peer = peers.get(socketId);
+  if (!peer || !peer.socket) return;
+  if (peer.makingOffer) return;
+  if (peer.pc.signalingState !== "stable") return;
+
+  try {
+    peer.makingOffer = true;
+    const offer = await peer.pc.createOffer({
+      offerToReceiveAudio: true,
+      offerToReceiveVideo: true,
+    });
+
+    if (peer.pc.signalingState !== "stable") return;
+
+    await peer.pc.setLocalDescription(offer);
+    peer.socket.emit("conference:offer", {
+      to: socketId,
+      offer,
+    });
+  } catch {
+    // ignore renegotiation race errors
+  } finally {
+    peer.makingOffer = false;
+  }
+};
+
+const renegotiateAllPeers = async () => {
+  const ids = Array.from(peers.keys());
+  await Promise.all(ids.map((id) => renegotiatePeer(id)));
+};
+
+const scheduleRenegotiation = () => {
+  if (renegotiateTimeout) {
+    clearTimeout(renegotiateTimeout);
+  }
+
+  renegotiateTimeout = setTimeout(async () => {
+    renegotiateTimeout = null;
+    await renegotiateAllPeers();
+  }, 120);
+};
+
 
 
 const upsertSender = async (peer, key, track, stream) => {
@@ -188,19 +221,9 @@ export const createPeer = async (socketId, socket) => {
 };
 
 export const createOffer = async (socketId, socket) => {
-  const peer = getOrCreatePeer(socketId, socket);
+  getOrCreatePeer(socketId, socket);
   await syncPeerTracks(socketId);
-
-  const offer = await peer.pc.createOffer({
-    offerToReceiveAudio: true,
-    offerToReceiveVideo: true,
-  });
-  await peer.pc.setLocalDescription(offer);
-
-  socket.emit("conference:offer", {
-    to: socketId,
-    offer,
-  });
+  await renegotiatePeer(socketId);
 };
 
 export const handleOffer = async ({ from, offer }, socket) => {

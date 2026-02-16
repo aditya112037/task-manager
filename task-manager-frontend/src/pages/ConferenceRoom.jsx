@@ -72,22 +72,75 @@ const getParticipantName = (participant) => {
 
 function RemoteAudioPlayer({ stream }) {
   const audioRef = useRef(null);
+  const streamIdRef = useRef(null);
+  const fadeTimerRef = useRef(null);
+  const unmuteTimerRef = useRef(null);
 
   useEffect(() => {
     const element = audioRef.current;
     if (!element) return;
 
+    if (fadeTimerRef.current) {
+      clearInterval(fadeTimerRef.current);
+      fadeTimerRef.current = null;
+    }
+    if (unmuteTimerRef.current) {
+      clearTimeout(unmuteTimerRef.current);
+      unmuteTimerRef.current = null;
+    }
+
     if (stream) {
       if (element.srcObject !== stream) {
         element.srcObject = stream;
       }
-      element.volume = 1;
+
+      const streamId =
+        stream.id || stream.getAudioTracks?.()[0]?.id || `${Date.now()}`;
+      const isNewStream = streamIdRef.current !== streamId;
+      streamIdRef.current = streamId;
+
+      if (isNewStream) {
+        element.muted = true;
+        element.volume = 0;
+      } else {
+        element.muted = false;
+        element.volume = 0.85;
+      }
+
       element.play().catch(() => {});
+
+      if (isNewStream) {
+        unmuteTimerRef.current = setTimeout(() => {
+          element.muted = false;
+          let step = 0;
+          const maxSteps = 8;
+          fadeTimerRef.current = setInterval(() => {
+            step += 1;
+            element.volume = Math.min(0.85, (0.85 * step) / maxSteps);
+            if (step >= maxSteps && fadeTimerRef.current) {
+              clearInterval(fadeTimerRef.current);
+              fadeTimerRef.current = null;
+            }
+          }, 80);
+        }, 300);
+      }
+
       return;
     }
 
     element.srcObject = null;
+    streamIdRef.current = null;
+    element.muted = true;
+    element.volume = 0;
   }, [stream]);
+
+  useEffect(
+    () => () => {
+      if (fadeTimerRef.current) clearInterval(fadeTimerRef.current);
+      if (unmuteTimerRef.current) clearTimeout(unmuteTimerRef.current);
+    },
+    []
+  );
 
   return <audio ref={audioRef} autoPlay playsInline />;
 }
