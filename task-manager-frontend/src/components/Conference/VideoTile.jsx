@@ -36,8 +36,14 @@ useEffect(() => {
   if (!videoEl) return;
   if (!isRenderableStream(stream)) return;
 
-  if (videoEl.srcObject !== stream) {
-    videoEl.srcObject = stream;
+  // Force tiles to render video tracks only. Audio is handled separately.
+  const videoTracks = stream
+    .getVideoTracks()
+    .filter((track) => track.readyState === "live");
+  const videoOnlyStream = new MediaStream(videoTracks);
+
+  if (videoEl.srcObject !== videoOnlyStream) {
+    videoEl.srcObject = videoOnlyStream;
     videoEl.play().catch(() => {});
   }
 
