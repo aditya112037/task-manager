@@ -138,30 +138,7 @@ const getOrCreatePeer = (socketId, socket) => {
   return peer;
 };
 
-const renegotiatePeer = async (socketId) => {
-  const peer = peers.get(socketId);
-  if (!peer || !peer.socket) return;
-  if (peer.makingOffer) return;
-  if (peer.pc.signalingState !== "stable") return;
 
-  try {
-    peer.makingOffer = true;
-    const offer = await peer.pc.createOffer({
-      offerToReceiveAudio: true,
-      offerToReceiveVideo: true,
-    });
-    await peer.pc.setLocalDescription(offer);
-
-    peer.socket.emit("conference:offer", {
-      to: socketId,
-      offer,
-    });
-  } catch {
-    // ignore renegotiation races
-  } finally {
-    peer.makingOffer = false;
-  }
-};
 
 const upsertSender = async (peer, key, track, stream) => {
   const existing = peer.senders[key];
