@@ -43,6 +43,7 @@ export default function TeamTaskItem({
   onDelete,
   onStatusChange,
   onQuickComplete,
+  onExtensionRequested,
   currentUserId,
   isAdminOrManager = false,
 }) {
@@ -311,6 +312,7 @@ export default function TeamTaskItem({
           open={openExtensionModal}
           onClose={() => setOpenExtensionModal(false)}
           task={task}
+          onSubmitted={onExtensionRequested}
         />
       )}
     </>

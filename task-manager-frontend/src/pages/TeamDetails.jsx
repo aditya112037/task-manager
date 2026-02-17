@@ -175,8 +175,8 @@ export default function TeamDetails() {
      LOAD TASKS
      🚨 CRITICAL FIX: Use current role, not stale closure
   --------------------------------------------------- */
-  const fetchTeamTasks = useCallback(async () => {
-    setLoadingTasks(true);
+  const fetchTeamTasks = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoadingTasks(true);
     try {
       const res = await teamTasksAPI.getTeamTasks(routeTeamId);
       let tasks = res.data || [];
@@ -194,7 +194,7 @@ export default function TeamDetails() {
     } catch (err) {
       console.error("Task load error:", err);
     } finally {
-      setLoadingTasks(false);
+      if (!silent) setLoadingTasks(false);
     }
   }, [routeTeamId, myRole, user]);
 
@@ -228,7 +228,7 @@ export default function TeamDetails() {
     const onTasksInvalidate = ({ detail }) => {
       if (detail?.teamId && String(detail.teamId) !== String(routeTeamId)) return;
       console.log("🔄 TeamDetails: invalidate:tasks received");
-      fetchTeamTasks();
+      fetchTeamTasks({ silent: true });
     };
 
     const onTeamsInvalidate = ({ detail }) => {
@@ -247,7 +247,7 @@ export default function TeamDetails() {
     const onCommentsInvalidate = ({ detail }) => {
       if (!detail?.taskId) return;
       // Check if this task belongs to current team
-      fetchTeamTasks();
+      fetchTeamTasks({ silent: true });
     };
 
     window.addEventListener("invalidate:tasks", onTasksInvalidate);
@@ -538,6 +538,59 @@ export default function TeamDetails() {
       refreshLockRef.current = false;
     }, 1000);
   }, [showSnack]);
+
+  /* ---------------------------------------------------
+     REQUEST EXTENSION - optimistic update (no hard reload feel)
+  --------------------------------------------------- */
+  const handleRequestExtension = async (taskId, payload) => {
+    const optimisticRequestedAt = new Date().toISOString();
+
+    setTeamTasks((prev) =>
+      prev.map((t) =>
+        t._id === taskId
+          ? {
+              ...t,
+              extensionRequest: {
+                ...(t.extensionRequest || {}),
+                requested: true,
+                status: "pending",
+                reason: payload.reason,
+                requestedDueDate: payload.requestedDueDate,
+                requestedAt: optimisticRequestedAt,
+                requestedBy: user,
+                reviewedBy: null,
+                reviewedAt: null,
+              },
+            }
+          : t
+      )
+    );
+
+    try {
+      const res = await teamTasksAPI.requestExtension(taskId, payload);
+      if (res?.data?._id) {
+        setTeamTasks((prev) =>
+          prev.map((t) => (t._id === res.data._id ? res.data : t))
+        );
+
+        if (["admin", "manager"].includes(myRole)) {
+          setPendingExtensions((prev) => {
+            const idx = prev.findIndex((t) => t._id === res.data._id);
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = res.data;
+              return next;
+            }
+            return [res.data, ...prev];
+          });
+        }
+      }
+    } catch (err) {
+      fetchTeamTasks();
+      fetchPendingExtensions();
+      throw err;
+    }
+  };
 
   /* ---------------------------------------------------
      APPROVE - FIXED with optimistic update
@@ -1178,6 +1231,7 @@ export default function TeamDetails() {
                   onDelete={() => handleDeleteTask(t._id)}
                   onStatusChange={(taskId, newStatus) => handleStatusChange(taskId, newStatus)}
                   onQuickComplete={() => handleQuickComplete(t._id)}
+                  onExtensionRequested={handleRequestExtension}
                 />
               ))}
             </Stack>

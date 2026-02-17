@@ -12,7 +12,12 @@ import {
 } from "@mui/material";
 import { teamTasksAPI } from "../../services/api";
 
-export default function ExtensionRequestModal({ open, onClose, task }) {
+export default function ExtensionRequestModal({
+  open,
+  onClose,
+  task,
+  onSubmitted,
+}) {
   const [reason, setReason] = useState("");
   const [requestedDueDate, setRequestedDueDate] = useState("");
   const [loading, setLoading] = useState(false);
@@ -70,12 +75,17 @@ export default function ExtensionRequestModal({ open, onClose, task }) {
     setError(null);
 
     try {
-      await teamTasksAPI.requestExtension(task._id, {
+      const requestPayload = {
         reason,
         requestedDueDate: new Date(requestedDueDate).toISOString(),
-      });
+      };
 
-      // Socket event will update UI everywhere
+      if (onSubmitted) {
+        await onSubmitted(task._id, requestPayload);
+      } else {
+        await teamTasksAPI.requestExtension(task._id, requestPayload);
+      }
+
       handleClose();
     } catch (err) {
       console.error("Extension request error:", err);
