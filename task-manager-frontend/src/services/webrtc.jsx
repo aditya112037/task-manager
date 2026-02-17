@@ -53,6 +53,12 @@ const emitRemoteMediaUpdate = (socketId) => {
     }
   });
 
+  // Fallback: if browser does not expose screen metadata for remote tracks,
+  // treat the second live video track as screen share.
+  if (screenTracks.length === 0 && cameraTracks.length > 1) {
+    screenTracks.push(cameraTracks.pop());
+  }
+
   // Guard against renegotiation artifacts that can leave multiple live
   // remote audio tracks for one peer and cause audible echo/doubling.
   const liveAudioTracks = uniqueLiveTracks(audioTracks).slice(0, 1);
@@ -408,6 +414,22 @@ export const stopScreen = async () => {
   if (!screenStream) return;
   screenStream.getTracks().forEach((t) => t.stop());
   screenStream = null;
+
+  const cameraTrack = cameraStream?.getVideoTracks?.()[0] || null;
+  const needsCameraRecovery =
+    cameraStream && (!cameraTrack || cameraTrack.readyState !== "live");
+
+  if (needsCameraRecovery) {
+    try {
+      cameraStream.getTracks().forEach((t) => t.stop());
+    } catch {
+      // ignore track stop errors
+    }
+    cameraStream = null;
+    await startCamera();
+    return;
+  }
+
   await syncAllPeerTracks();
   scheduleRenegotiation();
 };

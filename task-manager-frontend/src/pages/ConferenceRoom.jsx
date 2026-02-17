@@ -285,18 +285,17 @@ export default function ConferenceRoom() {
     }
 
     if (!socket || !conferenceId) return;
+    endedRef.current = true;
     socket.emit("conference:end", { conferenceId });
 
     if (endFallbackTimerRef.current) {
       clearTimeout(endFallbackTimerRef.current);
     }
-
-    endFallbackTimerRef.current = setTimeout(() => {
-      if (!endedRef.current) {
-        handleConferenceEnded();
-      }
-    }, 2500);
-  }, [conferenceId, handleConferenceEnded, isAdminOrManager, leaveConferenceLocally, socket]);
+    cleanupConference();
+    cleanupWebRTC();
+    setRemoteMedia({});
+    navigate("/teams");
+  }, [conferenceId, isAdminOrManager, leaveConferenceLocally, navigate, socket]);
 
   const handleToggleMic = useCallback(async () => {
     try {
