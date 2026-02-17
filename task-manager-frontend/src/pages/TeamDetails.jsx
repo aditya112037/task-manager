@@ -26,6 +26,8 @@ import {
   Card,
   CardContent,
   CardActions,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
@@ -70,6 +72,8 @@ export default function TeamDetails() {
 
   const params = new URLSearchParams(location.search);
   const forcedTab = params.get("tab");
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
   const [tab, setTab] = useState(0);
 
@@ -1024,7 +1028,7 @@ export default function TeamDetails() {
      RENDER UI
   --------------------------------------------------- */
   return (
-    <Box sx={{ px: 2, pt: { xs: 10, sm: 8 }, maxWidth: 1200, mx: "auto" }}>
+    <Box sx={{ px: { xs: 1, sm: 2 }, pt: { xs: 10, sm: 8 }, maxWidth: 1200, mx: "auto" }}>
       <Snackbar
         open={snackbar.open}
         autoHideDuration={4000}
@@ -1034,19 +1038,19 @@ export default function TeamDetails() {
       </Snackbar>
 
       {/* HEADER */}
-      <Paper sx={{ p: 3, borderRadius: 3, mb: 3, boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>
-        <Stack direction="row" justifyContent="space-between" alignItems="center">
-          <Stack direction="row" spacing={2}>
+      <Paper sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3, mb: 3, boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>
+        <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} spacing={2}>
+          <Stack direction="row" spacing={2} sx={{ width: "100%" }}>
             <Avatar sx={{ width: 70, height: 70, bgcolor: team.color, fontSize: 28 }}>
               {team.icon || "T"}
             </Avatar>
 
-            <Box>
-              <Typography variant="h5" fontWeight={700}>{team.name}</Typography>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="h5" fontWeight={700} sx={{ wordBreak: "break-word" }}>{team.name}</Typography>
               <Typography color="text.secondary">{team.description || "No description"}</Typography>
 
               {myRole && (
-                <Box sx={{ display: "flex", alignItems: "center", gap: 2, mt: 1 }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1, flexWrap: "wrap" }}>
                   <Chip
                     label={myRole.toUpperCase()}
                     color={isAdmin ? "primary" : "default"}
@@ -1069,7 +1073,7 @@ export default function TeamDetails() {
 
         <Divider sx={{ my: 2 }} />
 
-        <Tabs value={tab} onChange={(e, v) => setTab(v)}>
+        <Tabs value={tab} onChange={(e, v) => setTab(v)} variant="scrollable" scrollButtons="auto">
           <Tab label="Overview" />
           <Tab label="Members" />
           <Tab label="Tasks" />
@@ -1096,8 +1100,8 @@ export default function TeamDetails() {
       {tab === 0 && (
         <>
           {/* CONFERENCE SECTION - SOCKET-ONLY */}
-          <Paper sx={{ p: 3, borderRadius: 3, mb: 3 }}>
-            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+          <Paper sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3, mb: 3 }}>
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2, gap: 1, flexWrap: "wrap" }}>
               <Typography variant="h6" fontWeight={700}>
                 Team Conference
               </Typography>
@@ -1121,7 +1125,7 @@ export default function TeamDetails() {
           </Paper>
 
           {/* ANALYTICS SECTION */}
-          <Paper sx={{ p: 3, borderRadius: 3 }}>
+          <Paper sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3 }}>
             <TeamAnalytics team={team} tasks={teamTasks} myRole={myRole} />
 
             <Button 
@@ -1138,7 +1142,7 @@ export default function TeamDetails() {
 
       {/* MEMBERS */}
       {tab === 1 && (
-        <Paper sx={{ p: 3, borderRadius: 3 }}>
+        <Paper sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3 }}>
           <Typography variant="h6" fontWeight={700}>Team Members</Typography>
           <Stack spacing={2} sx={{ mt: 2 }}>
             {team.members?.map((m) => {
@@ -1146,12 +1150,12 @@ export default function TeamDetails() {
               const isCurrent = memberId === resolveUserId(user?._id);
 
               return (
-                <Paper key={memberId} sx={{ p: 2, display: "flex", justifyContent: "space-between" }}>
+                <Paper key={memberId} sx={{ p: 2, display: "flex", justifyContent: "space-between", flexDirection: { xs: "column", sm: "row" }, gap: 1.5 }}>
                   <Box>
                     <Typography fontWeight={600}>{m.user?.name || "User"}</Typography>
                     <Typography variant="body2" color="text.secondary">{m.role}</Typography>
                   </Box>
-                  <Stack direction="row" alignItems="center" spacing={1}>
+                  <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap">
                     {isAdmin && (
                       <FormControl size="small">
                         <Select value={m.role} onChange={(e) => handleUpdateRole(memberId, e.target.value)}>
@@ -1181,10 +1185,10 @@ export default function TeamDetails() {
 
       {/* TASKS */}
       {tab === 2 && (
-        <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+        <Paper sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3 }}>
+          <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2, gap: 1, flexWrap: "wrap" }}>
             <Typography variant="h6" fontWeight={700}>Team Tasks</Typography>
-            <Box sx={{ display: "flex", gap: 1 }}>
+            <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap", width: { xs: "100%", sm: "auto" } }}>
               <Button 
                 variant="outlined" 
                 size="small"
@@ -1197,6 +1201,7 @@ export default function TeamDetails() {
               {canEditTasks && (
                 <Button 
                   variant="contained" 
+                  fullWidth={isMobile}
                   onClick={() => {
                     setEditingTask(null);
                     setShowTaskForm(true);
@@ -1254,8 +1259,8 @@ export default function TeamDetails() {
 
       {/* EXTENSIONS */}
       {tab === 3 && (
-        <Paper sx={{ p: 3, borderRadius: 3 }}>
-          <Box sx={{ display: "flex", justifyContent:"space-between", alignItems: "center", mb: 2 }}>
+        <Paper sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3 }}>
+          <Box sx={{ display: "flex", justifyContent:"space-between", alignItems: "center", mb: 2, gap: 1, flexWrap: "wrap" }}>
             <Typography variant="h6" fontWeight={700}>Extension Requests</Typography>
             <Box sx={{ display: "flex", gap: 1 }}>
               <Button 
@@ -1308,7 +1313,7 @@ export default function TeamDetails() {
                         </Typography>
                       )}
                     </Grid>
-                    <Grid item xs={12} md={4} sx={{ display: "flex", justifyContent: "flex-end", gap: 1 }}>
+                    <Grid item xs={12} md={4} sx={{ display: "flex", justifyContent: { xs: "flex-start", md: "flex-end" }, gap: 1, flexWrap: "wrap" }}>
                       <Button
                         variant="contained"
                         color="success"
@@ -1340,7 +1345,7 @@ export default function TeamDetails() {
 
       {/* SETTINGS */}
       {tab === 4 && (
-        <Paper sx={{ p: 3, borderRadius: 3 }}>
+        <Paper sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3 }}>
           <Typography variant="h6" fontWeight={700}>Team Settings</Typography>
           {!isAdmin ? (
             <Box sx={{ mt: 2 }}>
@@ -1353,7 +1358,7 @@ export default function TeamDetails() {
             <Stack spacing={4} sx={{ mt: 2 }}>
               <Box>
                 <Typography fontWeight={600}>Invite Members</Typography>
-                <Paper sx={{ p: 2, mt: 1, display: "flex", gap: 2 }}>
+                <Paper sx={{ p: 2, mt: 1, display: "flex", gap: 2, flexDirection: { xs: "column", sm: "row" } }}>
                   <Typography sx={{ flexGrow: 1, wordBreak: "break-all" }}>
                     {inviteURL}
                   </Typography>
@@ -1379,7 +1384,7 @@ export default function TeamDetails() {
       )}
 
       {/* EDIT TEAM DIALOG */}
-      <Dialog open={editTeamDialog} onClose={() => setEditTeamDialog(false)}>
+      <Dialog open={editTeamDialog} onClose={() => setEditTeamDialog(false)} fullScreen={isMobile}>
         <DialogTitle>Edit Team</DialogTitle>
         <DialogContent>
           <Stack spacing={3} sx={{ mt: 2 }}>

@@ -142,7 +142,7 @@ export default function TeamTaskForm({ open, task, teamMembers, onCancel, onSubm
             InputLabelProps={{ shrink: true }}
           />
           
-          <Box sx={{ display: "flex", gap: 2 }}>
+          <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
             <FormControl sx={{ flex: 1 }}>
               <TextField
                 label="Color"
@@ -172,7 +172,7 @@ export default function TeamTaskForm({ open, task, teamMembers, onCancel, onSubm
               label="Icon"
               value={formData.icon}
               onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
-              sx={{ flex: 1 }}
+              sx={{ flex: 1, minWidth: { xs: "100%", sm: "auto" } }}
               helperText="Emoji or short text"
             />
           </Box>

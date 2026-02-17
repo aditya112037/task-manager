@@ -84,6 +84,9 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
           sx={{
             display: "flex",
             justifyContent: "space-between",
+            alignItems: { xs: "flex-start", sm: "center" },
+            flexDirection: { xs: "column", sm: "row" },
+            gap: 1,
             mb: 1,
           }}
         >
@@ -97,7 +100,7 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
             {task.title}
           </Typography>
 
-          <Box>
+          <Box sx={{ alignSelf: { xs: "flex-end", sm: "auto" } }}>
             <Tooltip title="Edit">
               <IconButton color="primary" onClick={() => onEdit(task)}>
                 <EditIcon />
@@ -123,7 +126,7 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
         )}
 
         {/* METADATA */}
-        <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
+        <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap", rowGap: 1 }}>
           {/* Priority */}
           <Chip
             label={task.priority}
@@ -156,7 +159,7 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
         </Stack>
 
         {/* CALENDAR BUTTONS */}
-        <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+        <Stack direction="row" spacing={2} sx={{ mb: 2, flexWrap: "wrap", rowGap: 1 }}>
           <Button
             variant="contained"
             color="secondary"
@@ -165,6 +168,7 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
               textTransform: "none",
               borderRadius: 2,
               px: 2,
+              width: { xs: "100%", sm: "auto" },
             }}
             onClick={() => {
               window.location.href = `${process.env.REACT_APP_API_URL}/api/ics/${task._id}`;
@@ -181,6 +185,7 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
               textTransform: "none",
               borderRadius: 2,
               px: 2,
+              width: { xs: "100%", sm: "auto" },
               borderColor:
                 theme.palette.mode === "dark"
                   ? "rgba(255,255,255,0.4)"
@@ -194,7 +199,7 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
         </Stack>
 
         {/* STATUS BUTTONS */}
-        <Stack direction="row" spacing={1}>
+        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }}>
           <Chip
             label="To Do"
             clickable

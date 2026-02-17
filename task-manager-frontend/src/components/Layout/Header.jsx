@@ -17,7 +17,7 @@ import { useAuth } from "../../context/AuthContext";
 const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
   const { user, logout } = useAuth();
 
-  const sidebarWidthOpen = 240;
+const sidebarWidthOpen = 240;
   const sidebarWidthClosed = 64;
 
   return (
@@ -27,11 +27,15 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
         zIndex: 1201,
         backgroundColor: (theme) => theme.palette.header?.main || theme.palette.primary.main,
         backgroundImage: 'none',
-        // Remove shadow that might create visual separation
         boxShadow: 'none',
-        // Make it flush with sidebar
-        width: `calc(100% - ${sidebarOpen ? sidebarWidthOpen : sidebarWidthClosed}px)`,
-        left: `${sidebarOpen ? sidebarWidthOpen : sidebarWidthClosed}px`,
+        width: {
+          xs: "100%",
+          md: `calc(100% - ${sidebarOpen ? sidebarWidthOpen : sidebarWidthClosed}px)`,
+        },
+        left: {
+          xs: 0,
+          md: `${sidebarOpen ? sidebarWidthOpen : sidebarWidthClosed}px`,
+        },
         right: 0,
         transition: theme => theme.transitions.create(['width', 'left'], {
           easing: theme.transitions.easing.sharp,
@@ -44,8 +48,9 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
         display: "flex", 
         justifyContent: "space-between",
         minHeight: '60px !important',
-        // Remove any left padding
-        pl: 2,
+        pl: { xs: 1, sm: 2 },
+        pr: { xs: 1, sm: 2 },
+        gap: 1,
       }}>
         {/* Sidebar Toggle Button for Mobile/Alternative */}
         <IconButton
@@ -56,11 +61,14 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
           <MenuIcon />
         </IconButton>
         
-        <Typography variant="h6" sx={{ fontWeight: "bold", color: "white" }}>
+        <Typography
+          variant="h6"
+          sx={{ fontWeight: "bold", color: "white", fontSize: { xs: "1rem", sm: "1.15rem" } }}
+        >
           Task Manager
         </Typography>
 
-        <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 0.5, sm: 1.5 } }}>
           <IconButton 
             sx={{ 
               color: "white",
@@ -87,6 +95,8 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
             sx={{ 
               color: "white", 
               borderColor: "white",
+              minWidth: { xs: "auto", sm: 80 },
+              px: { xs: 1, sm: 1.5 },
               '&:hover': {
                 borderColor: "white",
                 backgroundColor: 'rgba(255,255,255,0.1)',
@@ -94,7 +104,8 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
             }}
             onClick={logout}
           >
-            Logout
+            <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>Logout</Box>
+            <Box component="span" sx={{ display: { xs: "inline", sm: "none" } }}>Out</Box>
           </Button>
         </Box>
       </Toolbar>

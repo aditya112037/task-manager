@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Box, useTheme } from "@mui/material";
+import { Box, useTheme, useMediaQuery } from "@mui/material";
 import Sidebar from "./Sidebar";
 import Header from "./Header";
 import { useAuth } from "../../context/AuthContext";
@@ -10,6 +10,7 @@ import { getSocket } from "../../services/socket";
 const Layout = ({ children, toggleDarkMode, darkMode }) => {
   const { user } = useAuth();
   const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const socketRef = useRef(null);
@@ -17,6 +18,10 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
   const toggleSidebar = () => {
     setSidebarOpen((prev) => !prev);
   };
+
+  useEffect(() => {
+    setSidebarOpen(!isMobile);
+  }, [isMobile]);
 
   /* =====================================================
      SOCKET SETUP (SINGLE SOURCE OF TRUTH)
@@ -110,11 +115,11 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
 
   /* =====================================================
      LAYOUT UI
-     ===================================================== */
+  ===================================================== */
   return (
-    <Box sx={{ display: "flex", height: "100vh" }}>
+    <Box sx={{ display: "flex", minHeight: "100dvh" }}>
       {/* Sidebar */}
-      <Sidebar open={sidebarOpen} toggleSidebar={toggleSidebar} />
+      <Sidebar open={sidebarOpen} toggleSidebar={toggleSidebar} isMobile={isMobile} />
 
       {/* Main Content */}
       <Box
@@ -136,6 +141,7 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
           darkMode={darkMode}
           sidebarOpen={sidebarOpen}
           toggleSidebar={toggleSidebar}
+          isMobile={isMobile}
         />
 
         {/* Page Content */}

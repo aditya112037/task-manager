@@ -10,6 +10,8 @@ import {
   Snackbar,
   Tooltip,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from "@mui/material";
 import { useNavigate, useParams } from "react-router-dom";
 import CallEndIcon from "@mui/icons-material/CallEnd";
@@ -150,6 +152,8 @@ export default function ConferenceRoom() {
   const navigate = useNavigate();
   const socket = getSocket();
   const { user: currentUser } = useAuth();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
   const [layout, setLayout] = useState(LAYOUT.GRID);
   const [participantsPanelOpen, setParticipantsPanelOpen] = useState(true);
@@ -427,6 +431,10 @@ export default function ConferenceRoom() {
     },
     []
   );
+
+  useEffect(() => {
+    setParticipantsPanelOpen(!isMobile);
+  }, [isMobile]);
 
   useEffect(() => {
     if (!conferenceId) {
@@ -764,12 +772,13 @@ export default function ConferenceRoom() {
   }, [mySocketId, participantsWithFallback, remoteMedia, screenSharer]);
 
   const tileCount = remoteParticipants.length + 1;
-  const gridColumns = `repeat(${Math.min(4, Math.max(1, Math.ceil(Math.sqrt(tileCount))))}, minmax(220px, 1fr))`;
+  const minGridWidth = isMobile ? 150 : 220;
+  const gridColumns = `repeat(${Math.min(4, Math.max(1, Math.ceil(Math.sqrt(tileCount))))}, minmax(${minGridWidth}px, 1fr))`;
 
   const footerParticipantsCount = participantsWithFallback.length;
 
   return (
-    <Box sx={{ display: "flex", height: "100vh", background: "#000" }}>
+    <Box sx={{ display: "flex", height: "100dvh", background: "#000" }}>
       {remoteAudioEntries.map(([socketId, media]) => (
         <RemoteAudioPlayer key={`remote-audio-${socketId}`} stream={media.audioStream} />
       ))}
@@ -779,11 +788,11 @@ export default function ConferenceRoom() {
           flex: 1,
           display: "flex",
           flexDirection: "column",
-          p: 2,
+          p: { xs: 1, sm: 2 },
           minWidth: 0,
         }}
       >
-        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2, flexWrap: "wrap", gap: 1 }}>
           <Typography color="white" fontWeight={600}>
             Conference Room
             {isAdminOrManager && (
@@ -793,7 +802,7 @@ export default function ConferenceRoom() {
             )}
           </Typography>
 
-          <Box sx={{ display: "flex", gap: 1 }}>
+          <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
             <Tooltip title="Grid layout">
               <IconButton
                 onClick={() => setLayout(LAYOUT.GRID)}
@@ -868,6 +877,8 @@ export default function ConferenceRoom() {
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
+              flexWrap: "wrap",
+              gap: 1,
             }}
           >
             <Typography color="#00e676" fontWeight={600}>
@@ -894,7 +905,7 @@ export default function ConferenceRoom() {
             </Box>
 
             <Box sx={{ display: "flex", gap: 1.25, overflowX: "auto", pb: 1 }}>
-              <Box sx={{ width: 240, flexShrink: 0 }}>
+              <Box sx={{ width: { xs: 180, sm: 240 }, flexShrink: 0 }}>
                 <VideoTile
                   stream={getCameraStream()}
                   label="You"
@@ -909,7 +920,7 @@ export default function ConferenceRoom() {
               {remoteTileItems
                 .filter(({ participant }) => participant.socketId !== screenSharer)
                 .map(({ participant, media }) => (
-                  <Box key={participant.socketId} sx={{ width: 240, flexShrink: 0, position: "relative" }}>
+                  <Box key={participant.socketId} sx={{ width: { xs: 180, sm: 240 }, flexShrink: 0, position: "relative" }}>
                     <VideoTile
                       stream={media.cameraStream}
                       label={getParticipantName(participant)}
@@ -967,7 +978,10 @@ export default function ConferenceRoom() {
               sx={{
                 flex: 1,
                 display: "grid",
-                gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+                gridTemplateColumns: {
+                  xs: "repeat(auto-fit, minmax(140px, 1fr))",
+                  sm: "repeat(auto-fit, minmax(180px, 1fr))",
+                },
                 gap: 1,
                 minHeight: 180,
               }}
@@ -1068,6 +1082,7 @@ export default function ConferenceRoom() {
           sx={{
             display: "flex",
             justifyContent: "center",
+            flexWrap: "wrap",
             gap: 1.25,
             mt: 2,
             pt: 2,
@@ -1155,7 +1170,7 @@ export default function ConferenceRoom() {
           </Tooltip>
         </Box>
 
-        <Box sx={{ mt: 1, display: "flex", justifyContent: "center", alignItems: "center", gap: 1 }}>
+        <Box sx={{ mt: 1, display: "flex", justifyContent: "center", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
           <Typography color="#aaa" variant="caption">
             Participants: {footerParticipantsCount}
           </Typography>

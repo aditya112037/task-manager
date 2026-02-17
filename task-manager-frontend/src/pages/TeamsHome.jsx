@@ -161,7 +161,7 @@ const TeamsHome = () => {
   // -----------------------------
   if (teams.length === 0) {
     return (
-      <Box>
+      <Box sx={{ pt: { xs: 8, sm: 7 } }}>
         <Box sx={{ mb: 4 }}>
           <Typography variant="h4" fontWeight="bold">
             Teams
@@ -189,7 +189,14 @@ const TeamsHome = () => {
               Create a new team or join an existing one.
             </Typography>
 
-            <Box sx={{ display: "flex", gap: 2, justifyContent: "center" }}>
+            <Box
+              sx={{
+                display: "flex",
+                gap: 2,
+                justifyContent: "center",
+                flexDirection: { xs: "column", sm: "row" },
+              }}
+            >
               <Button 
                 variant="contained" 
                 component={Link} 
@@ -220,7 +227,7 @@ const TeamsHome = () => {
   // TEAM LIST (NON EMPTY)
   // -----------------------------
   return (
-    <Box>
+    <Box sx={{ pt: { xs: 8, sm: 7 } }}>
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" fontWeight="bold">
           Your Teams
@@ -270,7 +277,7 @@ const TeamsHome = () => {
         ))}
       </Grid>
 
-      <Box sx={{ mt: 4, display: "flex", gap: 2 }}>
+      <Box sx={{ mt: 4, display: "flex", gap: 2, flexDirection: { xs: "column", sm: "row" } }}>
         <Button 
           variant="contained" 
           component={Link} 

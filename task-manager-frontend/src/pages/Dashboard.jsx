@@ -300,6 +300,7 @@ const Dashboard = () => {
         <Button
           variant="outlined"
           size="small"
+          sx={{ width: { xs: "100%", sm: "auto" } }}
           onClick={handleRefresh}
           disabled={loading.teams || loading.teamTasks || loading.assigned}
         >
@@ -360,7 +361,7 @@ const Dashboard = () => {
       {tab === 1 && (
         <Box>
           <Paper sx={{ p: 3, mb: 3, borderRadius: 2 }}>
-            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2, gap: 1, flexWrap: "wrap" }}>
               <Typography variant="h5" fontWeight={600}>
                 Tasks Assigned to You
               </Typography>
@@ -523,7 +524,7 @@ const Dashboard = () => {
             </Paper>
           ) : (
             <Box>
-              <Paper sx={{ p: 2, mb: 3, borderRadius: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Paper sx={{ p: 2, mb: 3, borderRadius: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, flexWrap: "wrap" }}>
                 <Typography variant="body2" color="text.secondary">
                   Live updates enabled for all teams you're a member of
                 </Typography>
@@ -560,6 +561,8 @@ const Dashboard = () => {
                         display: "flex", 
                         justifyContent: "space-between", 
                         alignItems: "center",
+                        gap: 1,
+                        flexWrap: "wrap",
                         bgcolor: g.color ? `${g.color}20` : 'primary.light',
                         borderBottom: `1px solid ${theme.palette.divider}`
                       }}>
@@ -595,7 +598,7 @@ const Dashboard = () => {
                           variant="contained" 
                           size="small" 
                           onClick={() => (window.location.href = `/teams/${g.id}`)}
-                          sx={{ borderRadius: 2 }}
+                          sx={{ borderRadius: 2, width: { xs: "100%", sm: "auto" } }}
                         >
                           View Team
                         </Button>

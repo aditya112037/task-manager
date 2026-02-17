@@ -41,7 +41,7 @@ const JoinTeam = () => {
 
 
   return (
-    <Box>
+    <Box sx={{ pt: { xs: 8, sm: 7 } }}>
       {/* Header */}
       <Box sx={{ mb: 4 }}>
         <Typography

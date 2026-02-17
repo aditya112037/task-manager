@@ -37,7 +37,13 @@ export default function ParticipantsPanel({
   return (
     <Box
       sx={{
-        width: 300,
+        width: { xs: "100%", sm: 300 },
+        maxWidth: { xs: "100vw", sm: 300 },
+        position: { xs: "fixed", sm: "relative" },
+        right: 0,
+        top: 0,
+        bottom: 0,
+        zIndex: 1300,
         background: "#111",
         color: "white",
         borderLeft: "1px solid #222",

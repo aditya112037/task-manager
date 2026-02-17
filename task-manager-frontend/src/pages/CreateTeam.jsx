@@ -46,7 +46,7 @@ const CreateTeam = () => {
 
 
   return (
-    <Box>
+    <Box sx={{ pt: { xs: 8, sm: 7 } }}>
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" fontWeight="bold" sx={{ color: theme.palette.text.primary, mb: 1 }}>
           Create New Team

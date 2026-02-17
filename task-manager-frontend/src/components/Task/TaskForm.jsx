@@ -151,7 +151,7 @@ const TaskForm = ({ task, onSubmit, onCancel }) => {
             <Typography variant="body2" sx={{ minWidth: 88, color: "text.secondary" }}>
               Priority
             </Typography>
-            <Stack direction="row" spacing={1}>
+            <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }}>
               {priorityOptions.map((p) => {
                 const active = formData.priority === p.value;
                 return (
@@ -183,7 +183,7 @@ const TaskForm = ({ task, onSubmit, onCancel }) => {
               name="status"
               value={formData.status}
               onChange={handleChange}
-              sx={{ minWidth: 160, flex: 1 }}
+              sx={{ minWidth: { xs: "100%", sm: 160 }, flex: 1 }}
             >
               <MenuItem value="todo">To Do</MenuItem>
               <MenuItem value="in-progress">In Progress</MenuItem>
@@ -197,7 +197,7 @@ const TaskForm = ({ task, onSubmit, onCancel }) => {
               value={formData.dueDate}
               onChange={handleChange}
               InputLabelProps={{ shrink: true }}
-              sx={{ minWidth: 220, flex: 1 }}
+              sx={{ minWidth: { xs: "100%", sm: 220 }, flex: 1 }}
               error={!!errors.dueDate}
               helperText={errors.dueDate}
             />

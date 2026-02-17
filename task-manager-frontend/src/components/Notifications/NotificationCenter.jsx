@@ -138,7 +138,8 @@ const NotificationCenter = () => {
         }}
         PaperProps={{
           sx: {
-            width: 360,
+            width: { xs: "calc(100vw - 24px)", sm: 360 },
+            maxWidth: "100vw",
             maxHeight: 500,
             mt: 1,
             boxShadow: theme.shadows[3],
