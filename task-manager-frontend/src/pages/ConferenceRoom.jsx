@@ -184,6 +184,7 @@ export default function ConferenceRoom() {
   const endedRef = useRef(false);
   const speakingRef = useRef(false);
   const endFallbackTimerRef = useRef(null);
+  const lastNonPresentationLayoutRef = useRef(LAYOUT.GRID);
 
   const showNotification = useCallback((message, severity = "info") => {
     setNotification({ open: true, message, severity });
@@ -334,6 +335,9 @@ export default function ConferenceRoom() {
   const handleScreenShare = useCallback(async () => {
     try {
       if (!sharingScreen) {
+        if (layout !== LAYOUT.PRESENTATION) {
+          lastNonPresentationLayoutRef.current = layout;
+        }
         await startScreen();
         setSharingScreen(true);
         setScreenSharer(mySocketId);
@@ -344,13 +348,17 @@ export default function ConferenceRoom() {
         if (screenSharer === mySocketId) {
           setScreenSharer(null);
         }
-        setLayout(LAYOUT.GRID);
+        setLayout((prev) =>
+          prev === LAYOUT.PRESENTATION
+            ? lastNonPresentationLayoutRef.current || LAYOUT.GRID
+            : prev
+        );
       }
     } catch (error) {
       console.error("Screen share toggle failed", error);
       showNotification("Screen share failed", "error");
     }
-  }, [mySocketId, screenSharer, sharingScreen, showNotification]);
+  }, [layout, mySocketId, screenSharer, sharingScreen, showNotification]);
 
   const handleRaiseHand = useCallback(() => {
     if (handRaised) {
@@ -515,6 +523,26 @@ export default function ConferenceRoom() {
       }
     };
 
+    const onLocalScreenShare = (event) => {
+      const active = Boolean(event.detail?.active);
+      setSharingScreen(active);
+
+      if (active) {
+        if (mySocketId) {
+          setScreenSharer(mySocketId);
+        }
+        setLayout(LAYOUT.PRESENTATION);
+        return;
+      }
+
+      setScreenSharer((prev) => (prev === mySocketId ? null : prev));
+      setLayout((prev) =>
+        prev === LAYOUT.PRESENTATION
+          ? lastNonPresentationLayoutRef.current || LAYOUT.GRID
+          : prev
+      );
+    };
+
     const onUserJoined = async ({ socketId }) => {
       if (!socketId || socketId === socket.id) return;
       await createOffer(socketId, socket);
@@ -605,6 +633,7 @@ export default function ConferenceRoom() {
     };
 
     window.addEventListener("webrtc:remote-media", onRemoteMedia);
+    window.addEventListener("webrtc:local-screen-share", onLocalScreenShare);
 
     socket.on("conference:user-joined", onUserJoined);
     socket.on("conference:offer", onOffer);
@@ -625,6 +654,7 @@ export default function ConferenceRoom() {
 
     return () => {
       window.removeEventListener("webrtc:remote-media", onRemoteMedia);
+      window.removeEventListener("webrtc:local-screen-share", onLocalScreenShare);
 
       socket.off("conference:user-joined", onUserJoined);
       socket.off("conference:offer", onOffer);
@@ -804,7 +834,10 @@ export default function ConferenceRoom() {
           <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
             <Tooltip title="Grid layout">
               <IconButton
-                onClick={() => setLayout(LAYOUT.GRID)}
+                onClick={() => {
+                  lastNonPresentationLayoutRef.current = LAYOUT.GRID;
+                  setLayout(LAYOUT.GRID);
+                }}
                 sx={{
                   background: layout === LAYOUT.GRID ? "#1976d2" : "#303030",
                   color: "white",
@@ -816,7 +849,10 @@ export default function ConferenceRoom() {
 
             <Tooltip title="Speaker layout">
               <IconButton
-                onClick={() => setLayout(LAYOUT.SPEAKER)}
+                onClick={() => {
+                  lastNonPresentationLayoutRef.current = LAYOUT.SPEAKER;
+                  setLayout(LAYOUT.SPEAKER);
+                }}
                 sx={{
                   background: layout === LAYOUT.SPEAKER ? "#1976d2" : "#303030",
                   color: "white",

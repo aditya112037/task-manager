@@ -134,6 +134,14 @@ const getOrCreatePeer = (socketId, socket) => {
   return peer;
 };
 
+const emitLocalScreenShareUpdate = (active) => {
+  window.dispatchEvent(
+    new CustomEvent("webrtc:local-screen-share", {
+      detail: { active: Boolean(active) },
+    })
+  );
+};
+
 const renegotiatePeer = async (socketId) => {
   const peer = peers.get(socketId);
   if (!peer || !peer.socket) return;
@@ -405,15 +413,22 @@ export const startScreen = async () => {
     };
   }
 
+  emitLocalScreenShareUpdate(true);
   await syncAllPeerTracks();
   scheduleRenegotiation();
   return screenStream;
 };
 
 export const stopScreen = async () => {
-  if (!screenStream) return;
-  screenStream.getTracks().forEach((t) => t.stop());
+  const currentScreenStream = screenStream;
+  if (!currentScreenStream) return;
+
   screenStream = null;
+  currentScreenStream.getTracks().forEach((t) => {
+    t.onended = null;
+    t.stop();
+  });
+  emitLocalScreenShareUpdate(false);
 
   const cameraTrack = cameraStream?.getVideoTracks?.()[0] || null;
   const needsCameraRecovery =
