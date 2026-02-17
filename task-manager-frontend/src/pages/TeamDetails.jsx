@@ -54,6 +54,14 @@ const resolveUserId = (u) => {
   return null;
 };
 
+const resolveMemberUser = (team, userId) => {
+  if (!team?.members?.length || !userId) return null;
+  const member = team.members.find(
+    (m) => resolveUserId(m.user) === String(userId)
+  );
+  return member?.user || null;
+};
+
 export default function TeamDetails() {
   const { teamId: routeTeamId } = useParams();
   const { user, socketConnected } = useAuth();
@@ -536,9 +544,29 @@ export default function TeamDetails() {
   --------------------------------------------------- */
   const handleApproveExtension = async (taskId) => {
     if (!window.confirm("Approve this extension request?")) return;
-    
+
+    const extensionTask = pendingExtensions.find((t) => t._id === taskId);
+
     // Optimistic update
-    setPendingExtensions(prev => prev.filter(t => t._id !== taskId));
+    setPendingExtensions((prev) => prev.filter((t) => t._id !== taskId));
+    if (extensionTask?.extensionRequest?.requestedDueDate) {
+      setTeamTasks((prev) =>
+        prev.map((t) =>
+          t._id === taskId
+            ? {
+                ...t,
+                dueDate: extensionTask.extensionRequest.requestedDueDate,
+                extensionRequest: {
+                  ...t.extensionRequest,
+                  requested: false,
+                  status: "approved",
+                  reviewedAt: new Date().toISOString(),
+                },
+              }
+            : t
+        )
+      );
+    }
     
     try {
       await teamTasksAPI.approveExtension(taskId);
@@ -556,9 +584,24 @@ export default function TeamDetails() {
   --------------------------------------------------- */
   const handleRejectExtension = async (taskId) => {
     if (!window.confirm("Reject this extension request?")) return;
-    
+
     // Optimistic update
-    setPendingExtensions(prev => prev.filter(t => t._id !== taskId));
+    setPendingExtensions((prev) => prev.filter((t) => t._id !== taskId));
+    setTeamTasks((prev) =>
+      prev.map((t) =>
+        t._id === taskId
+          ? {
+              ...t,
+              extensionRequest: {
+                ...t.extensionRequest,
+                requested: false,
+                status: "rejected",
+                reviewedAt: new Date().toISOString(),
+              },
+            }
+          : t
+      )
+    );
     
     try {
       await teamTasksAPI.rejectExtension(taskId);
@@ -724,22 +767,34 @@ export default function TeamDetails() {
 
   const handleTaskSubmit = async (data) => {
     try {
+      const assignedUser = resolveMemberUser(team, data.assignedTo);
+      const optimisticPayload = {
+        ...data,
+        assignedTo: assignedUser || null,
+      };
+
       if (editingTask) {
         // Optimistic update for edit
-        const updatedTask = { ...editingTask, ...data };
+        const updatedTask = { ...editingTask, ...optimisticPayload };
         setTeamTasks(prev =>
           prev.map(t => t._id === editingTask._id ? updatedTask : t)
         );
         
-        await teamTasksAPI.updateTask(editingTask._id, data);
+        const res = await teamTasksAPI.updateTask(editingTask._id, data);
+        if (res?.data?._id) {
+          setTeamTasks((prev) =>
+            prev.map((t) => (t._id === res.data._id ? res.data : t))
+          );
+        }
         showSnack("Task updated", "success");
       } else {
         // Optimistic update for create
         const tempTask = {
-          ...data,
+          ...optimisticPayload,
           _id: `temp-${Date.now()}`,
           team: { _id: routeTeamId, name: team.name },
           status: "todo",
+          createdBy: user,
           extensionRequest: null
         };
         setTeamTasks(prev => [...prev, tempTask]);

@@ -26,6 +26,11 @@ const invalidateComments = (teamId, taskId) => {
   io.to(`team_${teamId}`).emit("invalidate:comments", { taskId });
 };
 
+const invalidateExtensions = (teamId) => {
+  if (!io) return;
+  io.to(`team_${teamId}`).emit("invalidate:extensions", { teamId });
+};
+
 /* ---------------- Helper ---------------- */
 function findMember(team, userId) {
   return team.members.find((m) => {
@@ -50,6 +55,16 @@ const isValidDate = (value) => {
   if (!value) return false;
   const d = new Date(value);
   return !Number.isNaN(d.getTime());
+};
+
+const populateTaskForClient = async (taskDoc) => {
+  if (!taskDoc) return taskDoc;
+  return taskDoc.populate([
+    { path: "assignedTo", select: "name photo" },
+    { path: "createdBy", select: "name photo" },
+    { path: "extensionRequest.requestedBy", select: "name photo" },
+    { path: "extensionRequest.reviewedBy", select: "name photo" },
+  ]);
 };
 
 /* ---------------- GET ALL TEAM TASKS ---------------- */
@@ -125,10 +140,12 @@ router.post("/:teamId", protect, async (req, res) => {
       meta: { title: task.title },
     });
 
+    const populatedTask = await populateTaskForClient(task);
+
     invalidateTasks(team._id);
     invalidateComments(team._id, task._id);
 
-    res.status(201).json(task);
+    res.status(201).json(populatedTask);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -188,6 +205,7 @@ router.put("/:taskId", protect, async (req, res) => {
 
     const oldStatus = task.status;
     const oldAssigned = task.assignedTo?.toString() || null;
+    const oldDueDate = task.dueDate ? new Date(task.dueDate).toISOString() : null;
 
     Object.assign(task, updates);
     await task.save();
@@ -206,22 +224,41 @@ router.put("/:taskId", protect, async (req, res) => {
       Object.prototype.hasOwnProperty.call(updates, "assignedTo") &&
       oldAssigned !== String(updates.assignedTo || null)
     ) {
+      const populatedAssigned = await task.populate("assignedTo", "name photo");
       await TaskComment.create({
         task: task._id,
         team: task.team._id,
         type: "system",
         action: updates.assignedTo ? "assigned" : "unassigned",
-        meta: { to: updates.assignedTo || null },
+        meta: {
+          to: updates.assignedTo || null,
+          toName: populatedAssigned.assignedTo?.name || null,
+        },
       });
 
       // assignment affects visibility → invalidate team too
       invalidateTeam(task.team._id);
     }
 
+    const newDueDate = task.dueDate ? new Date(task.dueDate).toISOString() : null;
+    if (
+      Object.prototype.hasOwnProperty.call(updates, "dueDate") &&
+      oldDueDate !== newDueDate
+    ) {
+      await TaskComment.create({
+        task: task._id,
+        team: task.team._id,
+        type: "system",
+        action: "due_date_changed",
+        meta: { from: oldDueDate, to: newDueDate },
+      });
+    }
+
+    const populatedTask = await populateTaskForClient(task);
     invalidateTasks(task.team._id);
     invalidateComments(task.team._id, task._id);
 
-    res.json(task);
+    res.json(populatedTask);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -241,6 +278,7 @@ router.delete("/:taskId", protect, async (req, res) => {
     await task.deleteOne();
 
     invalidateTasks(task.team._id);
+    invalidateExtensions(task.team._id);
 
     res.json({ message: "Task deleted" });
   } catch (err) {
@@ -293,10 +331,13 @@ router.post("/:taskId/request-extension", protect, async (req, res) => {
       meta: req.body,
     });
 
+    const populatedTask = await populateTaskForClient(task);
+
     invalidateTasks(task.team._id);
+    invalidateExtensions(task.team._id);
     invalidateComments(task.team._id, task._id);
 
-    res.json(task);
+    res.json(populatedTask);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -331,10 +372,13 @@ router.post("/:taskId/extension/approve", protect, async (req, res) => {
       action: "extension_approved",
     });
 
+    const populatedTask = await populateTaskForClient(task);
+
     invalidateTasks(task.team._id);
+    invalidateExtensions(task.team._id);
     invalidateComments(task.team._id, task._id);
 
-    res.json(task);
+    res.json(populatedTask);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -368,10 +412,13 @@ router.post("/:taskId/extension/reject", protect, async (req, res) => {
       action: "extension_rejected",
     });
 
+    const populatedTask = await populateTaskForClient(task);
+
     invalidateTasks(task.team._id);
+    invalidateExtensions(task.team._id);
     invalidateComments(task.team._id, task._id);
 
-    res.json(task);
+    res.json(populatedTask);
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });

@@ -37,9 +37,24 @@ export default function SystemComment({ comment }) {
         return `Status changed from ${meta.from || 'unknown'} to ${meta.to || 'unknown'}`;
       
       case "assigned":
-        return meta.to 
-          ? `Task was assigned to user ${meta.to}`
+        return meta.toName
+          ? `Task was assigned to ${meta.toName}`
+          : meta.to
+          ? "Task was assigned"
           : "Task assignment was updated";
+
+      case "unassigned":
+        return "Task was unassigned";
+
+      case "due_date_changed": {
+        const fromLabel = meta.from
+          ? new Date(meta.from).toLocaleDateString()
+          : "No due date";
+        const toLabel = meta.to
+          ? new Date(meta.to).toLocaleDateString()
+          : "No due date";
+        return `Due date changed from ${fromLabel} to ${toLabel}`;
+      }
       
       case "extension_requested":
         return `Extension requested: ${meta.reason || 'No reason provided'}`;
@@ -96,6 +111,26 @@ export default function SystemComment({ comment }) {
         borderColor: isDarkMode 
           ? alpha(theme.palette.warning.main, 0.3)
           : alpha(theme.palette.warning.main, 0.2),
+      },
+      unassigned: {
+        icon: <AssignmentIcon fontSize="inherit" />,
+        color: theme.palette.warning.main,
+        bgColor: isDarkMode
+          ? alpha(theme.palette.warning.main, 0.15)
+          : alpha(theme.palette.warning.main, 0.08),
+        borderColor: isDarkMode
+          ? alpha(theme.palette.warning.main, 0.3)
+          : alpha(theme.palette.warning.main, 0.2),
+      },
+      due_date_changed: {
+        icon: <ScheduleIcon fontSize="inherit" />,
+        color: theme.palette.info.main,
+        bgColor: isDarkMode
+          ? alpha(theme.palette.info.main, 0.15)
+          : alpha(theme.palette.info.main, 0.08),
+        borderColor: isDarkMode
+          ? alpha(theme.palette.info.main, 0.3)
+          : alpha(theme.palette.info.main, 0.2),
       },
       extension_requested: {
         icon: <ScheduleIcon fontSize="inherit" />,

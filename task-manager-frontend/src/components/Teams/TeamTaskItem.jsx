@@ -112,7 +112,7 @@ export default function TeamTaskItem({
   }, [task.dueDate, task.status]);
 
   const formatDate = (d) =>
-    d ? new Date(d).toLocaleDateString() : "No due date";
+    d ? new Date(d).toLocaleDateString() : "";
 
   /* ------------------ calendar links ------------------ */
   const getICSUrl = () =>
@@ -196,7 +196,11 @@ export default function TeamTaskItem({
             />
             <Chip
               icon={<AccessTimeIcon />}
-              label={`${formatDate(task.dueDate)} • ${dueStatus.message}`}
+              label={
+                task.dueDate
+                  ? `${formatDate(task.dueDate)} • ${dueStatus.message}`
+                  : "No due date"
+              }
               variant="outlined"
               size="small"
             />

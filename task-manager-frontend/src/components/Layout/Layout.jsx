@@ -82,9 +82,19 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
       }
     };
 
+    const onExtensionsInvalidate = (payload) => {
+      const teamId = payload?.teamId ?? payload?.detail?.teamId;
+      if (teamId) {
+        window.dispatchEvent(
+          new CustomEvent("invalidate:extensions", { detail: { teamId } })
+        );
+      }
+    };
+
     socket.on("invalidate:tasks", onTasksInvalidate);
     socket.on("invalidate:comments", onCommentsInvalidate);
     socket.on("invalidate:teams", onTeamsInvalidate);
+    socket.on("invalidate:extensions", onExtensionsInvalidate);
     socket.on("comment:created", onCommentCreated);
     socket.on("comment:deleted", onCommentDeleted);
 
@@ -92,6 +102,7 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
       socket.off("invalidate:tasks", onTasksInvalidate);
       socket.off("invalidate:comments", onCommentsInvalidate);
       socket.off("invalidate:teams", onTeamsInvalidate);
+      socket.off("invalidate:extensions", onExtensionsInvalidate);
       socket.off("comment:created", onCommentCreated);
       socket.off("comment:deleted", onCommentDeleted);
     };
