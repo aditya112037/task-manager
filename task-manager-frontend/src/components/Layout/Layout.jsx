@@ -51,6 +51,26 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
       }
     };
 
+    const onCommentCreated = (payload) => {
+      const taskId = payload?.taskId ?? payload?.detail?.taskId;
+      const comment = payload?.comment ?? payload?.detail?.comment;
+      if (!taskId || !comment) return;
+
+      window.dispatchEvent(
+        new CustomEvent("comment:created", { detail: { taskId, comment } })
+      );
+    };
+
+    const onCommentDeleted = (payload) => {
+      const taskId = payload?.taskId ?? payload?.detail?.taskId;
+      const commentId = payload?.commentId ?? payload?.detail?.commentId;
+      if (!taskId || !commentId) return;
+
+      window.dispatchEvent(
+        new CustomEvent("comment:deleted", { detail: { taskId, commentId } })
+      );
+    };
+
     // 👥 TEAMS / ROLES
     const onTeamsInvalidate = (payload) => {
       // ✅ FIX: Handle both payload formats
@@ -65,11 +85,15 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
     socket.on("invalidate:tasks", onTasksInvalidate);
     socket.on("invalidate:comments", onCommentsInvalidate);
     socket.on("invalidate:teams", onTeamsInvalidate);
+    socket.on("comment:created", onCommentCreated);
+    socket.on("comment:deleted", onCommentDeleted);
 
     return () => {
       socket.off("invalidate:tasks", onTasksInvalidate);
       socket.off("invalidate:comments", onCommentsInvalidate);
       socket.off("invalidate:teams", onTeamsInvalidate);
+      socket.off("comment:created", onCommentCreated);
+      socket.off("comment:deleted", onCommentDeleted);
     };
   }, [user?._id]);
 

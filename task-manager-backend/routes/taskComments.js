@@ -15,6 +15,16 @@ const invalidateComments = (teamId, taskId) => {
   io.to(`team_${teamId}`).emit("invalidate:comments", { taskId });
 };
 
+const emitCommentCreated = (teamId, taskId, comment) => {
+  if (!io) return;
+  io.to(`team_${teamId}`).emit("comment:created", { taskId, comment });
+};
+
+const emitCommentDeleted = (teamId, taskId, commentId) => {
+  if (!io) return;
+  io.to(`team_${teamId}`).emit("comment:deleted", { taskId, commentId });
+};
+
 /* ---------------- Helper ---------------- */
 function findMember(team, userId) {
   return team.members.find((m) => {
@@ -70,6 +80,7 @@ router.post("/:taskId", protect, async (req, res) => {
     // but DO NOT push it to other clients via socket.
     const populated = await comment.populate("author", "name photo");
 
+    emitCommentCreated(task.team._id, task._id, populated);
     invalidateComments(task.team._id, task._id);
 
     res.status(201).json(populated);
@@ -93,8 +104,10 @@ router.delete("/:commentId", protect, async (req, res) => {
       return res.status(403).json({ message: "Not authorized" });
 
     const taskId = comment.task;
+    const commentId = comment._id;
     await comment.deleteOne();
 
+    emitCommentDeleted(team._id, taskId, commentId);
     invalidateComments(team._id, taskId);
 
     res.json({ message: "Comment deleted" });

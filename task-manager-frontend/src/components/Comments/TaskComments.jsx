@@ -4,8 +4,10 @@ import { commentsAPI } from "../../services/api";
 import CommentItem from "./CommentItem";
 import CommentInput from "./CommentInput";
 import SystemComment from "./SystemComment";
+import { useAuth } from "../../context/AuthContext";
 
 export default function TaskComments({ taskId, myRole }) {
+  const { user } = useAuth();
 
   const [comments, setComments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -18,6 +20,12 @@ export default function TaskComments({ taskId, myRole }) {
     return typeof taskId === "string" && taskId.startsWith("temp-");
   }, [taskId]);
 
+  const sortComments = useCallback(
+    (list) =>
+      [...list].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt)),
+    []
+  );
+
   /* ---------------------------------------------------
      LOAD COMMENTS (single source of truth)
   --------------------------------------------------- */
@@ -29,11 +37,7 @@ export default function TaskComments({ taskId, myRole }) {
 
       const res = await commentsAPI.getByTask(taskId);
 
-      const sorted = (res.data || []).sort(
-        (a, b) => new Date(a.createdAt) - new Date(b.createdAt)
-      );
-
-      setComments(sorted);
+      setComments(sortComments(res.data || []));
       setError(null);
     } catch (err) {
       console.error("Failed to load comments:", err);
@@ -43,7 +47,7 @@ export default function TaskComments({ taskId, myRole }) {
       firstLoad.current = false;
       setLoading(false);
     }
-  }, [taskId, isTempTask]);
+  }, [taskId, isTempTask, sortComments]);
 
   /* ---------------------------------------------------
      INITIAL LOAD
@@ -60,34 +64,90 @@ export default function TaskComments({ taskId, myRole }) {
   }, [loadComments, isTempTask]);
 
   /* ---------------------------------------------------
-     SOCKET INVALIDATION LISTENER
+     REAL-TIME COMMENT EVENTS (NO HARD RELOAD)
   --------------------------------------------------- */
   useEffect(() => {
     if (!taskId || isTempTask) return;
+
+    const handleCreated = (e) => {
+      if (e.detail?.taskId !== taskId || !e.detail?.comment) return;
+
+      setComments((prev) => {
+        const next = [...prev];
+        const index = next.findIndex((c) => c._id === e.detail.comment._id);
+
+        if (index >= 0) {
+          next[index] = { ...next[index], ...e.detail.comment, _optimistic: false };
+        } else {
+          next.push({ ...e.detail.comment, _optimistic: false });
+        }
+
+        return sortComments(next);
+      });
+    };
+
+    const handleDeleted = (e) => {
+      if (e.detail?.taskId !== taskId || !e.detail?.commentId) return;
+      setComments((prev) => prev.filter((c) => c._id !== e.detail.commentId));
+    };
 
     const handleInvalidate = (e) => {
       if (e.detail?.taskId !== taskId) return;
       loadComments();
     };
 
+    window.addEventListener("comment:created", handleCreated);
+    window.addEventListener("comment:deleted", handleDeleted);
     window.addEventListener("invalidate:comments", handleInvalidate);
-    return () =>
+    return () => {
+      window.removeEventListener("comment:created", handleCreated);
+      window.removeEventListener("comment:deleted", handleDeleted);
       window.removeEventListener("invalidate:comments", handleInvalidate);
-  }, [taskId, isTempTask, loadComments]);
+    };
+  }, [taskId, isTempTask, sortComments, loadComments]);
 
   /* ---------------------------------------------------
      ADD COMMENT
   --------------------------------------------------- */
   const addComment = async (text) => {
-    if (!text.trim() || isTempTask) return;
+    const content = String(text || "").trim();
+    if (!content || isTempTask) return;
+
+    const optimisticId = `temp-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 9)}`;
+    const optimisticComment = {
+      _id: optimisticId,
+      type: "comment",
+      content,
+      createdAt: new Date().toISOString(),
+      author: {
+        _id: user?._id,
+        name: user?.name || "You",
+        photo: user?.photo || null,
+      },
+      _optimistic: true,
+    };
+
+    setComments((prev) => sortComments([...prev, optimisticComment]));
 
     try {
-      await commentsAPI.create(taskId, {
-        content: text,
+      const res = await commentsAPI.create(taskId, {
+        content,
         type: "comment",
       });
-      // ✅ socket will trigger refresh
+
+      if (res?.data?._id) {
+        setComments((prev) =>
+          sortComments(
+            prev.map((c) =>
+              c._id === optimisticId ? { ...res.data, _optimistic: false } : c
+            )
+          )
+        );
+      }
     } catch (err) {
+      setComments((prev) => prev.filter((c) => c._id !== optimisticId));
       console.error("Failed to add comment:", err);
       alert("Failed to post comment. Please try again.");
     }

@@ -63,6 +63,7 @@ export default function CommentItem({
     comment.content ||
     comment.text ||
     "";
+  const isOptimistic = Boolean(comment._optimistic);
 
   /* ------------------ time formatting ------------------ */
   const formatTime = (timestamp) => {
@@ -141,6 +142,18 @@ export default function CommentItem({
                 ? "rgba(255,255,255,0.1)"
                 : "rgba(0,0,0,0.08)"
             }`,
+            opacity: isOptimistic ? 0.78 : 1,
+            transform: isOptimistic ? "translateY(2px)" : "none",
+            transition: "all 220ms ease",
+            animation: isOptimistic ? "commentSendPulse 1.2s ease-in-out infinite" : "none",
+            "@keyframes commentSendPulse": {
+              "0%, 100%": { boxShadow: "none" },
+              "50%": {
+                boxShadow: isDarkMode
+                  ? "0 0 0 1px rgba(255,255,255,0.14)"
+                  : "0 0 0 1px rgba(0,0,0,0.08)",
+              },
+            },
           }}
         >
           {/* Header */}
@@ -180,13 +193,13 @@ export default function CommentItem({
                     variant="caption"
                     color="text.disabled"
                   >
-                    {formatTime(comment.createdAt)}
+                    {isOptimistic ? "Sending..." : formatTime(comment.createdAt)}
                   </Typography>
                 </Tooltip>
               )}
             </Box>
 
-            <IconButton size="small" onClick={openMenu}>
+            <IconButton size="small" onClick={openMenu} disabled={isOptimistic}>
               <MoreVertIcon fontSize="small" />
             </IconButton>
           </Box>
