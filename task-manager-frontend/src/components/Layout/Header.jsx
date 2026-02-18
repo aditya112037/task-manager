@@ -64,17 +64,29 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
           <MenuIcon />
         </IconButton>
 
-        <Typography
-          variant="h6"
-          sx={{
-            fontWeight: 700,
-            color: "sidebar.text",
-            letterSpacing: 0.45,
-            fontSize: { xs: "1rem", sm: "1.18rem" },
-          }}
-        >
-          Task Suite
-        </Typography>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.2 }}>
+          <Box
+            component="img"
+            src="/logo192.png"
+            alt="logo"
+            sx={{
+              width: 32,
+              height: 32,
+              display: { xs: "none", md: "block" },
+            }}
+          />
+          <Typography
+            variant="h6"
+            sx={{
+              fontWeight: 700,
+              color: "sidebar.text",
+              letterSpacing: 0.45,
+              fontSize: { xs: "1rem", sm: "1.18rem" },
+            }}
+          >
+            Task Suite
+          </Typography>
+        </Box>
 
         <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 0.5, sm: 1.5 } }}>
           <IconButton
