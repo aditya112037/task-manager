@@ -17,6 +17,20 @@ const app = express();
 const server = http.createServer(app);
 
 /* ---------------------------------------------------
+   CORS CONFIGURATION
+--------------------------------------------------- */
+const allowedOrigins = [
+  "http://localhost:3000",
+  "https://task-manager-psi-lake.vercel.app",
+  "https://task-manager-8vth.onrender.com",
+];
+
+const isAllowedOrigin = (origin) => {
+  if (!origin) return true;
+  return allowedOrigins.includes(origin);
+};
+
+/* ---------------------------------------------------
    CRITICAL: PREFLIGHT HANDLER - MUST BE FIRST
 --------------------------------------------------- */
 app.use((req, res, next) => {
@@ -24,7 +38,13 @@ app.use((req, res, next) => {
   
   if (req.method === "OPTIONS") {
     console.log("🛡️ Intercepting OPTIONS preflight");
-    res.header("Access-Control-Allow-Origin", req.headers.origin || "*");
+    if (!isAllowedOrigin(req.headers.origin)) {
+      console.error(`🚫 Preflight blocked by CORS: ${req.headers.origin}`);
+      return res.status(403).json({ error: "Not allowed by CORS" });
+    }
+    if (req.headers.origin) {
+      res.header("Access-Control-Allow-Origin", req.headers.origin);
+    }
     res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS");
     res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, Accept");
     res.header("Access-Control-Allow-Credentials", "true");
@@ -34,22 +54,13 @@ app.use((req, res, next) => {
   next();
 });
 
-/* ---------------------------------------------------
-   CORS CONFIGURATION
---------------------------------------------------- */
-const allowedOrigins = [
-  "http://localhost:3000",
-  "https://task-manager-psi-lake.vercel.app",
-  "https://task-manager-8vth.onrender.com", // Add render domain too
-];
-
 const corsOptions = {
   origin: function (origin, callback) {
     console.log("🌐 CORS check for origin:", origin);
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
-    if (allowedOrigins.indexOf(origin) !== -1 || origin.includes("onrender.com")) {
+    if (isAllowedOrigin(origin)) {
       callback(null, true);
     } else {
       console.error(`🚫 CORS blocked: ${origin}`);
@@ -77,7 +88,7 @@ app.use(passport.initialize());
 const io = new Server(server, {
   cors: {
     origin: function(origin, callback) {
-      if (!origin || allowedOrigins.includes(origin) || origin.includes("onrender.com")) {
+      if (isAllowedOrigin(origin)) {
         callback(null, true);
       } else {
         callback(new Error("Not allowed by CORS"));
@@ -176,7 +187,7 @@ io.on("connection", (socket) => {
 --------------------------------------------------- */
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin) || (origin && origin.includes("onrender.com"))) {
+  if (isAllowedOrigin(origin) && origin) {
     res.header("Access-Control-Allow-Origin", origin);
   }
   res.header("Access-Control-Allow-Credentials", "true");
