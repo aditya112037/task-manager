@@ -124,7 +124,7 @@ export default function TeamTaskForm({ open, task, teamMembers, onCancel, onSubm
               label="Assigned To"
               onChange={(e) => setFormData({ ...formData, assignedTo: e.target.value })}
             >
-              <MenuItem value="">Unassigned</MenuItem>
+              <MenuItem value="">Team Tasks</MenuItem>
               {teamMembers.map((member) => (
                 <MenuItem key={member.user._id} value={member.user._id}>
                   {member.user.name} ({member.role})

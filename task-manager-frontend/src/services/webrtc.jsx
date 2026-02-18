@@ -142,6 +142,10 @@ const emitLocalScreenShareUpdate = (active) => {
   );
 };
 
+const emitLocalAudioEnded = () => {
+  window.dispatchEvent(new CustomEvent("webrtc:local-audio-ended"));
+};
+
 const renegotiatePeer = async (socketId) => {
   const peer = peers.get(socketId);
   if (!peer || !peer.socket) return;
@@ -336,6 +340,17 @@ export const startAudio = async () => {
         autoGainControl: false,
       });
     } catch {}
+
+    track.onended = () => {
+      const endedStream = stream;
+      if (audioStream !== endedStream) return;
+
+      audioStream = null;
+      emitLocalAudioEnded();
+      Promise.resolve(syncAllPeerTracks()).then(() => {
+        scheduleRenegotiation();
+      });
+    };
   }
 
   audioStream = stream;
@@ -365,7 +380,10 @@ export const unmuteAudio = () => setMicEnabled(true);
 
 export const destroyAudio = async () => {
   if (!audioStream) return;
-  audioStream.getTracks().forEach((t) => t.stop());
+  audioStream.getTracks().forEach((t) => {
+    t.onended = null;
+    t.stop();
+  });
   audioStream = null;
   await syncAllPeerTracks();
   scheduleRenegotiation();

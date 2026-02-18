@@ -15,6 +15,7 @@ import {
   Snackbar,
   Alert,
   Container,
+  Avatar,
 } from "@mui/material";
 import GroupIcon from "@mui/icons-material/Group";
 import AssignmentIcon from "@mui/icons-material/Assignment";
@@ -23,6 +24,7 @@ import TaskList from "../components/Task/TaskList";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import { teamTasksAPI, teamsAPI } from "../services/api";
 import { useAuth } from "../context/AuthContext";
+import { getTeamAvatarLabel, getTeamAvatarSx } from "../utils/teamAvatar";
 
 const Dashboard = () => {
   const theme = useTheme();
@@ -703,29 +705,26 @@ const Dashboard = () => {
                       onClick={() => (window.location.href = `/teams/${t._id}`)}
                     >
                       <Box sx={{ display: "flex", alignItems: "center", mb: 3 }}>
-                        <Box sx={{ 
-                          width: 60, 
-                          height: 60, 
-                          borderRadius: "50%", 
-                          bgcolor: t.color || theme.palette.primary.main, 
-                          display: "flex", 
-                          alignItems: "center", 
-                          justifyContent: "center", 
-                          fontSize: "1.8rem", 
-                          mr: 2,
-                          color: 'white'
-                        }}>
-                          {t.icon || "👥"}
-                        </Box>
+                        <Avatar
+                          sx={{
+                            width: 60,
+                            height: 60,
+                            mr: 2,
+                            fontSize: "1rem",
+                            ...getTeamAvatarSx(t, theme.palette.primary.main),
+                          }}
+                        >
+                          {getTeamAvatarLabel(t)}
+                        </Avatar>
                         <Box>
                           <Typography variant="h6" fontWeight={700}>
                             {t.name}
                           </Typography>
-                          <Chip 
-                            label={userRole || "member"} 
-                            size="small" 
-                            color={userRole === "admin" ? "primary" : userRole === "manager" ? "secondary" : "default"} 
-                            sx={{ mt: 0.5 }} 
+                          <Chip
+                            label={userRole || "member"}
+                            size="small"
+                            color={userRole === "admin" ? "primary" : userRole === "manager" ? "secondary" : "default"}
+                            sx={{ mt: 0.5 }}
                           />
                         </Box>
                       </Box>

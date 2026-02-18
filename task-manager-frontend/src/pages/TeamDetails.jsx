@@ -45,6 +45,7 @@ import { useAuth } from "../context/AuthContext";
 import TeamAnalytics from "../components/Teams/Overview/Analytics";
 import { joinTeamRoom, getSocket } from "../services/socket";
 import { requestConferenceCreation } from "../services/conferenceSocket";
+import { getTeamAvatarLabel, getTeamAvatarSx } from "../utils/teamAvatar";
 
 /* ---------------------------------------------------
    SAFE MEMBER RESOLVER (prevents all crashes)
@@ -1043,8 +1044,8 @@ export default function TeamDetails() {
       <Paper sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3, mb: 3, boxShadow: "0 4px 12px rgba(0,0,0,0.15)" }}>
         <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "flex-start", sm: "center" }} spacing={2}>
           <Stack direction="row" spacing={2} sx={{ width: "100%" }}>
-            <Avatar sx={{ width: 70, height: 70, bgcolor: team.color, fontSize: 28 }}>
-              {team.icon || "T"}
+            <Avatar sx={{ width: 70, height: 70, fontSize: 24, ...getTeamAvatarSx(team) }}>
+              {getTeamAvatarLabel(team)}
             </Avatar>
 
             <Box sx={{ minWidth: 0 }}>
@@ -1296,7 +1297,7 @@ export default function TeamDetails() {
                     <Grid item xs={12} md={8}>
                       <Typography variant="h6">{t.title}</Typography>
                       <Typography color="text.secondary">
-                        Assigned to: {t.assignedTo?.name || "Unassigned"}
+                        Assigned to: {t.assignedTo?.name || "Team Tasks"}
                       </Typography>
                       <Typography sx={{ mt: 1 }}>{t.description}</Typography>
                       <Typography variant="caption" sx={{ display: "block", mt: 1 }}>

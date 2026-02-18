@@ -31,7 +31,7 @@ import TaskComments from "../Comments/TaskComments";
 const resolveId = (v) => (typeof v === "object" ? v?._id : v);
 
 const resolveUserName = (u) => {
-  if (!u) return "Unassigned";
+  if (!u) return "Team Tasks";
   if (typeof u === "object") return u.name || "User";
   return "User";
 };

@@ -19,6 +19,7 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 import GroupsIcon from "@mui/icons-material/Groups";
 import { teamsAPI } from "../services/api";
+import { getTeamAvatarLabel, getTeamAvatarSx } from "../utils/teamAvatar";
 
 
 const TeamsHome = () => {
@@ -258,11 +259,11 @@ const TeamsHome = () => {
                   width: 60,
                   height: 60,
                   mb: 2,
-                  bgcolor: team.color || "#1976d2",
-                  fontSize: 30,
+                  fontSize: 22,
+                  ...getTeamAvatarSx(team, theme.palette.primary.main),
                 }}
               >
-                {team.icon || "👥"}
+                {getTeamAvatarLabel(team)}
               </Avatar>
 
               <Typography variant="h6" fontWeight={600}>
@@ -300,3 +301,4 @@ const TeamsHome = () => {
 };
 
 export default TeamsHome;
+

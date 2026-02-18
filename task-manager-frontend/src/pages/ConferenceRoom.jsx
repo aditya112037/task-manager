@@ -297,15 +297,16 @@ export default function ConferenceRoom() {
 
     if (!socket || !conferenceId || isEndingRef.current) return;
     isEndingRef.current = true;
+    endedRef.current = true;
     socket.emit("conference:end", { conferenceId });
 
     if (endFallbackTimerRef.current) {
       clearTimeout(endFallbackTimerRef.current);
     }
-    endFallbackTimerRef.current = setTimeout(() => {
-      handleConferenceEnded();
-    }, 3000);
-  }, [conferenceId, handleConferenceEnded, isAdminOrManager, leaveConferenceLocally, socket]);
+    performLocalTeardown().then(() => {
+      navigate("/teams");
+    });
+  }, [conferenceId, isAdminOrManager, leaveConferenceLocally, navigate, performLocalTeardown, socket]);
 
   const handleToggleMic = useCallback(async () => {
     try {
@@ -551,6 +552,12 @@ export default function ConferenceRoom() {
       );
     };
 
+    const onLocalAudioEnded = () => {
+      setMicOn(false);
+      emitMediaUpdate(false, camOn);
+      showNotification("Microphone disconnected", "warning");
+    };
+
     const onUserJoined = async ({ socketId }) => {
       if (!socketId || socketId === socket.id) return;
       await createOffer(socketId, socket);
@@ -653,6 +660,7 @@ export default function ConferenceRoom() {
 
     window.addEventListener("webrtc:remote-media", onRemoteMedia);
     window.addEventListener("webrtc:local-screen-share", onLocalScreenShare);
+    window.addEventListener("webrtc:local-audio-ended", onLocalAudioEnded);
 
     socket.on("conference:user-joined", onUserJoined);
     socket.on("conference:offer", onOffer);
@@ -675,6 +683,7 @@ export default function ConferenceRoom() {
     return () => {
       window.removeEventListener("webrtc:remote-media", onRemoteMedia);
       window.removeEventListener("webrtc:local-screen-share", onLocalScreenShare);
+      window.removeEventListener("webrtc:local-audio-ended", onLocalAudioEnded);
 
       socket.off("conference:user-joined", onUserJoined);
       socket.off("conference:offer", onOffer);
