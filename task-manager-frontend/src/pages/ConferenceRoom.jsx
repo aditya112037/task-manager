@@ -149,7 +149,8 @@ function RemoteAudioPlayer({ stream }) {
 
 export default function ConferenceRoom() {
   const { conferenceId } = useParams();
-  const location = useLocation();
+  const routerLocation = useLocation();
+  const locationTeamId = routerLocation.state?.teamId || null;
   const navigate = useNavigate();
   const socket = getSocket();
   const { user: currentUser } = useAuth();
@@ -181,7 +182,7 @@ export default function ConferenceRoom() {
     severity: "info",
   });
   const [conferenceTeamId, setConferenceTeamId] = useState(
-    () => location.state?.teamId || null
+    () => locationTeamId
   );
 
   const joinedRef = useRef(false);
@@ -304,9 +305,10 @@ export default function ConferenceRoom() {
       clearTimeout(endFallbackTimerRef.current);
     }
     performLocalTeardown().then(() => {
-      navigate("/teams");
+      const resolvedTeamId = conferenceTeamId || locationTeamId;
+      navigate(resolvedTeamId ? `/teams/${resolvedTeamId}` : "/teams");
     });
-  }, [conferenceId, isAdminOrManager, leaveConferenceLocally, navigate, performLocalTeardown, socket]);
+  }, [conferenceId, conferenceTeamId, isAdminOrManager, leaveConferenceLocally, locationTeamId, navigate, performLocalTeardown, socket]);
 
   const handleToggleMic = useCallback(async () => {
     try {
