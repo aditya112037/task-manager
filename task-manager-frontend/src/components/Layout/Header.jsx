@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   AppBar,
   Toolbar,
@@ -11,14 +11,64 @@ import {
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import MenuIcon from "@mui/icons-material/Menu";
+import InstallDesktopIcon from "@mui/icons-material/InstallDesktop";
 
 import { useAuth } from "../../context/AuthContext";
 
 const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
   const { user, logout } = useAuth();
 
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isInstalled, setIsInstalled] = useState(false);
+
   const sidebarWidthOpen = 240;
   const sidebarWidthClosed = 64;
+
+  useEffect(() => {
+    const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
+    setIsInstalled(Boolean(standalone));
+
+    const onBeforeInstallPrompt = (event) => {
+      event.preventDefault();
+      setDeferredPrompt(event);
+    };
+
+    const onInstalled = () => {
+      setDeferredPrompt(null);
+      setIsInstalled(true);
+    };
+
+    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+    window.addEventListener("appinstalled", onInstalled);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", onInstalled);
+    };
+  }, []);
+
+  const isIOS = useMemo(() => {
+    const ua = window.navigator.userAgent.toLowerCase();
+    return /iphone|ipad|ipod/.test(ua);
+  }, []);
+
+  const canShowInstall = !isInstalled;
+
+  const onInstallClick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      setDeferredPrompt(null);
+      return;
+    }
+
+    if (isIOS) {
+      window.alert('On iPhone/iPad: tap Share, then "Add to Home Screen".');
+      return;
+    }
+
+    window.alert('Use your browser menu to choose "Install app" or "Add to desktop".');
+  };
 
   return (
     <AppBar
@@ -65,7 +115,7 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
         </IconButton>
 
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.2 }}>
-          
+
           <Typography
             variant="h6"
             sx={{
@@ -80,6 +130,27 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
         </Box>
 
         <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 0.5, sm: 1.5 } }}>
+          {canShowInstall && (
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<InstallDesktopIcon />}
+              sx={{
+                color: "sidebar.text",
+                borderColor: "rgba(255,255,255,0.26)",
+                minWidth: { xs: "auto", sm: 96 },
+                px: { xs: 1, sm: 1.5 },
+                "&:hover": {
+                  borderColor: "rgba(255,255,255,0.42)",
+                  backgroundColor: "rgba(255,255,255,0.1)",
+                }
+              }}
+              onClick={onInstallClick}
+            >
+              <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>Install</Box>
+            </Button>
+          )}
+
           <IconButton
             sx={{
               color: "sidebar.text",
@@ -87,7 +158,7 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
               "&:hover": {
                 backgroundColor: "rgba(255,255,255,0.1)",
               }
-            }} 
+            }}
             onClick={toggleDarkMode}
           >
             {darkMode ? <LightModeIcon /> : <DarkModeIcon />}
