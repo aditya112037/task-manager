@@ -65,16 +65,7 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
         </IconButton>
 
         <Box sx={{ display: "flex", alignItems: "center", gap: 1.2 }}>
-          <Box
-            component="img"
-            src="/logo192.png"
-            alt="logo"
-            sx={{
-              width: 32,
-              height: 32,
-              display: { xs: "none", md: "block" },
-            }}
-          />
+          
           <Typography
             variant="h6"
             sx={{
