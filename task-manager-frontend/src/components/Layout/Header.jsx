@@ -25,7 +25,7 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
       position="fixed"
       sx={{
         zIndex: 1201,
-        backgroundColor: (theme) => theme.palette.header?.main || theme.palette.primary.main,
+        backgroundColor: (theme) => theme.palette.header?.background || theme.palette.primary.main,
         backgroundImage: "none",
         width: {
           xs: "100%",

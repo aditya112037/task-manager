@@ -49,12 +49,12 @@ function AppContent() {
         text: { primary: "#172029", secondary: "#4c5965" },
         divider: "rgba(12, 28, 38, 0.14)",
         sidebar: {
-          main: "linear-gradient(195deg, #102234 0%, #08141f 100%)",
+          background: "linear-gradient(195deg, #102234 0%, #08141f 100%)",
           hover: "rgba(208, 167, 132, 0.18)",
           active: "rgba(208, 167, 132, 0.24)",
           text: "#f4eee6",
         },
-        header: { main: "rgba(7, 20, 32, 0.88)" },
+        header: { background: "rgba(7, 20, 32, 0.88)" },
       };
 
       const darkPalette = {
@@ -65,12 +65,12 @@ function AppContent() {
         text: { primary: "#e9ecef", secondary: "#a8b4bf" },
         divider: "rgba(210, 222, 233, 0.16)",
         sidebar: {
-          main: "linear-gradient(200deg, #08131d 0%, #040a11 100%)",
+          background: "linear-gradient(200deg, #08131d 0%, #040a11 100%)",
           hover: "rgba(201, 162, 127, 0.16)",
           active: "rgba(201, 162, 127, 0.24)",
           text: "#f4eadf",
         },
-        header: { main: "rgba(4, 10, 16, 0.88)" },
+        header: { background: "rgba(4, 10, 16, 0.88)" },
       };
 
       return createTheme({
@@ -222,7 +222,7 @@ function AppContent() {
           MuiDrawer: {
             styleOverrides: {
               paper: ({ theme }) => ({
-                background: theme.palette.sidebar.main,
+                background: theme.palette.sidebar.background,
                 borderRight: `1px solid ${theme.palette.divider}`,
               }),
             },

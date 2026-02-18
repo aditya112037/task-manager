@@ -41,7 +41,7 @@ const Sidebar = ({ open, toggleSidebar, isMobile = false }) => {
         boxSizing: "border-box",
         "& .MuiDrawer-paper": {
           width: drawerWidth,
-          background: theme.palette.sidebar.main,
+          background: theme.palette.sidebar.background,
           color: theme.palette.sidebar.text,
           border: "none",
           overflowX: "hidden",
