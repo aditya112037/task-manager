@@ -513,7 +513,9 @@ export default function TeamDetails() {
     }
     
     console.log("Joining conference:", conference.conferenceId);
-    navigate(`/conference/${conference.conferenceId}`);
+    navigate(`/conference/${conference.conferenceId}`, {
+      state: { teamId: routeTeamId || conference.teamId || null },
+    });
   };
 
   /* ---------------------------------------------------

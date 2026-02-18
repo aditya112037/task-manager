@@ -13,7 +13,7 @@ import {
   useMediaQuery,
   useTheme,
 } from "@mui/material";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import CallEndIcon from "@mui/icons-material/CallEnd";
 import ClearAllIcon from "@mui/icons-material/ClearAll";
 import GroupsIcon from "@mui/icons-material/Groups";
@@ -149,6 +149,7 @@ function RemoteAudioPlayer({ stream }) {
 
 export default function ConferenceRoom() {
   const { conferenceId } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const socket = getSocket();
   const { user: currentUser } = useAuth();
@@ -179,6 +180,9 @@ export default function ConferenceRoom() {
     message: "",
     severity: "info",
   });
+  const [conferenceTeamId, setConferenceTeamId] = useState(
+    () => location.state?.teamId || null
+  );
 
   const joinedRef = useRef(false);
   const endedRef = useRef(false);
@@ -269,7 +273,7 @@ export default function ConferenceRoom() {
     [navigate, performLocalTeardown]
   );
 
-  const handleConferenceEnded = useCallback(async () => {
+  const handleConferenceEnded = useCallback(async (payload = {}) => {
     if (endedRef.current) return;
     endedRef.current = true;
     isEndingRef.current = false;
@@ -281,8 +285,9 @@ export default function ConferenceRoom() {
     await performLocalTeardown();
 
     showNotification("Conference has ended", "info");
-    navigate("/teams");
-  }, [navigate, performLocalTeardown, showNotification]);
+    const resolvedTeamId = payload?.teamId || conferenceTeamId;
+    navigate(resolvedTeamId ? `/teams/${resolvedTeamId}` : "/teams");
+  }, [conferenceTeamId, navigate, performLocalTeardown, showNotification]);
 
   const handleEndConference = useCallback(() => {
     if (!isAdminOrManager) {
@@ -580,6 +585,12 @@ export default function ConferenceRoom() {
       setParticipants(nextParticipants);
     };
 
+    const onConferenceState = ({ conference }) => {
+      if (conference?.teamId) {
+        setConferenceTeamId(conference.teamId);
+      }
+    };
+
     const onHandsUpdated = ({ raisedHands: nextRaisedHands = [] }) => {
       setRaisedHands(nextRaisedHands);
       setHandRaised(Boolean(mySocketId && nextRaisedHands.includes(mySocketId)));
@@ -649,6 +660,7 @@ export default function ConferenceRoom() {
     socket.on("conference:ice-candidate", onIceCandidate);
     socket.on("conference:user-left", onUserLeft);
     socket.on("conference:participants", onParticipants);
+    socket.on("conference:state", onConferenceState);
     socket.on("conference:hands-updated", onHandsUpdated);
     socket.on("conference:media-update", onMediaUpdate);
     socket.on("conference:active-speaker", onActiveSpeaker);
@@ -670,6 +682,7 @@ export default function ConferenceRoom() {
       socket.off("conference:ice-candidate", onIceCandidate);
       socket.off("conference:user-left", onUserLeft);
       socket.off("conference:participants", onParticipants);
+      socket.off("conference:state", onConferenceState);
       socket.off("conference:hands-updated", onHandsUpdated);
       socket.off("conference:media-update", onMediaUpdate);
       socket.off("conference:active-speaker", onActiveSpeaker);
