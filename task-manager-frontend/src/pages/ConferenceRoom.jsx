@@ -182,7 +182,9 @@ export default function ConferenceRoom() {
 
   const joinedRef = useRef(false);
   const endedRef = useRef(false);
+  const isEndingRef = useRef(false);
   const speakingRef = useRef(false);
+  const hasCleanedUpRef = useRef(false);
   const endFallbackTimerRef = useRef(null);
   const lastNonPresentationLayoutRef = useRef(LAYOUT.GRID);
 
@@ -242,30 +244,10 @@ export default function ConferenceRoom() {
     [remoteMedia]
   );
 
-  const leaveConferenceLocally = useCallback(
-    async (navigateBack = true) => {
-      try {
-        if (socket && conferenceId) {
-          socket.emit("conference:leave", { conferenceId });
-        }
-      } catch {
-        // no-op
-      }
+  const performLocalTeardown = useCallback(async () => {
+    if (hasCleanedUpRef.current) return;
+    hasCleanedUpRef.current = true;
 
-      cleanupConference();
-      await cleanupWebRTC();
-      setRemoteMedia({});
-
-      if (navigateBack) {
-        navigate(-1);
-      }
-    },
-    [conferenceId, navigate, socket]
-  );
-
-  const handleConferenceEnded = useCallback(async () => {
-    if (endedRef.current) return;
-    endedRef.current = true;
     if (endFallbackTimerRef.current) {
       clearTimeout(endFallbackTimerRef.current);
       endFallbackTimerRef.current = null;
@@ -274,10 +256,33 @@ export default function ConferenceRoom() {
     cleanupConference();
     await cleanupWebRTC();
     setRemoteMedia({});
+  }, []);
+
+  const leaveConferenceLocally = useCallback(
+    async (navigateBack = true) => {
+      await performLocalTeardown();
+
+      if (navigateBack) {
+        navigate(-1);
+      }
+    },
+    [navigate, performLocalTeardown]
+  );
+
+  const handleConferenceEnded = useCallback(async () => {
+    if (endedRef.current) return;
+    endedRef.current = true;
+    isEndingRef.current = false;
+    if (endFallbackTimerRef.current) {
+      clearTimeout(endFallbackTimerRef.current);
+      endFallbackTimerRef.current = null;
+    }
+
+    await performLocalTeardown();
 
     showNotification("Conference has ended", "info");
     navigate("/teams");
-  }, [navigate, showNotification]);
+  }, [navigate, performLocalTeardown, showNotification]);
 
   const handleEndConference = useCallback(() => {
     if (!isAdminOrManager) {
@@ -285,18 +290,17 @@ export default function ConferenceRoom() {
       return;
     }
 
-    if (!socket || !conferenceId) return;
-    endedRef.current = true;
+    if (!socket || !conferenceId || isEndingRef.current) return;
+    isEndingRef.current = true;
     socket.emit("conference:end", { conferenceId });
 
     if (endFallbackTimerRef.current) {
       clearTimeout(endFallbackTimerRef.current);
     }
-    cleanupConference();
-    cleanupWebRTC();
-    setRemoteMedia({});
-    navigate("/teams");
-  }, [conferenceId, isAdminOrManager, leaveConferenceLocally, navigate, socket]);
+    endFallbackTimerRef.current = setTimeout(() => {
+      handleConferenceEnded();
+    }, 3000);
+  }, [conferenceId, handleConferenceEnded, isAdminOrManager, leaveConferenceLocally, socket]);
 
   const handleToggleMic = useCallback(async () => {
     try {
@@ -494,10 +498,9 @@ export default function ConferenceRoom() {
     join();
 
     return () => {
-      cleanupConference();
-      cleanupWebRTC();
+      performLocalTeardown();
     };
-  }, [conferenceId, emitMediaUpdate, navigate, showNotification, socket]);
+  }, [conferenceId, emitMediaUpdate, navigate, performLocalTeardown, showNotification, socket]);
 
   useEffect(() => {
     if (!socket || !conferenceId) return;
@@ -627,9 +630,14 @@ export default function ConferenceRoom() {
     };
 
     const onConferenceError = ({ message }) => {
-      if (message) {
-        showNotification(message, "error");
+      if (!message) return;
+
+      if (message.toLowerCase().includes("ended")) {
+        handleConferenceEnded();
+        return;
       }
+
+      showNotification(message, "error");
     };
 
     window.addEventListener("webrtc:remote-media", onRemoteMedia);

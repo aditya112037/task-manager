@@ -73,7 +73,7 @@ const Sidebar = ({ open, toggleSidebar, isMobile = false }) => {
               Workspace
             </Typography>
             <Typography variant="body2" sx={{ color: "sidebar.text", letterSpacing: 0.5, fontWeight: 700 }}>
-              Premium Flow
+              Task Manager
             </Typography>
           </Box>
         )}

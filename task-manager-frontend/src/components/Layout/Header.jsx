@@ -73,7 +73,7 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
             fontSize: { xs: "1rem", sm: "1.18rem" },
           }}
         >
-          Atlas Task Suite
+          Task Suite
         </Typography>
 
         <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 0.5, sm: 1.5 } }}>
