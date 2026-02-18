@@ -7,6 +7,8 @@ import {
   ListItemText,
   Toolbar,
   IconButton,
+  Box,
+  Typography,
   useTheme,
 } from "@mui/material";
 
@@ -35,43 +37,51 @@ const Sidebar = ({ open, toggleSidebar, isMobile = false }) => {
       sx={{
         width: drawerWidth,
         flexShrink: 0,
-        whiteSpace: 'nowrap',
-        boxSizing: 'border-box',
-        '& .MuiDrawer-paper': {
+        whiteSpace: "nowrap",
+        boxSizing: "border-box",
+        "& .MuiDrawer-paper": {
           width: drawerWidth,
           background: theme.palette.sidebar.main,
           color: theme.palette.sidebar.text,
-          border: 'none',
-          overflowX: 'hidden',
-          transition: theme.transitions.create('width', {
+          border: "none",
+          overflowX: "hidden",
+          transition: theme.transitions.create("width", {
             easing: theme.transitions.easing.sharp,
             duration: theme.transitions.duration.enteringScreen,
           }),
-          // REMOVE any right border or shadow that creates gap
-          boxShadow: 'none',
-          borderRight: `1px solid ${theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`,
-          position: isMobile ? "fixed" : 'fixed',
+          borderRight: `1px solid ${theme.palette.divider}`,
+          boxShadow: "24px 0 48px rgba(0,0,0,0.15)",
+          position: "fixed",
           left: 0,
           top: 0,
           bottom: 0,
         },
       }}
     >
-      {/* Header with Toggle Button */}
       <Toolbar
         sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: showLabel ? 'flex-end' : 'center',
+          display: "flex",
+          alignItems: "center",
+          justifyContent: showLabel ? "space-between" : "center",
           px: 1,
-          minHeight: '64px !important',
+          minHeight: "68px !important",
         }}
       >
-        <IconButton 
+        {showLabel && (
+          <Box sx={{ pl: 1.2 }}>
+            <Typography variant="subtitle2" sx={{ color: "sidebar.text", opacity: 0.75 }}>
+              Workspace
+            </Typography>
+            <Typography variant="body2" sx={{ color: "sidebar.text", letterSpacing: 0.5, fontWeight: 700 }}>
+              Premium Flow
+            </Typography>
+          </Box>
+        )}
+        <IconButton
           onClick={toggleSidebar}
           sx={{
             color: theme.palette.sidebar.text,
-            '&:hover': {
+            "&:hover": {
               backgroundColor: theme.palette.sidebar.hover,
             }
           }}
@@ -80,9 +90,7 @@ const Sidebar = ({ open, toggleSidebar, isMobile = false }) => {
         </IconButton>
       </Toolbar>
 
-      {/* Navigation Items */}
       <List sx={{ px: 1 }}>
-        {/* Dashboard */}
         <ListItemButton
           component={Link}
           to="/"
@@ -90,28 +98,28 @@ const Sidebar = ({ open, toggleSidebar, isMobile = false }) => {
           selected={location.pathname === "/"}
           sx={{
             color: theme.palette.sidebar.text,
-            borderRadius: 1, // Reduced border radius
+            borderRadius: 2,
             mb: 1,
-            justifyContent: showLabel ? 'initial' : 'center',
+            justifyContent: showLabel ? "initial" : "center",
             px: showLabel ? 2 : 1,
-            minHeight: 48,
-            '&.Mui-selected': {
-              backgroundColor: theme.palette.sidebar.hover,
-              '&:hover': {
-                backgroundColor: theme.palette.sidebar.hover,
+            minHeight: 50,
+            "&.Mui-selected": {
+              backgroundColor: theme.palette.sidebar.active || theme.palette.sidebar.hover,
+              "&:hover": {
+                backgroundColor: theme.palette.sidebar.active || theme.palette.sidebar.hover,
               }
             },
-            '&:hover': {
+            "&:hover": {
               backgroundColor: theme.palette.sidebar.hover,
             }
           }}
         >
-          <ListItemIcon 
+          <ListItemIcon
             sx={{
               color: theme.palette.sidebar.text,
               minWidth: 0,
-              mr: showLabel ? 2 : 'auto',
-              justifyContent: 'center',
+              mr: showLabel ? 2 : "auto",
+              justifyContent: "center",
             }}
           >
             <DashboardIcon />
@@ -124,7 +132,6 @@ const Sidebar = ({ open, toggleSidebar, isMobile = false }) => {
           )}
         </ListItemButton>
 
-        {/* Teams */}
         <ListItemButton
           component={Link}
           to="/teams"
@@ -132,28 +139,28 @@ const Sidebar = ({ open, toggleSidebar, isMobile = false }) => {
           selected={location.pathname.startsWith("/teams")}
           sx={{
             color: theme.palette.sidebar.text,
-            borderRadius: 1, // Reduced border radius
+            borderRadius: 2,
             mb: 1,
-            justifyContent: showLabel ? 'initial' : 'center',
+            justifyContent: showLabel ? "initial" : "center",
             px: showLabel ? 2 : 1,
-            minHeight: 48,
-            '&.Mui-selected': {
-              backgroundColor: theme.palette.sidebar.hover,
-              '&:hover': {
-                backgroundColor: theme.palette.sidebar.hover,
+            minHeight: 50,
+            "&.Mui-selected": {
+              backgroundColor: theme.palette.sidebar.active || theme.palette.sidebar.hover,
+              "&:hover": {
+                backgroundColor: theme.palette.sidebar.active || theme.palette.sidebar.hover,
               }
             },
-            '&:hover': {
+            "&:hover": {
               backgroundColor: theme.palette.sidebar.hover,
             }
           }}
         >
-          <ListItemIcon 
+          <ListItemIcon
             sx={{
               color: theme.palette.sidebar.text,
               minWidth: 0,
-              mr: showLabel ? 2 : 'auto',
-              justifyContent: 'center',
+              mr: showLabel ? 2 : "auto",
+              justifyContent: "center",
             }}
           >
             <GroupIcon />

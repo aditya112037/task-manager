@@ -58,7 +58,8 @@ const Register = () => {
         display: "flex",
         justifyContent: "center",
         alignItems: "center",
-        background: "linear-gradient(135deg, #667eea 0%, #764ba2 100%)",
+        background:
+          "radial-gradient(circle at 12% 15%, rgba(15, 118, 110, 0.26), transparent 30%), radial-gradient(circle at 86% 0%, rgba(176, 137, 104, 0.26), transparent 26%), linear-gradient(170deg, #07111d 0%, #0b1824 100%)",
         p: 2,
       }}
     >
@@ -66,8 +67,10 @@ const Register = () => {
         sx={{
           width: "100%",
           maxWidth: 400,
-          borderRadius: 2,
-          boxShadow: 3,
+          borderRadius: 3,
+          boxShadow: 8,
+          border: "1px solid rgba(238, 230, 220, 0.22)",
+          backdropFilter: "blur(14px)",
         }}
       >
         <CardContent sx={{ p: 4 }}>
@@ -77,7 +80,7 @@ const Register = () => {
             gutterBottom
             align="center"
             fontWeight="bold"
-            color="primary"
+            color="primary.main"
           >
             Create Account
           </Typography>
@@ -156,8 +159,8 @@ const Register = () => {
 
           <Typography variant="body2" align="center">
             Already have an account?{" "}
-            <Link to="/login" style={{ textDecoration: 'none',color: "skyblue" }}>
-              Login here
+            <Link to="/login" style={{ textDecoration: "none", color: "#b08968", fontWeight: 700 }}>
+              Login
             </Link>
           </Typography>
         </CardContent>

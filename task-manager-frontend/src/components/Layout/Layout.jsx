@@ -118,16 +118,14 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
   ===================================================== */
   return (
     <Box sx={{ display: "flex", minHeight: "100dvh" }}>
-      {/* Sidebar */}
       <Sidebar open={sidebarOpen} toggleSidebar={toggleSidebar} isMobile={isMobile} />
 
-      {/* Main Content */}
       <Box
         component="main"
         sx={{
           flexGrow: 1,
           minHeight: "100vh",
-          backgroundColor: theme.palette.background.default,
+          backgroundColor: "transparent",
           transition: theme.transitions.create("margin", {
             easing: theme.transitions.easing.easeInOut,
             duration: theme.transitions.duration.standard,
@@ -135,7 +133,6 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
           overflowY: "auto",
         }}
       >
-        {/* Header */}
         <Header
           toggleDarkMode={toggleDarkMode}
           darkMode={darkMode}
@@ -144,8 +141,18 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
           isMobile={isMobile}
         />
 
-        {/* Page Content */}
-        <Box sx={{ p: 2 }}>{children}</Box>
+        <Box
+          sx={{
+            px: { xs: 1.5, sm: 2.5 },
+            pb: 2.5,
+            pt: "84px",
+            maxWidth: "1680px",
+            mx: "auto",
+            width: "100%",
+          }}
+        >
+          {children}
+        </Box>
       </Box>
     </Box>
   );
