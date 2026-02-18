@@ -5,7 +5,12 @@ import {
   Typography,
   Box,
   Button,
-  IconButton
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Stack
 } from "@mui/material";
 
 import DarkModeIcon from "@mui/icons-material/DarkMode";
@@ -20,9 +25,17 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
 
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isInstalled, setIsInstalled] = useState(false);
+  const [installHelpOpen, setInstallHelpOpen] = useState(false);
 
   const sidebarWidthOpen = 240;
   const sidebarWidthClosed = 64;
+
+  const platform = useMemo(() => {
+    const ua = window.navigator.userAgent.toLowerCase();
+    const isIOS = /iphone|ipad|ipod/.test(ua);
+    const isAndroid = /android/.test(ua);
+    return { isIOS, isAndroid };
+  }, []);
 
   useEffect(() => {
     const standalone = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone;
@@ -36,6 +49,7 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
     const onInstalled = () => {
       setDeferredPrompt(null);
       setIsInstalled(true);
+      setInstallHelpOpen(false);
     };
 
     window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
@@ -47,153 +61,204 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
     };
   }, []);
 
-  const isIOS = useMemo(() => {
-    const ua = window.navigator.userAgent.toLowerCase();
-    return /iphone|ipad|ipod/.test(ua);
-  }, []);
-
   const canShowInstall = !isInstalled;
 
   const onInstallClick = async () => {
     if (deferredPrompt) {
       deferredPrompt.prompt();
-      await deferredPrompt.userChoice;
+      const choice = await deferredPrompt.userChoice;
+      if (choice?.outcome !== "accepted") {
+        setInstallHelpOpen(true);
+      }
       setDeferredPrompt(null);
       return;
     }
 
-    if (isIOS) {
-      window.alert('On iPhone/iPad: tap Share, then "Add to Home Screen".');
-      return;
-    }
+    setInstallHelpOpen(true);
+  };
 
-    window.alert('Use your browser menu to choose "Install app" or "Add to desktop".');
+  const openShareSheet = async () => {
+    if (!navigator.share) return;
+    try {
+      await navigator.share({
+        title: "Task Suite",
+        text: "Install Task Suite",
+        url: window.location.href,
+      });
+    } catch {
+      // user cancelled share sheet
+    }
+  };
+
+  const copyCurrentLink = async () => {
+    if (!navigator.clipboard) return;
+    try {
+      await navigator.clipboard.writeText(window.location.href);
+    } catch {
+      // clipboard unavailable
+    }
   };
 
   return (
-    <AppBar
-      position="fixed"
-      sx={{
-        zIndex: 1201,
-        backgroundColor: (theme) => theme.palette.header?.background || theme.palette.primary.main,
-        backgroundImage: "none",
-        width: {
-          xs: "100%",
-          md: `calc(100% - ${sidebarOpen ? sidebarWidthOpen : sidebarWidthClosed}px)`,
-        },
-        left: {
-          xs: 0,
-          md: `${sidebarOpen ? sidebarWidthOpen : sidebarWidthClosed}px`,
-        },
-        right: 0,
-        transition: (theme) => theme.transitions.create(["width", "left"], {
-          easing: theme.transitions.easing.sharp,
-          duration: theme.transitions.duration.enteringScreen,
-        }),
-        height: "68px",
-      }}
-    >
-      <Toolbar sx={{
-        display: "flex",
-        justifyContent: "space-between",
-        minHeight: "68px !important",
-        pl: { xs: 1, sm: 2 },
-        pr: { xs: 1, sm: 2 },
-        gap: 1,
-      }}>
-        <IconButton
-          color="inherit"
-          onClick={toggleSidebar}
-          sx={{
-            mr: 1.5,
-            display: { xs: "flex", md: "none" },
-            border: "1px solid rgba(255,255,255,0.2)",
-            borderRadius: 2,
-          }}
-        >
-          <MenuIcon />
-        </IconButton>
-
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.2 }}>
-
-          <Typography
-            variant="h6"
+    <>
+      <AppBar
+        position="fixed"
+        sx={{
+          zIndex: 1201,
+          backgroundColor: (theme) => theme.palette.header?.background || theme.palette.primary.main,
+          backgroundImage: "none",
+          width: {
+            xs: "100%",
+            md: `calc(100% - ${sidebarOpen ? sidebarWidthOpen : sidebarWidthClosed}px)`,
+          },
+          left: {
+            xs: 0,
+            md: `${sidebarOpen ? sidebarWidthOpen : sidebarWidthClosed}px`,
+          },
+          right: 0,
+          transition: (theme) => theme.transitions.create(["width", "left"], {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.enteringScreen,
+          }),
+          height: "68px",
+        }}
+      >
+        <Toolbar sx={{
+          display: "flex",
+          justifyContent: "space-between",
+          minHeight: "68px !important",
+          pl: { xs: 1, sm: 2 },
+          pr: { xs: 1, sm: 2 },
+          gap: 1,
+        }}>
+          <IconButton
+            color="inherit"
+            onClick={toggleSidebar}
             sx={{
-              fontWeight: 700,
-              color: "sidebar.text",
-              letterSpacing: 0.45,
-              fontSize: { xs: "1rem", sm: "1.18rem" },
+              mr: 1.5,
+              display: { xs: "flex", md: "none" },
+              border: "1px solid rgba(255,255,255,0.2)",
+              borderRadius: 2,
             }}
           >
-            Task Suite
-          </Typography>
-        </Box>
+            <MenuIcon />
+          </IconButton>
 
-        <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 0.5, sm: 1.5 } }}>
-          {canShowInstall && (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1.2 }}>
+            <Typography
+              variant="h6"
+              sx={{
+                fontWeight: 700,
+                color: "sidebar.text",
+                letterSpacing: 0.45,
+                fontSize: { xs: "1rem", sm: "1.18rem" },
+              }}
+            >
+              Task Suite
+            </Typography>
+          </Box>
+
+          <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 0.5, sm: 1.5 } }}>
+            {canShowInstall && (
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<InstallDesktopIcon />}
+                sx={{
+                  color: "sidebar.text",
+                  borderColor: "rgba(255,255,255,0.26)",
+                  minWidth: { xs: "auto", sm: 112 },
+                  px: { xs: 1, sm: 1.5 },
+                  "&:hover": {
+                    borderColor: "rgba(255,255,255,0.42)",
+                    backgroundColor: "rgba(255,255,255,0.1)",
+                  }
+                }}
+                onClick={onInstallClick}
+              >
+                <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>Install App</Box>
+              </Button>
+            )}
+
+            <IconButton
+              sx={{
+                color: "sidebar.text",
+                border: "1px solid rgba(255,255,255,0.2)",
+                "&:hover": {
+                  backgroundColor: "rgba(255,255,255,0.1)",
+                }
+              }}
+              onClick={toggleDarkMode}
+            >
+              {darkMode ? <LightModeIcon /> : <DarkModeIcon />}
+            </IconButton>
+
+            <Typography sx={{
+              color: "sidebar.text",
+              display: { xs: "none", sm: "block" },
+              fontSize: "0.88rem",
+              opacity: 0.9,
+            }}>
+              {user?.name}
+            </Typography>
+
             <Button
               variant="outlined"
               size="small"
-              startIcon={<InstallDesktopIcon />}
               sx={{
                 color: "sidebar.text",
                 borderColor: "rgba(255,255,255,0.26)",
-                minWidth: { xs: "auto", sm: 96 },
+                minWidth: { xs: "auto", sm: 80 },
                 px: { xs: 1, sm: 1.5 },
                 "&:hover": {
                   borderColor: "rgba(255,255,255,0.42)",
                   backgroundColor: "rgba(255,255,255,0.1)",
                 }
               }}
-              onClick={onInstallClick}
+              onClick={logout}
             >
-              <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>Install</Box>
+              <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>Logout</Box>
+              <Box component="span" sx={{ display: { xs: "inline", sm: "none" } }}>Out</Box>
             </Button>
+          </Box>
+        </Toolbar>
+      </AppBar>
+
+      <Dialog open={installHelpOpen} onClose={() => setInstallHelpOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle>Install Task Suite</DialogTitle>
+        <DialogContent dividers>
+          {platform.isIOS ? (
+            <Stack spacing={1.2}>
+              <Typography variant="body2">iPhone/iPad requires manual install:</Typography>
+              <Typography variant="body2">1. Tap the Share icon in Safari.</Typography>
+              <Typography variant="body2">2. Select "Add to Home Screen".</Typography>
+              <Typography variant="body2">3. Tap "Add".</Typography>
+            </Stack>
+          ) : platform.isAndroid ? (
+            <Stack spacing={1.2}>
+              <Typography variant="body2">If prompt did not appear:</Typography>
+              <Typography variant="body2">1. Open browser menu.</Typography>
+              <Typography variant="body2">2. Tap "Install app" or "Add to Home screen".</Typography>
+              <Typography variant="body2">3. Confirm install.</Typography>
+            </Stack>
+          ) : (
+            <Stack spacing={1.2}>
+              <Typography variant="body2">Desktop install steps:</Typography>
+              <Typography variant="body2">1. Open browser menu (top-right).</Typography>
+              <Typography variant="body2">2. Click "Install Task Suite" or "Install app".</Typography>
+              <Typography variant="body2">3. Confirm install.</Typography>
+            </Stack>
           )}
-
-          <IconButton
-            sx={{
-              color: "sidebar.text",
-              border: "1px solid rgba(255,255,255,0.2)",
-              "&:hover": {
-                backgroundColor: "rgba(255,255,255,0.1)",
-              }
-            }}
-            onClick={toggleDarkMode}
-          >
-            {darkMode ? <LightModeIcon /> : <DarkModeIcon />}
-          </IconButton>
-
-          <Typography sx={{
-            color: "sidebar.text",
-            display: { xs: "none", sm: "block" },
-            fontSize: "0.88rem",
-            opacity: 0.9,
-          }}>
-            {user?.name}
-          </Typography>
-
-          <Button
-            variant="outlined"
-            size="small"
-            sx={{
-              color: "sidebar.text",
-              borderColor: "rgba(255,255,255,0.26)",
-              minWidth: { xs: "auto", sm: 80 },
-              px: { xs: 1, sm: 1.5 },
-              "&:hover": {
-                borderColor: "rgba(255,255,255,0.42)",
-                backgroundColor: "rgba(255,255,255,0.1)",
-              }
-            }}
-            onClick={logout}
-          >
-            <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>Logout</Box>
-            <Box component="span" sx={{ display: { xs: "inline", sm: "none" } }}>Out</Box>
-          </Button>
-        </Box>
-      </Toolbar>
-    </AppBar>
+        </DialogContent>
+        <DialogActions sx={{ px: 2, py: 1.5, gap: 1 }}>
+          {platform.isIOS && navigator.share && (
+            <Button onClick={openShareSheet}>Open Share Sheet</Button>
+          )}
+          <Button onClick={copyCurrentLink}>Copy Link</Button>
+          <Button variant="contained" onClick={() => setInstallHelpOpen(false)}>Done</Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 };
 
