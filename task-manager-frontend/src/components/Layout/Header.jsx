@@ -13,6 +13,7 @@ import LightModeIcon from "@mui/icons-material/LightMode";
 import MenuIcon from "@mui/icons-material/Menu";
 
 import { useAuth } from "../../context/AuthContext";
+import NotificationCenter from "../Notifications/NotificationCenter";
 
 const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
   const { user, logout } = useAuth();
@@ -79,6 +80,8 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
         </Box>
 
         <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 0.5, sm: 1.5 } }}>
+          <NotificationCenter />
+
           <IconButton
             sx={{
               color: "sidebar.text",

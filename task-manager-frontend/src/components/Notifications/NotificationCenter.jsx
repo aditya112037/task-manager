@@ -6,14 +6,13 @@ import {
   Popover,
   List,
   ListItem,
+  ListItemButton,
   ListItemText,
   ListItemAvatar,
   Avatar,
   Typography,
   Box,
-  Chip,
   Button,
-  Divider,
   useTheme,
 } from "@mui/material";
 import NotificationsIcon from "@mui/icons-material/Notifications";
@@ -76,6 +75,16 @@ const NotificationCenter = () => {
     } catch (error) {
       console.error("Error marking all as read:", error);
     }
+  };
+
+  const openNotificationTarget = (notification) => {
+    const teamId = notification?.relatedTeam?._id || notification?.relatedTeam;
+    if (teamId) {
+      window.location.href = `/teams/${teamId}`;
+      return;
+    }
+    // Fallback: no related resource, just close popover.
+    handleClose();
   };
 
   const getNotificationIcon = (type) => {
@@ -174,18 +183,24 @@ const NotificationCenter = () => {
             notifications.map((notification) => (
               <ListItem
                 key={notification._id}
+                disablePadding
                 sx={{
-                  bgcolor: notification.read ? 'transparent' : 'action.hover',
+                  bgcolor: notification.read ? "transparent" : "action.hover",
                   borderBottom: `1px solid ${theme.palette.divider}`,
-                  '&:hover': {
-                    bgcolor: 'action.selected',
-                  },
-                  cursor: 'pointer',
                 }}
-                onClick={() => markAsRead(notification._id)}
               >
+                <ListItemButton
+                  onClick={async () => {
+                    await markAsRead(notification._id);
+                    openNotificationTarget(notification);
+                  }}
+                  sx={{
+                    "&:hover": { bgcolor: "action.selected" },
+                    alignItems: "flex-start",
+                  }}
+                >
                 <ListItemAvatar>
-                  <Avatar sx={{ bgcolor: 'transparent' }}>
+                  <Avatar sx={{ bgcolor: "transparent" }}>
                     {getNotificationIcon(notification.type)}
                   </Avatar>
                 </ListItemAvatar>
@@ -217,22 +232,11 @@ const NotificationCenter = () => {
                     }}
                   />
                 )}
+                </ListItemButton>
               </ListItem>
             ))
           )}
         </List>
-
-        {notifications.length > 0 && (
-          <Box sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
-            <Button 
-              fullWidth 
-              onClick={() => window.location.href = "/notifications"}
-              variant="outlined"
-            >
-              View All Notifications
-            </Button>
-          </Box>
-        )}
       </Popover>
     </>
   );

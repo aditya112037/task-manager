@@ -282,7 +282,7 @@ const Dashboard = () => {
 
   return (
     <Container maxWidth="xl" sx={{ 
-      pt: { xs: 10, sm: 8 },
+      pt: 0,
       pb: 6,
       minHeight: "100vh"
     }}>

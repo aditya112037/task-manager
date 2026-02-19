@@ -20,7 +20,7 @@ import DeleteIcon from "@mui/icons-material/Delete";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import GoogleIcon from "@mui/icons-material/Google";
-import ScheduleIcon from "@mui/icons-material/Schedule";
+import EventIcon from "@mui/icons-material/Event";
 import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import ChatBubbleIcon from "@mui/icons-material/ChatBubble";
 import { useTheme } from "@mui/material/styles";
@@ -134,8 +134,7 @@ export default function TeamTaskItem({
   };
 
   const openMenu = Boolean(anchorEl);
-  const showMenu =
-    canCompleteTask || canDeleteTask || Boolean(task.dueDate);
+  const showMenu = canCompleteTask || canDeleteTask || canEdit;
 
   return (
     <>
@@ -250,6 +249,51 @@ export default function TeamTaskItem({
             )}
           </Stack>
 
+          <Stack
+            direction="row"
+            spacing={2}
+            sx={{ mt: 2, mb: 1, flexWrap: "wrap", rowGap: 1 }}
+          >
+            <Button
+              variant="contained"
+              color="secondary"
+              startIcon={<EventIcon />}
+              sx={{
+                textTransform: "none",
+                borderRadius: 2,
+                px: 2,
+                width: { xs: "100%", sm: "auto" },
+              }}
+              onClick={() => {
+                window.location.href = getICSUrl();
+              }}
+            >
+              Add to Calendar (Apple)
+            </Button>
+
+            <Button
+              variant="outlined"
+              color="primary"
+              startIcon={<GoogleIcon />}
+              sx={{
+                textTransform: "none",
+                borderRadius: 2,
+                px: 2,
+                width: { xs: "100%", sm: "auto" },
+                borderColor:
+                  theme.palette.mode === "dark"
+                    ? "rgba(255,255,255,0.4)"
+                    : undefined,
+              }}
+              href={getGoogleUrl()}
+              target="_blank"
+              rel="noreferrer"
+              disabled={!task.dueDate}
+            >
+              Add to Google Calendar
+            </Button>
+          </Stack>
+
           {/* COMMENTS */}
           {canViewComments && (
             <Collapse in={showComments}>
@@ -278,18 +322,6 @@ export default function TeamTaskItem({
           {canCompleteTask && (
             <MenuItem onClick={() => onQuickComplete(task._id)}>
               <CheckCircleIcon fontSize="small" sx={{ mr: 1 }} /> Complete
-            </MenuItem>
-          )}
-
-          {task.dueDate && (
-            <MenuItem onClick={() => window.open(getICSUrl(), "_blank")}>
-              <ScheduleIcon fontSize="small" sx={{ mr: 1 }} /> Download ICS
-            </MenuItem>
-          )}
-
-          {task.dueDate && (
-            <MenuItem onClick={() => window.open(getGoogleUrl(), "_blank")}>
-              <GoogleIcon fontSize="small" sx={{ mr: 1 }} /> Google Calendar
             </MenuItem>
           )}
 
