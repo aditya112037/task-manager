@@ -117,10 +117,10 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
                 }}
               >
                 <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
-                  Marketing Pages
+                  About
                 </Box>
                 <Box component="span" sx={{ display: { xs: "inline", sm: "none" } }}>
-                  Pages
+                  About
                 </Box>
               </Button>
 
