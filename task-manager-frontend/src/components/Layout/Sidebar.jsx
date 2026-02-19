@@ -190,9 +190,9 @@ const Sidebar = ({ open, toggleSidebar, isMobile = false }) => {
           <List sx={{ px: 1, flexGrow: 1 }}>
             <ListItemButton
               component={Link}
-              to="/"
+              to="/app"
               onClick={isMobile ? toggleSidebar : undefined}
-              selected={location.pathname === "/"}
+              selected={location.pathname === "/app"}
               sx={{
                 color: theme.palette.sidebar.text,
                 borderRadius: 2,

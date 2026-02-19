@@ -35,7 +35,7 @@ export default function OAuthSuccess() {
         setUser(userData);
         
         // Redirect to dashboard
-        navigate("/");
+        navigate("/app");
       } catch (error) {
         console.error("OAuth failed:", error);
         localStorage.removeItem("token");

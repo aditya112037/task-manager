@@ -5,7 +5,9 @@ import {
   Typography,
   Box,
   Button,
-  IconButton
+  IconButton,
+  Menu,
+  MenuItem,
 } from "@mui/material";
 
 import DarkModeIcon from "@mui/icons-material/DarkMode";
@@ -14,9 +16,26 @@ import MenuIcon from "@mui/icons-material/Menu";
 
 import { useAuth } from "../../context/AuthContext";
 import NotificationCenter from "../Notifications/NotificationCenter";
+import { Link, useLocation } from "react-router-dom";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 
 const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
   const { user, logout } = useAuth();
+  const location = useLocation();
+  const [marketingAnchorEl, setMarketingAnchorEl] = React.useState(null);
+  const marketingMenuOpen = Boolean(marketingAnchorEl);
+
+  const marketingPages = [
+    { label: "Home", to: "/" },
+    { label: "Features", to: "/features" },
+    { label: "Pricing", to: "/pricing" },
+    { label: "About", to: "/about" },
+    { label: "Contact", to: "/contact" },
+    { label: "Privacy", to: "/privacy" },
+    { label: "Terms", to: "/terms" },
+    { label: "Security", to: "/security" },
+    { label: "Blog", to: "/blog" },
+  ];
 
   const sidebarWidthOpen = 240;
   const sidebarWidthClosed = 64;
@@ -80,6 +99,53 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
         </Box>
 
         <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 0.5, sm: 1.5 } }}>
+          {location.pathname === "/app" && (
+            <>
+              <Button
+                variant="outlined"
+                size="small"
+                endIcon={<KeyboardArrowDownIcon />}
+                onClick={(event) => setMarketingAnchorEl(event.currentTarget)}
+                sx={{
+                  color: "sidebar.text",
+                  borderColor: "rgba(255,255,255,0.26)",
+                  minWidth: { xs: "auto", sm: 120 },
+                  px: { xs: 1, sm: 1.5 },
+                  "&:hover": {
+                    borderColor: "rgba(255,255,255,0.42)",
+                    backgroundColor: "rgba(255,255,255,0.1)",
+                  },
+                }}
+              >
+                <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
+                  Marketing Pages
+                </Box>
+                <Box component="span" sx={{ display: { xs: "inline", sm: "none" } }}>
+                  Pages
+                </Box>
+              </Button>
+
+              <Menu
+                anchorEl={marketingAnchorEl}
+                open={marketingMenuOpen}
+                onClose={() => setMarketingAnchorEl(null)}
+                anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+                transformOrigin={{ vertical: "top", horizontal: "right" }}
+              >
+                {marketingPages.map((page) => (
+                  <MenuItem
+                    key={page.to}
+                    component={Link}
+                    to={page.to}
+                    onClick={() => setMarketingAnchorEl(null)}
+                  >
+                    {page.label}
+                  </MenuItem>
+                ))}
+              </Menu>
+            </>
+          )}
+
           <NotificationCenter />
 
           <IconButton

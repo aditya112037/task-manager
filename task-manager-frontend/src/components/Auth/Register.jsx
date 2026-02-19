@@ -43,7 +43,7 @@ const Register = () => {
       setError("");
       setLoading(true);
       await register(formData.name, formData.email, formData.password);
-      navigate("/");
+      navigate("/app");
     } catch (error) {
       setError(error.response?.data?.message || "Failed to register");
     } finally {

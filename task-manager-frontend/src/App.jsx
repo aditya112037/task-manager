@@ -12,6 +12,17 @@ import TeamsHome from "./pages/TeamsHome";
 import TeamDetails from "./pages/TeamDetails";
 import CreateTeam from "./pages/CreateTeam";
 import JoinTeam from "./pages/JoinTeam";
+import {
+  LandingPage,
+  FeaturesPage,
+  PricingPage,
+  AboutPage,
+  ContactPage,
+  PrivacyPage,
+  TermsPage,
+  SecurityPage,
+  BlogPage,
+} from "./pages/public/MarketingPages";
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -22,7 +33,7 @@ const ProtectedRoute = ({ children }) => {
 const PublicRoute = ({ children }) => {
   const { user, loading } = useAuth();
   if (loading) return <div>Loading...</div>;
-  return !user ? children : <Navigate to="/" />;
+  return !user ? children : <Navigate to="/app" />;
 };
 
 function AppContent() {
@@ -268,6 +279,18 @@ function AppContent() {
           <Route path="/join/:inviteCode" element={<JoinTeam />} />
           <Route
             path="/"
+            element={<LandingPage />}
+          />
+          <Route path="/features" element={<FeaturesPage />} />
+          <Route path="/pricing" element={<PricingPage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/contact" element={<ContactPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/security" element={<SecurityPage />} />
+          <Route path="/blog" element={<BlogPage />} />
+          <Route
+            path="/app"
             element={
               <ProtectedRoute>
                 <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
@@ -314,6 +337,7 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Router>
     </ThemeProvider>

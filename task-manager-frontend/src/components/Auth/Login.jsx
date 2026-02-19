@@ -37,7 +37,7 @@ const Login = () => {
       setError("");
       setLoading(true);
       await login(formData.email, formData.password);
-      navigate("/");
+      navigate("/app");
     } catch (error) {
       setError(error.response?.data?.message || "Failed to login");
     } finally {
