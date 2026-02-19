@@ -26,7 +26,6 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
   const marketingMenuOpen = Boolean(marketingAnchorEl);
 
   const marketingPages = [
-    { label: "Home", to: "/" },
     { label: "Features", to: "/features" },
     { label: "Pricing", to: "/pricing" },
     { label: "About", to: "/about" },

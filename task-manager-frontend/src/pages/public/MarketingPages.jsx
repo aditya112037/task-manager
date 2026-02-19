@@ -21,8 +21,8 @@ const priceCardSx = {
 
 export const LandingPage = () => (
   <MarketingLayout
-    title="Structured execution for serious teams."
-    subtitle="Task Suite helps growing businesses plan work, run meetings, enforce accountability, and ship with clarity."
+    title="Welcome to Task Suite"
+    subtitle="A calm, structured workspace where your team can plan clearly, collaborate confidently, and deliver on time."
   >
     <Grid container spacing={3} sx={{ mb: 2 }}>
       <Grid item xs={12} md={7}>
@@ -30,7 +30,7 @@ export const LandingPage = () => (
           <CardContent sx={{ p: 3.5 }}>
             <Stack spacing={2}>
               <Chip label="Built for operations-first teams" color="secondary" sx={{ alignSelf: "flex-start" }} />
-              <Typography variant="h4">One system for tasks, meetings, and ownership.</Typography>
+              <Typography variant="h4">One place for tasks, meetings, and clear ownership.</Typography>
               <Typography color="text.secondary">
                 Teams do not fail because of a lack of tools. They fail because execution is fragmented. Task Suite unifies
                 day-to-day delivery into one controlled workflow.

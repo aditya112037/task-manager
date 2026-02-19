@@ -1,9 +1,21 @@
 import React from "react";
 import { AppBar, Box, Button, Container, Stack, Toolbar, Typography, useTheme } from "@mui/material";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
+
+const publicNavItems = [
+  { label: "Features", to: "/features" },
+  { label: "Pricing", to: "/pricing" },
+  { label: "About", to: "/about" },
+  { label: "Contact", to: "/contact" },
+  { label: "Privacy", to: "/privacy" },
+  { label: "Terms", to: "/terms" },
+  { label: "Security", to: "/security" },
+  { label: "Blog", to: "/blog" },
+];
 
 const MarketingLayout = ({ title, subtitle, children }) => {
   const theme = useTheme();
+  const location = useLocation();
 
   return (
     <Box sx={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
@@ -28,9 +40,24 @@ const MarketingLayout = ({ title, subtitle, children }) => {
               >
                 Task Suite
               </Typography>
-              <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 700, letterSpacing: 0.4 }}>
-                by Task Manager
-              </Typography>
+            </Stack>
+
+            <Stack direction="row" spacing={1} sx={{ display: { xs: "none", lg: "flex" } }}>
+              {publicNavItems.map((item) => {
+                const active = location.pathname === item.to;
+                return (
+                  <Button
+                    key={item.to}
+                    component={Link}
+                    to={item.to}
+                    variant={active ? "contained" : "text"}
+                    color={active ? "primary" : "inherit"}
+                    size="small"
+                  >
+                    {item.label}
+                  </Button>
+                );
+              })}
             </Stack>
 
             <Stack direction="row" spacing={1}>
@@ -86,6 +113,13 @@ const MarketingLayout = ({ title, subtitle, children }) => {
                 Professional project execution for modern teams.
               </Typography>
             </Box>
+            <Stack direction="row" spacing={0.4} sx={{ flexWrap: "wrap" }}>
+              {publicNavItems.map((item) => (
+                <Button key={item.to} component={Link} to={item.to} size="small" variant="text">
+                  {item.label}
+                </Button>
+              ))}
+            </Stack>
           </Stack>
         </Container>
       </Box>
