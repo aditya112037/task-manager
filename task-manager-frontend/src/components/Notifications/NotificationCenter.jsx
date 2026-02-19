@@ -59,21 +59,21 @@ const NotificationCenter = () => {
     setAnchorEl(null);
   };
 
-  const markAsRead = async (notificationId) => {
+  const removeNotification = async (notificationId) => {
     try {
-      await api.put(`/api/notifications/${notificationId}/read`);
+      await api.delete(`/api/notifications/${notificationId}`);
       fetchNotifications();
     } catch (error) {
-      console.error("Error marking notification as read:", error);
+      console.error("Error deleting notification:", error);
     }
   };
 
-  const markAllAsRead = async () => {
+  const clearAllNotifications = async () => {
     try {
-      await api.put("/api/notifications/read-all");
+      await api.delete("/api/notifications");
       fetchNotifications();
     } catch (error) {
-      console.error("Error marking all as read:", error);
+      console.error("Error clearing notifications:", error);
     }
   };
 
@@ -160,8 +160,8 @@ const NotificationCenter = () => {
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Typography variant="h6">Notifications</Typography>
             {unreadCount > 0 && (
-              <Button size="small" onClick={markAllAsRead}>
-                Mark all as read
+              <Button size="small" onClick={clearAllNotifications}>
+                Clear all
               </Button>
             )}
           </Box>
@@ -191,7 +191,7 @@ const NotificationCenter = () => {
               >
                 <ListItemButton
                   onClick={async () => {
-                    await markAsRead(notification._id);
+                    await removeNotification(notification._id);
                     openNotificationTarget(notification);
                   }}
                   sx={{
