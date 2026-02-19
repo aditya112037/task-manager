@@ -3,6 +3,7 @@
 const express = require("express");
 const router = express.Router();
 const Team = require("../models/team");
+const Notification = require("../models/Notification");
 const { protect } = require("../middleware/auth");
 const { getConferenceByTeamId, conferences } = require("../utils/conferenceStore");
 
@@ -22,6 +23,33 @@ const invalidateTasks = (teamId) => {
 };
 
 const validMemberRoles = new Set(["admin", "manager", "member"]);
+
+const notifyTeamMembers = async ({
+  teamId,
+  type,
+  title,
+  message,
+  excludeUserId = null,
+  metadata = {},
+}) => {
+  const team = await Team.findById(teamId).select("members");
+  if (!team) return;
+  const recipients = (team.members || [])
+    .map((m) => m.user)
+    .filter((uid) => String(uid) !== String(excludeUserId || ""));
+  if (!recipients.length) return;
+  await Notification.insertMany(
+    recipients.map((uid) => ({
+      user: uid,
+      type,
+      title,
+      message,
+      relatedTeam: teamId,
+      metadata,
+    })),
+    { ordered: false }
+  );
+};
 
 // ----------------------------------------------------
 // CREATE TEAM ✓
@@ -87,6 +115,13 @@ router.post("/:teamId/join", protect, async (req, res) => {
       team.members.push({ user: req.user._id, role: "member" });
       await team.save();
 
+      await notifyTeamMembers({
+        teamId: team._id,
+        type: "team_joined",
+        title: "Team Member Joined",
+        message: `${req.user.name} joined the team.`,
+      });
+
       // membership affects visibility
       invalidateTeam(team._id);
       invalidateTasks(team._id);
@@ -120,6 +155,14 @@ router.delete("/:teamId/members/:userId", protect, async (req, res) => {
     );
 
     await team.save();
+
+    await notifyTeamMembers({
+      teamId: team._id,
+      type: "team_left",
+      title: "Team Member Removed",
+      message: `A team member was removed by ${req.user.name}.`,
+      metadata: { removedUserId: req.params.userId },
+    });
 
     invalidateTeam(team._id);
     invalidateTasks(team._id);
@@ -240,6 +283,15 @@ router.put("/:teamId/members/:userId/role", protect, async (req, res) => {
     member.role = nextRole;
     await team.save();
 
+    await Notification.create({
+      user: req.params.userId,
+      type: "team_role_updated",
+      title: "Role Updated",
+      message: `${req.user.name} changed your role to ${nextRole}.`,
+      relatedTeam: team._id,
+      metadata: { role: nextRole },
+    });
+
     invalidateTeam(team._id);
     invalidateTasks(team._id);
 
@@ -280,6 +332,14 @@ router.post("/:teamId/leave", protect, async (req, res) => {
     );
 
     await team.save();
+
+    await notifyTeamMembers({
+      teamId: team._id,
+      type: "team_left",
+      title: "Team Member Left",
+      message: `${req.user.name} left the team.`,
+      excludeUserId: req.user._id,
+    });
 
     invalidateTeam(team._id);
     invalidateTasks(team._id);

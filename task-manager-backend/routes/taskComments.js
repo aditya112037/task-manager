@@ -3,6 +3,7 @@ const router = express.Router();
 const TaskComment = require("../models/TaskComment");
 const TTask = require("../models/TTask");
 const Team = require("../models/team");
+const Notification = require("../models/Notification");
 const { protect } = require("../middleware/auth");
 
 // ----------------------------------------------------
@@ -79,6 +80,25 @@ router.post("/:taskId", protect, async (req, res) => {
     // We return the created comment (as before),
     // but DO NOT push it to other clients via socket.
     const populated = await comment.populate("author", "name photo");
+
+    const recipientIds = (task.team.members || [])
+      .map((m) => m.user)
+      .filter((uid) => String(uid) !== String(req.user._id));
+
+    if (recipientIds.length) {
+      await Notification.insertMany(
+        recipientIds.map((uid) => ({
+          user: uid,
+          type: "task_commented",
+          title: "New Comment",
+          message: `${req.user.name} commented on "${task.title}".`,
+          relatedTask: task._id,
+          relatedTeam: task.team._id,
+          metadata: { commentId: comment._id },
+        })),
+        { ordered: false }
+      );
+    }
 
     emitCommentCreated(task.team._id, task._id, populated);
     invalidateComments(task.team._id, task._id);

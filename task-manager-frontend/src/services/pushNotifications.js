@@ -22,23 +22,23 @@ const urlBase64ToUint8Array = (base64String) => {
   return outputArray;
 };
 
-export const registerForPushNotifications = async () => {
-  if (!isPushSupported()) return;
-  if (!localStorage.getItem("token")) return;
-  if (Notification.permission === "denied") return;
+export const registerForPushNotifications = async ({ askPermission = false } = {}) => {
+  if (!isPushSupported()) return { ok: false, reason: "unsupported" };
+  if (!localStorage.getItem("token")) return { ok: false, reason: "no_token" };
+  if (Notification.permission === "denied") return { ok: false, reason: "denied" };
 
   const keyRes = await notificationsAPI.getPushVapidPublicKey();
   const publicKey = keyRes?.data?.publicKey;
-  if (!publicKey) return;
+  if (!publicKey) return { ok: false, reason: "no_vapid_key" };
 
   const registration = await navigator.serviceWorker.ready;
-  if (!registration) return;
+  if (!registration) return { ok: false, reason: "no_sw_registration" };
 
   let permission = Notification.permission;
-  if (permission !== "granted") {
+  if (permission !== "granted" && askPermission) {
     permission = await Notification.requestPermission();
   }
-  if (permission !== "granted") return;
+  if (permission !== "granted") return { ok: false, reason: "permission_not_granted" };
 
   let subscription = await registration.pushManager.getSubscription();
   if (!subscription) {
@@ -49,6 +49,7 @@ export const registerForPushNotifications = async () => {
   }
 
   await notificationsAPI.subscribePush(subscription.toJSON());
+  return { ok: true };
 };
 
 export const unsubscribeFromPushNotifications = async () => {
@@ -64,4 +65,3 @@ export const unsubscribeFromPushNotifications = async () => {
   await notificationsAPI.unsubscribePush(subscription.endpoint);
   await subscription.unsubscribe();
 };
-

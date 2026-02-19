@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const TTask = require("../models/TTask");
 const Team = require("../models/team");
+const Notification = require("../models/Notification");
 const mongoose = require("mongoose");
 const TaskComment = require("../models/TaskComment");
 const { protect } = require("../middleware/auth");
@@ -65,6 +66,36 @@ const populateTaskForClient = async (taskDoc) => {
     { path: "extensionRequest.requestedBy", select: "name photo" },
     { path: "extensionRequest.reviewedBy", select: "name photo" },
   ]);
+};
+
+const notifyTeamMembers = async ({
+  teamId,
+  type,
+  title,
+  message,
+  relatedTask = null,
+  excludeUserId = null,
+  metadata = {},
+}) => {
+  const team = await Team.findById(teamId).select("members");
+  if (!team) return;
+  const recipients = (team.members || [])
+    .map((m) => m.user)
+    .filter((uid) => String(uid) !== String(excludeUserId || ""));
+  if (!recipients.length) return;
+
+  await Notification.insertMany(
+    recipients.map((uid) => ({
+      user: uid,
+      type,
+      title,
+      message,
+      relatedTask,
+      relatedTeam: teamId,
+      metadata,
+    })),
+    { ordered: false }
+  );
 };
 
 /* ---------------- GET ALL TEAM TASKS ---------------- */
@@ -141,6 +172,15 @@ router.post("/:teamId", protect, async (req, res) => {
     });
 
     const populatedTask = await populateTaskForClient(task);
+
+    await notifyTeamMembers({
+      teamId: team._id,
+      type: "team_task_created",
+      title: "Team Task Created",
+      message: `${req.user.name} created "${task.title}".`,
+      relatedTask: task._id,
+      metadata: { title: task.title },
+    });
 
     invalidateTasks(team._id);
     invalidateComments(team._id, task._id);
@@ -255,6 +295,33 @@ router.put("/:taskId", protect, async (req, res) => {
     }
 
     const populatedTask = await populateTaskForClient(task);
+
+    await notifyTeamMembers({
+      teamId: task.team._id,
+      type: "team_task_updated",
+      title: "Team Task Updated",
+      message: `${req.user.name} updated "${task.title}".`,
+      relatedTask: task._id,
+      excludeUserId: req.user._id,
+      metadata: { title: task.title, updates: Object.keys(updates) },
+    });
+
+    if (
+      Object.prototype.hasOwnProperty.call(updates, "assignedTo") &&
+      updates.assignedTo &&
+      String(updates.assignedTo) !== String(req.user._id)
+    ) {
+      await Notification.create({
+        user: updates.assignedTo,
+        type: "task_assigned",
+        title: "Task Assigned",
+        message: `${req.user.name} assigned you "${task.title}".`,
+        relatedTask: task._id,
+        relatedTeam: task.team._id,
+        metadata: { title: task.title },
+      });
+    }
+
     invalidateTasks(task.team._id);
     invalidateComments(task.team._id, task._id);
 
@@ -275,7 +342,17 @@ router.delete("/:taskId", protect, async (req, res) => {
     if (!member || !["admin", "manager"].includes(member.role))
       return res.status(403).json({ message: "Not authorized" });
 
+    const removedTitle = task.title;
     await task.deleteOne();
+
+    await notifyTeamMembers({
+      teamId: task.team._id,
+      type: "team_task_deleted",
+      title: "Team Task Deleted",
+      message: `${req.user.name} deleted "${removedTitle}".`,
+      relatedTask: task._id,
+      metadata: { title: removedTitle },
+    });
 
     invalidateTasks(task.team._id);
     invalidateExtensions(task.team._id);
@@ -333,6 +410,16 @@ router.post("/:taskId/request-extension", protect, async (req, res) => {
 
     const populatedTask = await populateTaskForClient(task);
 
+    await notifyTeamMembers({
+      teamId: task.team._id,
+      type: "extension_requested",
+      title: "Extension Requested",
+      message: `${req.user.name} requested an extension for "${task.title}".`,
+      relatedTask: task._id,
+      excludeUserId: req.user._id,
+      metadata: { requestedDueDate },
+    });
+
     invalidateTasks(task.team._id);
     invalidateExtensions(task.team._id);
     invalidateComments(task.team._id, task._id);
@@ -374,6 +461,17 @@ router.post("/:taskId/extension/approve", protect, async (req, res) => {
 
     const populatedTask = await populateTaskForClient(task);
 
+    if (task.assignedTo) {
+      await Notification.create({
+        user: task.assignedTo,
+        type: "extension_approved",
+        title: "Extension Approved",
+        message: `${req.user.name} approved extension for "${task.title}".`,
+        relatedTask: task._id,
+        relatedTeam: task.team._id,
+      });
+    }
+
     invalidateTasks(task.team._id);
     invalidateExtensions(task.team._id);
     invalidateComments(task.team._id, task._id);
@@ -413,6 +511,17 @@ router.post("/:taskId/extension/reject", protect, async (req, res) => {
     });
 
     const populatedTask = await populateTaskForClient(task);
+
+    if (task.assignedTo) {
+      await Notification.create({
+        user: task.assignedTo,
+        type: "extension_rejected",
+        title: "Extension Rejected",
+        message: `${req.user.name} rejected extension for "${task.title}".`,
+        relatedTask: task._id,
+        relatedTeam: task.team._id,
+      });
+    }
 
     invalidateTasks(task.team._id);
     invalidateExtensions(task.team._id);

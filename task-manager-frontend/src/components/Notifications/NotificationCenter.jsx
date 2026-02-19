@@ -21,6 +21,7 @@ import WarningIcon from "@mui/icons-material/Warning";
 import ErrorIcon from "@mui/icons-material/Error";
 import InfoIcon from "@mui/icons-material/Info";
 import api from "../../services/api";
+import { registerForPushNotifications } from "../../services/pushNotifications";
 
 const NotificationCenter = () => {
   const theme = useTheme();
@@ -28,6 +29,8 @@ const NotificationCenter = () => {
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [enablingPush, setEnablingPush] = useState(false);
+  const [pushStatus, setPushStatus] = useState("");
 
   const open = Boolean(anchorEl);
 
@@ -116,6 +119,29 @@ const NotificationCenter = () => {
     return date.toLocaleDateString();
   };
 
+  const handleEnablePush = async () => {
+    try {
+      setEnablingPush(true);
+      setPushStatus("");
+      const result = await registerForPushNotifications({ askPermission: true });
+      if (result?.ok) {
+        setPushStatus("Push enabled.");
+      } else if (result?.reason === "denied") {
+        setPushStatus("Push blocked in browser settings.");
+      } else if (result?.reason === "permission_not_granted") {
+        setPushStatus("Permission not granted.");
+      } else if (result?.reason === "unsupported") {
+        setPushStatus("Push is not supported on this context/device.");
+      } else {
+        setPushStatus("Push setup incomplete.");
+      }
+    } catch (error) {
+      setPushStatus("Failed to enable push.");
+    } finally {
+      setEnablingPush(false);
+    }
+  };
+
   return (
     <>
       <IconButton
@@ -165,6 +191,23 @@ const NotificationCenter = () => {
               </Button>
             )}
           </Box>
+          {typeof Notification !== "undefined" && Notification.permission !== "granted" && (
+            <Box sx={{ mt: 1 }}>
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={handleEnablePush}
+                disabled={enablingPush}
+              >
+                {enablingPush ? "Enabling..." : "Enable Push"}
+              </Button>
+              {pushStatus && (
+                <Typography variant="caption" sx={{ display: "block", mt: 0.5 }}>
+                  {pushStatus}
+                </Typography>
+              )}
+            </Box>
+          )}
         </Box>
 
         <List sx={{ p: 0 }}>

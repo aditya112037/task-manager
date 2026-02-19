@@ -22,7 +22,17 @@ const notificationSchema = new mongoose.Schema(
 
   "new_team_task",
   "conference_started",
-  "conference_ended"
+  "conference_ended",
+  "personal_task_created",
+  "personal_task_updated",
+  "personal_task_deleted",
+  "team_task_created",
+  "team_task_updated",
+  "team_task_deleted",
+  "task_commented",
+  "team_joined",
+  "team_left",
+  "team_role_updated"
 ],
       required: true,
     },

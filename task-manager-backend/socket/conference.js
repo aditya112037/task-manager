@@ -372,7 +372,6 @@ module.exports = function registerConferenceSocket(io, socket) {
         type: "conference_started",
         title: "Conference Started",
         message: `${user.name} started a conference.`,
-        excludeUserId: user._id,
       });
 
       // ✅ FIXED: Authoritative participants list

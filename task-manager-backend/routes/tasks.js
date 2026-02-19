@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const Task = require('../models/task');
+const Notification = require("../models/Notification");
 const { protect } = require('../middleware/auth');
 
 const router = express.Router();
@@ -38,6 +39,14 @@ router.post('/', [
       user: req.user._id
     });
 
+    await Notification.create({
+      user: req.user._id,
+      type: "personal_task_created",
+      title: "Personal Task Created",
+      message: `You created "${task.title}".`,
+      metadata: { taskId: task._id, title: task.title },
+    });
+
     res.status(201).json(task);
   } catch (error) {
     console.error(error);
@@ -61,9 +70,18 @@ router.put('/:id', async (req, res) => {
       return res.status(401).json({ message: 'Not authorized' });
     }
 
+    const oldTitle = task.title;
     task = await Task.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
       runValidators: true
+    });
+
+    await Notification.create({
+      user: req.user._id,
+      type: "personal_task_updated",
+      title: "Personal Task Updated",
+      message: `You updated "${task.title || oldTitle}".`,
+      metadata: { taskId: task._id, title: task.title || oldTitle },
     });
 
     res.json(task);
@@ -89,7 +107,16 @@ router.delete('/:id', async (req, res) => {
       return res.status(401).json({ message: 'Not authorized' });
     }
 
+    const removedTitle = task.title;
     await Task.findByIdAndDelete(req.params.id);
+
+    await Notification.create({
+      user: req.user._id,
+      type: "personal_task_deleted",
+      title: "Personal Task Deleted",
+      message: `You deleted "${removedTitle}".`,
+      metadata: { taskId: req.params.id, title: removedTitle },
+    });
 
     res.json({ message: 'Task removed' });
   } catch (error) {

@@ -98,7 +98,7 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     if (!user?._id) return;
-    registerForPushNotifications().catch((err) => {
+    registerForPushNotifications({ askPermission: false }).catch((err) => {
       console.warn("Push registration failed:", err?.message || err);
     });
   }, [user?._id]);
