@@ -31,7 +31,6 @@ const NotificationCenter = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [enablingPush, setEnablingPush] = useState(false);
-  const [testingPush, setTestingPush] = useState(false);
   const [pushStatus, setPushStatus] = useState("");
 
   const open = Boolean(anchorEl);
@@ -158,24 +157,6 @@ const NotificationCenter = () => {
     }
   };
 
-  const handleTestPush = async () => {
-    try {
-      setTestingPush(true);
-      setPushStatus("");
-      await api.post("/api/notifications/test-push", {
-        title: "Test Push",
-        message: "If you see this as a popup, push is working.",
-        url: "/",
-      });
-      setPushStatus("Test push requested. Check for popup.");
-      fetchNotifications();
-    } catch (error) {
-      setPushStatus("Test push failed.");
-    } finally {
-      setTestingPush(false);
-    }
-  };
-
   return (
     <>
       <IconButton
@@ -242,16 +223,6 @@ const NotificationCenter = () => {
               )}
             </Box>
           )}
-          <Box sx={{ mt: 1 }}>
-            <Button
-              size="small"
-              variant="text"
-              onClick={handleTestPush}
-              disabled={testingPush}
-            >
-              {testingPush ? "Testing..." : "Test Push"}
-            </Button>
-          </Box>
         </Box>
 
         <List sx={{ p: 0 }}>
