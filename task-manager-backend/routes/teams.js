@@ -4,6 +4,8 @@ const express = require("express");
 const router = express.Router();
 const Team = require("../models/team");
 const Notification = require("../models/Notification");
+const { emitNotificationsChanged } = require("../utils/notificationEvents");
+const { sendPushToUsers } = require("../utils/pushNotifications");
 const { protect } = require("../middleware/auth");
 const { getConferenceByTeamId, conferences } = require("../utils/conferenceStore");
 
@@ -49,6 +51,14 @@ const notifyTeamMembers = async ({
     })),
     { ordered: false }
   );
+  emitNotificationsChanged(recipients);
+  await sendPushToUsers(recipients, {
+    title,
+    body: message,
+    url: `/teams/${teamId}`,
+    tag: `${type}-${teamId}`,
+    data: { teamId, type },
+  });
 };
 
 // ----------------------------------------------------
@@ -290,6 +300,13 @@ router.put("/:teamId/members/:userId/role", protect, async (req, res) => {
       message: `${req.user.name} changed your role to ${nextRole}.`,
       relatedTeam: team._id,
       metadata: { role: nextRole },
+    });
+    emitNotificationsChanged([req.params.userId]);
+    await sendPushToUsers([req.params.userId], {
+      title: "Role Updated",
+      body: `${req.user.name} changed your role to ${nextRole}.`,
+      url: `/teams/${team._id}`,
+      tag: `team-role-updated-${team._id}`,
     });
 
     invalidateTeam(team._id);

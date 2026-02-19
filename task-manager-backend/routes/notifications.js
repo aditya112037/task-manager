@@ -3,6 +3,8 @@ const express = require("express");
 const router = express.Router();
 const Notification = require("../models/Notification");
 const User = require("../models/user");
+const { emitNotificationsChanged } = require("../utils/notificationEvents");
+const { sendPushToUsers } = require("../utils/pushNotifications");
 const { protect } = require("../middleware/auth");
 
 // GET user notifications
@@ -89,6 +91,39 @@ router.post("/push/unsubscribe", protect, async (req, res) => {
     );
 
     return res.json({ message: "Push subscription removed" });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: "Server error" });
+  }
+});
+
+// TEMP: Send a test notification + push to current user
+router.post("/test-push", protect, async (req, res) => {
+  try {
+    const title = String(req.body?.title || "Test Notification");
+    const message = String(
+      req.body?.message || "Push test from Task Manager backend."
+    );
+    const url = String(req.body?.url || "/");
+
+    const notification = await Notification.create({
+      user: req.user._id,
+      type: "test_notification",
+      title,
+      message,
+      metadata: { url, isTest: true },
+    });
+
+    emitNotificationsChanged([req.user._id]);
+    await sendPushToUsers([req.user._id], {
+      title,
+      body: message,
+      url,
+      tag: `test-push-${notification._id}`,
+      data: { notificationId: notification._id, isTest: true },
+    });
+
+    return res.json({ message: "Test push sent", notificationId: notification._id });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ message: "Server error" });

@@ -5,6 +5,8 @@ const Team = require("../models/team");
 const Notification = require("../models/Notification");
 const mongoose = require("mongoose");
 const TaskComment = require("../models/TaskComment");
+const { emitNotificationsChanged } = require("../utils/notificationEvents");
+const { sendPushToUsers } = require("../utils/pushNotifications");
 const { protect } = require("../middleware/auth");
 
 // ----------------------------------------------------
@@ -96,6 +98,14 @@ const notifyTeamMembers = async ({
     })),
     { ordered: false }
   );
+  emitNotificationsChanged(recipients);
+  await sendPushToUsers(recipients, {
+    title,
+    body: message,
+    url: `/teams/${teamId}`,
+    tag: `${type}-${teamId}`,
+    data: { teamId, relatedTask, type },
+  });
 };
 
 /* ---------------- GET ALL TEAM TASKS ---------------- */
@@ -320,6 +330,13 @@ router.put("/:taskId", protect, async (req, res) => {
         relatedTeam: task.team._id,
         metadata: { title: task.title },
       });
+      emitNotificationsChanged([updates.assignedTo]);
+      await sendPushToUsers([updates.assignedTo], {
+        title: "Task Assigned",
+        body: `${req.user.name} assigned you "${task.title}".`,
+        url: `/teams/${task.team._id}`,
+        tag: `task-assigned-${task._id}`,
+      });
     }
 
     invalidateTasks(task.team._id);
@@ -470,6 +487,13 @@ router.post("/:taskId/extension/approve", protect, async (req, res) => {
         relatedTask: task._id,
         relatedTeam: task.team._id,
       });
+      emitNotificationsChanged([task.assignedTo]);
+      await sendPushToUsers([task.assignedTo], {
+        title: "Extension Approved",
+        body: `${req.user.name} approved extension for "${task.title}".`,
+        url: `/teams/${task.team._id}`,
+        tag: `extension-approved-${task._id}`,
+      });
     }
 
     invalidateTasks(task.team._id);
@@ -520,6 +544,13 @@ router.post("/:taskId/extension/reject", protect, async (req, res) => {
         message: `${req.user.name} rejected extension for "${task.title}".`,
         relatedTask: task._id,
         relatedTeam: task.team._id,
+      });
+      emitNotificationsChanged([task.assignedTo]);
+      await sendPushToUsers([task.assignedTo], {
+        title: "Extension Rejected",
+        body: `${req.user.name} rejected extension for "${task.title}".`,
+        url: `/teams/${task.team._id}`,
+        tag: `extension-rejected-${task._id}`,
       });
     }
 

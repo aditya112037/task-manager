@@ -1,5 +1,5 @@
 // components/Notifications/NotificationCenter.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Badge,
   IconButton,
@@ -22,6 +22,7 @@ import ErrorIcon from "@mui/icons-material/Error";
 import InfoIcon from "@mui/icons-material/Info";
 import api from "../../services/api";
 import { registerForPushNotifications } from "../../services/pushNotifications";
+import { getSocket } from "../../services/socket";
 
 const NotificationCenter = () => {
   const theme = useTheme();
@@ -30,11 +31,12 @@ const NotificationCenter = () => {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [enablingPush, setEnablingPush] = useState(false);
+  const [testingPush, setTestingPush] = useState(false);
   const [pushStatus, setPushStatus] = useState("");
 
   const open = Boolean(anchorEl);
 
-  const fetchNotifications = async () => {
+  const fetchNotifications = useCallback(async () => {
     try {
       setLoading(true);
       const response = await api.get("/api/notifications");
@@ -45,14 +47,28 @@ const NotificationCenter = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchNotifications();
     // Poll for new notifications every 30 seconds
     const interval = setInterval(fetchNotifications, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchNotifications]);
+
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    const onNotificationsChanged = () => {
+      fetchNotifications();
+    };
+
+    socket.on("notifications:changed", onNotificationsChanged);
+    return () => {
+      socket.off("notifications:changed", onNotificationsChanged);
+    };
+  }, [fetchNotifications]);
 
   const handleClick = (event) => {
     setAnchorEl(event.currentTarget);
@@ -142,6 +158,24 @@ const NotificationCenter = () => {
     }
   };
 
+  const handleTestPush = async () => {
+    try {
+      setTestingPush(true);
+      setPushStatus("");
+      await api.post("/api/notifications/test-push", {
+        title: "Test Push",
+        message: "If you see this as a popup, push is working.",
+        url: "/",
+      });
+      setPushStatus("Test push requested. Check for popup.");
+      fetchNotifications();
+    } catch (error) {
+      setPushStatus("Test push failed.");
+    } finally {
+      setTestingPush(false);
+    }
+  };
+
   return (
     <>
       <IconButton
@@ -208,6 +242,16 @@ const NotificationCenter = () => {
               )}
             </Box>
           )}
+          <Box sx={{ mt: 1 }}>
+            <Button
+              size="small"
+              variant="text"
+              onClick={handleTestPush}
+              disabled={testingPush}
+            >
+              {testingPush ? "Testing..." : "Test Push"}
+            </Button>
+          </Box>
         </Box>
 
         <List sx={{ p: 0 }}>

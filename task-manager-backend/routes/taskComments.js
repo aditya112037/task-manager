@@ -4,6 +4,8 @@ const TaskComment = require("../models/TaskComment");
 const TTask = require("../models/TTask");
 const Team = require("../models/team");
 const Notification = require("../models/Notification");
+const { emitNotificationsChanged } = require("../utils/notificationEvents");
+const { sendPushToUsers } = require("../utils/pushNotifications");
 const { protect } = require("../middleware/auth");
 
 // ----------------------------------------------------
@@ -98,6 +100,14 @@ router.post("/:taskId", protect, async (req, res) => {
         })),
         { ordered: false }
       );
+      emitNotificationsChanged(recipientIds);
+      await sendPushToUsers(recipientIds, {
+        title: "New Comment",
+        body: `${req.user.name} commented on "${task.title}".`,
+        url: `/teams/${task.team._id}`,
+        tag: `task-comment-${task._id}`,
+        data: { taskId: task._id, teamId: task.team._id },
+      });
     }
 
     emitCommentCreated(task.team._id, task._id, populated);

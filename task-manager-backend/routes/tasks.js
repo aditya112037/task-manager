@@ -2,6 +2,8 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const Task = require('../models/task');
 const Notification = require("../models/Notification");
+const { emitNotificationsChanged } = require("../utils/notificationEvents");
+const { sendPushToUsers } = require("../utils/pushNotifications");
 const { protect } = require('../middleware/auth');
 
 const router = express.Router();
@@ -46,6 +48,13 @@ router.post('/', [
       message: `You created "${task.title}".`,
       metadata: { taskId: task._id, title: task.title },
     });
+    emitNotificationsChanged([req.user._id]);
+    await sendPushToUsers([req.user._id], {
+      title: "Personal Task Created",
+      body: `You created "${task.title}".`,
+      url: "/",
+      tag: `personal-task-created-${task._id}`,
+    });
 
     res.status(201).json(task);
   } catch (error) {
@@ -83,6 +92,13 @@ router.put('/:id', async (req, res) => {
       message: `You updated "${task.title || oldTitle}".`,
       metadata: { taskId: task._id, title: task.title || oldTitle },
     });
+    emitNotificationsChanged([req.user._id]);
+    await sendPushToUsers([req.user._id], {
+      title: "Personal Task Updated",
+      body: `You updated "${task.title || oldTitle}".`,
+      url: "/",
+      tag: `personal-task-updated-${task._id}`,
+    });
 
     res.json(task);
   } catch (error) {
@@ -116,6 +132,13 @@ router.delete('/:id', async (req, res) => {
       title: "Personal Task Deleted",
       message: `You deleted "${removedTitle}".`,
       metadata: { taskId: req.params.id, title: removedTitle },
+    });
+    emitNotificationsChanged([req.user._id]);
+    await sendPushToUsers([req.user._id], {
+      title: "Personal Task Deleted",
+      body: `You deleted "${removedTitle}".`,
+      url: "/",
+      tag: `personal-task-deleted-${req.params.id}`,
     });
 
     res.json({ message: 'Task removed' });

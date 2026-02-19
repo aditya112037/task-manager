@@ -3,6 +3,7 @@ const Team = require("../models/team");
 const Notification = require("../models/Notification");
 const verifyConferenceAdmin = require("./verifyConferenceAdmin");
 const { sendPushToUsers } = require("../utils/pushNotifications");
+const { emitNotificationsChanged } = require("../utils/notificationEvents");
 const { 
   conferences, 
   getConferenceByTeamId, 
@@ -50,6 +51,7 @@ module.exports = function registerConferenceSocket(io, socket) {
       })),
       { ordered: false }
     );
+    emitNotificationsChanged(recipients);
 
     await sendPushToUsers(recipients, {
       title,

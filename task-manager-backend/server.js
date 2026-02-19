@@ -161,6 +161,9 @@ io.use(async (socket, next) => {
 --------------------------------------------------- */
 io.on("connection", (socket) => {
   console.log("🔥 Socket connected:", socket.id, socket.user?.email);
+  if (socket.userId) {
+    socket.join(`user_${socket.userId}`);
+  }
 
   socket.on("joinTeam", (teamId) => {
     if (!teamId) return;
