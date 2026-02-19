@@ -58,6 +58,25 @@ export const LandingPage = () => (
           <Grid item xs={12}>
             <Card sx={sectionCardSx}>
               <CardContent sx={{ p: 3.5 }}>
+                <Stack spacing={1.2}>
+                  <Typography variant="h5">Built for leaders in control roles</Typography>
+                  <Typography color="text.secondary">
+                    Team Leads, Project Managers, Operations Managers, and Agency Founders.
+                  </Typography>
+                  <Divider sx={{ my: 0.6 }} />
+                  <Typography variant="body2" color="text.secondary">
+                    Leaders demand Control, Visibility, Accountability, Deadlines, and Reduced chaos.
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Task Suite branding and workflow design are focused specifically on these outcomes.
+                  </Typography>
+                </Stack>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12}>
+            <Card sx={sectionCardSx}>
+              <CardContent sx={{ p: 3.5 }}>
                 <Stack spacing={2}>
                   <Typography variant="h5">Why teams switch</Typography>
                   <Typography color="text.secondary">Too many apps. Meetings without execution. Deadlines slipping.</Typography>
@@ -67,25 +86,6 @@ export const LandingPage = () => (
                   <Divider />
                   <Typography variant="body2" color="text.secondary">
                     Trusted by teams that need predictability, not productivity noise.
-                  </Typography>
-                </Stack>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={12}>
-            <Card sx={sectionCardSx}>
-              <CardContent sx={{ p: 3.5 }}>
-                <Stack spacing={1.2}>
-                  <Typography variant="h5">Built for leaders in control roles</Typography>
-                  <Typography color="text.secondary">
-                    Team Leads, Project Managers, Operations Managers, and Agency Founders.
-                  </Typography>
-                  <Divider sx={{ my: 0.6 }} />
-                  <Typography variant="body2" color="text.secondary">
-                    They care about: Control, Visibility, Accountability, Deadlines, and Reduced chaos.
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Task Suite branding and workflow design are focused specifically on these outcomes.
                   </Typography>
                 </Stack>
               </CardContent>
