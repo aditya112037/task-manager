@@ -48,3 +48,51 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
+
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+
+  let payload = {};
+  try {
+    payload = event.data.json();
+  } catch {
+    payload = { title: 'Task Manager', body: event.data.text() };
+  }
+
+  const title = payload.title || 'Task Manager';
+  const options = {
+    body: payload.body || '',
+    icon: payload.icon || '/logo192.png',
+    badge: payload.badge || '/logo192.png',
+    tag: payload.tag || 'task-manager',
+    data: payload.data || { url: payload.url || '/' },
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const url =
+    event.notification?.data?.url ||
+    event.notification?.data?.path ||
+    '/';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if ('navigate' in client) {
+          return client.navigate(url).then(() => client.focus());
+        }
+        if ('focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(url);
+      }
+      return undefined;
+    })
+  );
+});

@@ -122,6 +122,11 @@ export const notificationsAPI = {
   markAllAsRead: () => api.put("/api/notifications/read-all"),
   deleteNotification: (id) => api.delete(`/api/notifications/${id}`),
   clearAll: () => api.delete("/api/notifications"),
+  getPushVapidPublicKey: () => api.get("/api/notifications/push/vapid-public-key"),
+  subscribePush: (subscription) =>
+    api.post("/api/notifications/push/subscribe", { subscription }),
+  unsubscribePush: (endpoint) =>
+    api.post("/api/notifications/push/unsubscribe", { endpoint }),
 };
 
 // -------------------- COMMENTS API (CRITICAL FIX) --------------------

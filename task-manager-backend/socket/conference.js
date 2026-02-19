@@ -1,6 +1,8 @@
 // socketHandlers/registerConferenceSocket.js
 const Team = require("../models/team");
+const Notification = require("../models/Notification");
 const verifyConferenceAdmin = require("./verifyConferenceAdmin");
+const { sendPushToUsers } = require("../utils/pushNotifications");
 const { 
   conferences, 
   getConferenceByTeamId, 
@@ -19,6 +21,44 @@ module.exports = function registerConferenceSocket(io, socket) {
   const EMPTY_END_DELAY = 30; // 30 seconds
   const getConferenceRoom = (conferenceId) =>
     `conference_${conferenceId}`;
+
+  const notifyTeamConference = async ({
+    teamId,
+    conferenceId,
+    type,
+    title,
+    message,
+    excludeUserId = null,
+  }) => {
+    const team = await Team.findById(teamId).select("members");
+    if (!team) return;
+
+    const recipients = (team.members || [])
+      .map((m) => String(m.user))
+      .filter((id) => id && id !== String(excludeUserId || ""));
+
+    if (recipients.length === 0) return;
+
+    await Notification.insertMany(
+      recipients.map((userId) => ({
+        user: userId,
+        type,
+        title,
+        message,
+        relatedTeam: teamId,
+        metadata: { conferenceId },
+      })),
+      { ordered: false }
+    );
+
+    await sendPushToUsers(recipients, {
+      title,
+      body: message,
+      url: `/teams/${teamId}`,
+      tag: `conference-${teamId}-${type}`,
+      data: { teamId, conferenceId, type },
+    });
+  };
 
   const getParticipant = (conferenceId, socketId) => {
     const conference = getConference(conferenceId);
@@ -98,7 +138,7 @@ module.exports = function registerConferenceSocket(io, socket) {
   /* ---------------------------------------------------
      🧱 FIXED: SINGLE end function using store lifecycle
   --------------------------------------------------- */
-  const endConferenceAuthoritative = (conference, reason) => {
+  const endConferenceAuthoritative = (conference, reason, endedByName = null) => {
     // ✅ FIXED: Use store's endConference function
     const endedConference = endConference(conference.conferenceId, reason);
     if (!endedConference) return;
@@ -110,6 +150,19 @@ module.exports = function registerConferenceSocket(io, socket) {
     io.to(`team_${teamId}`).emit("conference:ended", payload);
     io.to(`team_${teamId}`).emit("conference:refresh", { teamId });
     io.to(getConferenceRoom(conferenceId)).emit("conference:ended", payload);
+
+    notifyTeamConference({
+      teamId,
+      conferenceId,
+      type: "conference_ended",
+      title: "Conference Ended",
+      message:
+        endedByName
+          ? `${endedByName} ended the team conference.`
+          : "Team conference has ended.",
+    }).catch((error) => {
+      console.error("conference end notification error:", error);
+    });
 
     console.log(`🏁 Conference ${conferenceId} ended [${reason}]`);
 
@@ -311,6 +364,15 @@ module.exports = function registerConferenceSocket(io, socket) {
         conferenceId,
         teamId,
         createdBy: conference.createdBy,
+      });
+
+      await notifyTeamConference({
+        teamId,
+        conferenceId,
+        type: "conference_started",
+        title: "Conference Started",
+        message: `${user.name} started a conference.`,
+        excludeUserId: user._id,
       });
 
       // ✅ FIXED: Authoritative participants list
@@ -873,7 +935,7 @@ if (!conference.speakerMode.enabled) {
       }
 
       // 🚨 AUTHORITATIVE END (no leave logic)
-      endConferenceAuthoritative(conference, "host-ended");
+      endConferenceAuthoritative(conference, "host-ended", user.name);
 
     } catch (err) {
       console.error("conference:end error:", err);

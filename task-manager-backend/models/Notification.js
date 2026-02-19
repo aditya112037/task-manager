@@ -20,7 +20,9 @@ const notificationSchema = new mongoose.Schema(
   "extension_approved",
   "extension_rejected",
 
-  "new_team_task"
+  "new_team_task",
+  "conference_started",
+  "conference_ended"
 ],
       required: true,
     },

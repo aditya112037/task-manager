@@ -13,6 +13,10 @@ import {
   connectSocket,
   disconnectSocket,
 } from "../services/socket";
+import {
+  registerForPushNotifications,
+  unsubscribeFromPushNotifications,
+} from "../services/pushNotifications";
 
 const AuthContext = createContext(null);
 
@@ -33,6 +37,10 @@ export const AuthProvider = ({ children }) => {
      LOGOUT
   --------------------------------------------------- */
   const handleLogout = useCallback(() => {
+    unsubscribeFromPushNotifications().catch((err) => {
+      console.warn("Push unsubscribe failed:", err?.message || err);
+    });
+
     disconnectSocket();
     socketInitializedRef.current = false;
 
@@ -86,6 +94,13 @@ export const AuthProvider = ({ children }) => {
       socket.off("connect_error", handleConnectError);
       socketInitializedRef.current = false;
     };
+  }, [user?._id]);
+
+  useEffect(() => {
+    if (!user?._id) return;
+    registerForPushNotifications().catch((err) => {
+      console.warn("Push registration failed:", err?.message || err);
+    });
   }, [user?._id]);
 
   /* ---------------------------------------------------
