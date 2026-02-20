@@ -19,8 +19,9 @@ const priceCardSx = {
   },
 };
 
-export const LandingPage = () => (
+export const LandingPage = ({ embedded = false }) => (
   <MarketingLayout
+    embedded={embedded}
     title="Welcome to Task Suite"
     subtitle="A calm, structured workspace where your team can plan clearly, collaborate confidently, and deliver on time."
   >
@@ -97,8 +98,9 @@ export const LandingPage = () => (
   </MarketingLayout>
 );
 
-export const FeaturesPage = () => (
+export const FeaturesPage = ({ embedded = false }) => (
   <MarketingLayout
+    embedded={embedded}
     title="Outcome-focused capabilities"
     subtitle="Features designed to improve execution quality, not just activity."
   >
@@ -144,8 +146,9 @@ export const FeaturesPage = () => (
   </MarketingLayout>
 );
 
-export const PricingPage = () => (
+export const PricingPage = ({ embedded = false }) => (
   <MarketingLayout
+    embedded={embedded}
     title="Simple pricing for growing teams"
     subtitle="Static pricing display for plan comparison. Hover cards to explore included capabilities."
   >
@@ -219,8 +222,9 @@ export const PricingPage = () => (
   </MarketingLayout>
 );
 
-export const AboutPage = () => (
+export const AboutPage = ({ embedded = false }) => (
   <MarketingLayout
+    embedded={embedded}
     title="About Task Suite"
     subtitle="Built for businesses that need stability, clarity, and dependable execution systems."
   >
@@ -282,8 +286,9 @@ export const AboutPage = () => (
   </MarketingLayout>
 );
 
-export const ContactPage = () => (
+export const ContactPage = ({ embedded = false }) => (
   <MarketingLayout
+    embedded={embedded}
     title="Contact"
     subtitle="For support, demos, pricing help, and implementation guidance."
   >
@@ -330,8 +335,9 @@ const PolicySection = ({ heading, body }) => (
   </Box>
 );
 
-export const PrivacyPage = () => (
+export const PrivacyPage = ({ embedded = false }) => (
   <MarketingLayout
+    embedded={embedded}
     title="Privacy Policy"
     subtitle="Last updated: February 19, 2026."
   >
@@ -360,8 +366,9 @@ export const PrivacyPage = () => (
   </MarketingLayout>
 );
 
-export const TermsPage = () => (
+export const TermsPage = ({ embedded = false }) => (
   <MarketingLayout
+    embedded={embedded}
     title="Terms of Service"
     subtitle="Last updated: February 19, 2026."
   >
@@ -390,8 +397,9 @@ export const TermsPage = () => (
   </MarketingLayout>
 );
 
-export const SecurityPage = () => (
+export const SecurityPage = ({ embedded = false }) => (
   <MarketingLayout
+    embedded={embedded}
     title="Security & Data Protection"
     subtitle="Operational and technical controls that protect your team data."
   >
@@ -437,8 +445,9 @@ export const SecurityPage = () => (
   </MarketingLayout>
 );
 
-export const BlogPage = () => (
+export const BlogPage = ({ embedded = false }) => (
   <MarketingLayout
+    embedded={embedded}
     title="Blog"
     subtitle="Insights on team structure, delivery quality, and operational maturity."
   >

@@ -281,14 +281,86 @@ function AppContent() {
             path="/"
             element={<LandingPage />}
           />
-          <Route path="/features" element={<FeaturesPage />} />
-          <Route path="/pricing" element={<PricingPage />} />
-          <Route path="/about" element={<AboutPage />} />
-          <Route path="/contact" element={<ContactPage />} />
-          <Route path="/privacy" element={<PrivacyPage />} />
-          <Route path="/terms" element={<TermsPage />} />
-          <Route path="/security" element={<SecurityPage />} />
-          <Route path="/blog" element={<BlogPage />} />
+          <Route
+            path="/features"
+            element={
+              <ProtectedRoute>
+                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                  <FeaturesPage embedded />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/pricing"
+            element={
+              <ProtectedRoute>
+                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                  <PricingPage embedded />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/about"
+            element={
+              <ProtectedRoute>
+                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                  <AboutPage embedded />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/contact"
+            element={
+              <ProtectedRoute>
+                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                  <ContactPage embedded />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/privacy"
+            element={
+              <ProtectedRoute>
+                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                  <PrivacyPage embedded />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/terms"
+            element={
+              <ProtectedRoute>
+                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                  <TermsPage embedded />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/security"
+            element={
+              <ProtectedRoute>
+                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                  <SecurityPage embedded />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/blog"
+            element={
+              <ProtectedRoute>
+                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                  <BlogPage embedded />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/app"
             element={

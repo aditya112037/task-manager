@@ -24,6 +24,7 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
   const location = useLocation();
   const [marketingAnchorEl, setMarketingAnchorEl] = React.useState(null);
   const marketingMenuOpen = Boolean(marketingAnchorEl);
+  const marketingPaths = ["/app", "/features", "/pricing", "/about", "/contact", "/privacy", "/terms", "/security", "/blog"];
 
   const marketingPages = [
     { label: "Features", to: "/features" },
@@ -98,7 +99,7 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
         </Box>
 
         <Box sx={{ display: "flex", alignItems: "center", gap: { xs: 0.5, sm: 1.5 } }}>
-          {location.pathname === "/app" && (
+          {marketingPaths.includes(location.pathname) && (
             <>
               <Button
                 variant="outlined"
