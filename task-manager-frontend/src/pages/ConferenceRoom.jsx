@@ -282,12 +282,13 @@ export default function ConferenceRoom() {
       clearTimeout(endFallbackTimerRef.current);
       endFallbackTimerRef.current = null;
     }
-
-    await performLocalTeardown();
-
     showNotification("Conference has ended", "info");
     const resolvedTeamId = payload?.teamId || conferenceTeamId;
     navigate(resolvedTeamId ? `/teams/${resolvedTeamId}` : "/teams");
+
+    performLocalTeardown().catch((error) => {
+      console.error("Conference teardown after end failed", error);
+    });
   }, [conferenceTeamId, navigate, performLocalTeardown, showNotification]);
 
   const handleEndConference = useCallback(() => {
@@ -304,9 +305,10 @@ export default function ConferenceRoom() {
     if (endFallbackTimerRef.current) {
       clearTimeout(endFallbackTimerRef.current);
     }
-    performLocalTeardown().then(() => {
-      const resolvedTeamId = conferenceTeamId || locationTeamId;
-      navigate(resolvedTeamId ? `/teams/${resolvedTeamId}` : "/teams");
+    const resolvedTeamId = conferenceTeamId || locationTeamId;
+    navigate(resolvedTeamId ? `/teams/${resolvedTeamId}` : "/teams");
+    performLocalTeardown().catch((error) => {
+      console.error("Conference teardown after local end failed", error);
     });
   }, [conferenceId, conferenceTeamId, isAdminOrManager, leaveConferenceLocally, locationTeamId, navigate, performLocalTeardown, socket]);
 
