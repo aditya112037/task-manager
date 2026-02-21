@@ -529,14 +529,18 @@ export default function ConferenceRoom() {
 
       if (screenStream) {
         setScreenSharer(socketId);
-      } else {
-        setScreenSharer((prev) => (prev === socketId ? null : prev));
       }
     };
 
     const onLocalScreenShare = (event) => {
       const active = Boolean(event.detail?.active);
       setSharingScreen(active);
+      if (socket && conferenceId) {
+        socket.emit("conference:screen-share-update", {
+          conferenceId,
+          active,
+        });
+      }
 
       if (active) {
         if (mySocketId) {
@@ -547,6 +551,23 @@ export default function ConferenceRoom() {
       }
 
       setScreenSharer((prev) => (prev === mySocketId ? null : prev));
+      setLayout((prev) =>
+        prev === LAYOUT.PRESENTATION
+          ? lastNonPresentationLayoutRef.current || LAYOUT.GRID
+          : prev
+      );
+    };
+
+    const onScreenShareUpdate = ({ socketId, active }) => {
+      if (!socketId || socketId === mySocketId) return;
+
+      if (active) {
+        setScreenSharer(socketId);
+        setLayout(LAYOUT.PRESENTATION);
+        return;
+      }
+
+      setScreenSharer((prev) => (prev === socketId ? null : prev));
       setLayout((prev) =>
         prev === LAYOUT.PRESENTATION
           ? lastNonPresentationLayoutRef.current || LAYOUT.GRID
@@ -679,6 +700,7 @@ export default function ConferenceRoom() {
     socket.on("conference:force-mute", onForceMute);
     socket.on("conference:force-camera-off", onForceCameraOff);
     socket.on("conference:removed-by-admin", onRemovedByAdmin);
+    socket.on("conference:screen-share-update", onScreenShareUpdate);
     socket.on("conference:ended", handleConferenceEnded);
     socket.on("conference:error", onConferenceError);
 
@@ -702,6 +724,7 @@ export default function ConferenceRoom() {
       socket.off("conference:force-mute", onForceMute);
       socket.off("conference:force-camera-off", onForceCameraOff);
       socket.off("conference:removed-by-admin", onRemovedByAdmin);
+      socket.off("conference:screen-share-update", onScreenShareUpdate);
       socket.off("conference:ended", handleConferenceEnded);
       socket.off("conference:error", onConferenceError);
     };
@@ -818,6 +841,16 @@ export default function ConferenceRoom() {
       const presenter = participantsWithFallback.find((p) => p.socketId === screenSharer);
       return {
         stream: remoteMedia[screenSharer].screenStream,
+        label: getParticipantName(presenter),
+        isLocal: false,
+        isScreen: true,
+      };
+    }
+
+    if (screenSharer && remoteMedia[screenSharer]?.cameraStream) {
+      const presenter = participantsWithFallback.find((p) => p.socketId === screenSharer);
+      return {
+        stream: remoteMedia[screenSharer].cameraStream,
         label: getParticipantName(presenter),
         isLocal: false,
         isScreen: true,

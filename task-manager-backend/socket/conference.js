@@ -605,6 +605,18 @@ module.exports = function registerConferenceSocket(io, socket) {
     });
   });
 
+  socket.on("conference:screen-share-update", ({ conferenceId, active }) => {
+    if (!conferenceId || conferenceId !== socket.conferenceId) return;
+    const conference = getConference(conferenceId);
+    if (!conference) return;
+    if (!conference.participants.has(socket.id)) return;
+
+    socket.to(getConferenceRoom(conferenceId)).emit("conference:screen-share-update", {
+      socketId: socket.id,
+      active: Boolean(active),
+    });
+  });
+
   /* ---------------------------------------------------
      RAISE HAND FEATURE
   --------------------------------------------------- */
