@@ -189,6 +189,8 @@ export default function ConferenceRoom() {
   const endedRef = useRef(false);
   const isEndingRef = useRef(false);
   const speakingRef = useRef(false);
+  const micLevelRef = useRef(0);
+  const lastMicUiUpdateRef = useRef(0);
   const hasCleanedUpRef = useRef(false);
   const endFallbackTimerRef = useRef(null);
   const lastNonPresentationLayoutRef = useRef(LAYOUT.GRID);
@@ -735,14 +737,14 @@ export default function ConferenceRoom() {
   useEffect(() => {
     const interval = window.setInterval(() => {
       const hasScreen = Boolean(getScreenStream());
-      setSharingScreen(hasScreen);
+      setSharingScreen((prev) => (prev === hasScreen ? prev : hasScreen));
 
       if (hasScreen && mySocketId) {
-        setScreenSharer(mySocketId);
+        setScreenSharer((prev) => (prev === mySocketId ? prev : mySocketId));
       } else if (!hasScreen) {
         setScreenSharer((prev) => (prev === mySocketId ? null : prev));
       }
-    }, 300);
+    }, 1200);
 
     return () => window.clearInterval(interval);
   }, [mySocketId]);
@@ -753,6 +755,8 @@ export default function ConferenceRoom() {
         sendSpeakingStatus(false);
       }
       speakingRef.current = false;
+      micLevelRef.current = 0;
+      lastMicUiUpdateRef.current = 0;
       setMicLevel(0);
       return;
     }
@@ -770,17 +774,20 @@ export default function ConferenceRoom() {
       analyser.getByteFrequencyData(data);
 
       const avg = data.reduce((sum, value) => sum + value, 0) / data.length;
-      setMicLevel((prev) => {
-        const smooth = avg * 0.25 + prev * 0.75;
-        const speakingNow = smooth > 5;
+      const smooth = avg * 0.25 + micLevelRef.current * 0.75;
+      micLevelRef.current = smooth;
 
-        if (speakerModeEnabled && speakingNow !== speakingRef.current) {
-          speakingRef.current = speakingNow;
-          sendSpeakingStatus(speakingNow);
-        }
+      const speakingNow = smooth > 5;
+      if (speakerModeEnabled && speakingNow !== speakingRef.current) {
+        speakingRef.current = speakingNow;
+        sendSpeakingStatus(speakingNow);
+      }
 
-        return smooth;
-      });
+      const now = performance.now();
+      if (now - lastMicUiUpdateRef.current >= 120) {
+        lastMicUiUpdateRef.current = now;
+        setMicLevel((prev) => (Math.abs(prev - smooth) < 1 ? prev : smooth));
+      }
 
       rafId = window.requestAnimationFrame(evaluate);
     };
