@@ -134,7 +134,10 @@ function AppContent() {
                 backgroundImage: darkMode
                   ? "radial-gradient(circle at 12% 16%, rgba(65, 179, 164, 0.16), transparent 34%), radial-gradient(circle at 84% 0%, rgba(201, 162, 127, 0.14), transparent 30%), linear-gradient(180deg, #060b12 0%, #070d14 100%)"
                   : "radial-gradient(circle at 8% 8%, rgba(15, 118, 110, 0.16), transparent 34%), radial-gradient(circle at 90% -6%, rgba(176, 137, 104, 0.16), transparent 28%), linear-gradient(180deg, #f8f5ef 0%, #f5f3ee 100%)",
-                backgroundAttachment: "fixed",
+                backgroundAttachment: "scroll",
+                "@media (pointer: fine)": {
+                  backgroundAttachment: "fixed",
+                },
                 transition: "background-color 0.35s ease, color 0.35s ease",
               },
               "::selection": {
@@ -231,11 +234,34 @@ function AppContent() {
             },
           },
           MuiDrawer: {
+            defaultProps: {
+              ModalProps: {
+                keepMounted: true,
+                disableScrollLock: true,
+              },
+            },
             styleOverrides: {
               paper: ({ theme }) => ({
                 background: theme.palette.sidebar.background,
                 borderRight: `1px solid ${theme.palette.divider}`,
               }),
+            },
+          },
+          MuiDialog: {
+            defaultProps: {
+              keepMounted: true,
+              disableScrollLock: true,
+            },
+          },
+          MuiPopover: {
+            defaultProps: {
+              disableScrollLock: true,
+            },
+          },
+          MuiMenu: {
+            defaultProps: {
+              keepMounted: true,
+              disableScrollLock: true,
             },
           },
         },
