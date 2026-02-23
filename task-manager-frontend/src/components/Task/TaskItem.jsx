@@ -269,7 +269,6 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
                   <Typography
                     variant="body2"
                     sx={{
-                      textDecoration: item.completed ? "line-through" : "none",
                       color: item.completed ? "text.secondary" : "text.primary",
                     }}
                   >

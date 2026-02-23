@@ -27,6 +27,12 @@ import { useAuth } from "../context/AuthContext";
 import { getTeamAvatarLabel, getTeamAvatarSx } from "../utils/teamAvatar";
 import { useNavigate } from "react-router-dom";
 
+const byNewestCreated = (a, b) => {
+  const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+  const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+  return bTime - aTime;
+};
+
 const Dashboard = () => {
   const theme = useTheme();
   const navigate = useNavigate();
@@ -88,14 +94,14 @@ const Dashboard = () => {
       );
 
       // Flatten all results into a single array
-      const allTasks = results.flat();
+      const allTasks = results.flat().sort(byNewestCreated);
       setTeamTasks(allTasks);
 
       // Calculate assigned tasks from the same source
       const mine = allTasks.filter(
         task => String(task.assignedTo?._id || task.assignedTo) === String(user?._id)
       );
-      setAssignedTasks(mine);
+      setAssignedTasks(mine.sort(byNewestCreated));
 
     } catch (err) {
       console.error("fetchAllTeamTasks error:", err);
@@ -552,9 +558,10 @@ const Dashboard = () => {
                         return !assignedToId || String(assignedToId) === String(user?._id);
                       })
                     : g.tasks; // Admins and managers see all tasks
+                  const sortedVisibleTasks = [...visibleTasks].sort(byNewestCreated);
 
                   // Update the task count in the header to reflect filtered tasks
-                  const visibleTaskCount = visibleTasks.length;
+                  const visibleTaskCount = sortedVisibleTasks.length;
                   const totalTaskCount = g.tasks.length;
                   const hiddenTaskCount = totalTaskCount - visibleTaskCount;
 
@@ -628,7 +635,7 @@ const Dashboard = () => {
                             </Typography>
                           </Box>
                         ) : (
-                          visibleTasks.map((task) => (
+                          sortedVisibleTasks.map((task) => (
                             <TeamTaskItem
                               key={task._id}
                               task={task}

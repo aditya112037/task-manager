@@ -303,7 +303,6 @@ export default function TeamTaskItem({
                       <Typography
                         variant="body2"
                         sx={{
-                          textDecoration: subtask.completed ? "line-through" : "none",
                           color: subtask.completed ? "text.secondary" : "text.primary",
                         }}
                       >

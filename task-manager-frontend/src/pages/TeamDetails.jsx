@@ -914,7 +914,7 @@ export default function TeamDetails() {
           createdBy: user,
           extensionRequest: null
         };
-        setTeamTasks(prev => [...prev, withComputedProgress(tempTask)]);
+        setTeamTasks(prev => [withComputedProgress(tempTask), ...prev]);
         
         const res = await teamTasksAPI.createTask(routeTeamId, data);
         // Replace temp task with real one
