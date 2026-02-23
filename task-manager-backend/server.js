@@ -223,7 +223,6 @@ app.get("/", (req, res) => {
     activeConferences: conferences.size,
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || "development"
-  startExecutionScoreScheduler();
   });
 });
 
