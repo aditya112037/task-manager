@@ -10,11 +10,14 @@ import {
   MenuItem,
   Stack,
   Typography,
+  IconButton,
 } from "@mui/material";
 import EventNoteIcon from "@mui/icons-material/EventNote";
 import LowPriorityIcon from "@mui/icons-material/LowPriority";
 import PriorityHighIcon from "@mui/icons-material/PriorityHigh";
 import LabelImportantIcon from "@mui/icons-material/LabelImportant";
+import AddIcon from "@mui/icons-material/Add";
+import DeleteIcon from "@mui/icons-material/Delete";
 
 const priorityOptions = [
   { value: "low", label: "Low", icon: <LowPriorityIcon fontSize="small" /> },
@@ -29,6 +32,7 @@ const TaskForm = ({ task, onSubmit, onCancel }) => {
     priority: "medium",
     status: "todo",
     dueDate: "",
+    subtasks: [],
   });
 
   const [errors, setErrors] = useState({});
@@ -45,6 +49,14 @@ const TaskForm = ({ task, onSubmit, onCancel }) => {
         dueDate: task.dueDate
           ? new Date(task.dueDate).toISOString().slice(0, 16) // yyyy-MM-ddTHH:mm
           : "",
+        subtasks: Array.isArray(task.subtasks)
+          ? task.subtasks.map((item) => ({
+              _id: item._id,
+              title: item.title || "",
+              completed: Boolean(item.completed),
+              completedAt: item.completedAt || null,
+            }))
+          : [],
       });
     } else {
       // reset when creating new
@@ -54,6 +66,7 @@ const TaskForm = ({ task, onSubmit, onCancel }) => {
         priority: "medium",
         status: "todo",
         dueDate: "",
+        subtasks: [],
       });
     }
     setErrors({});
@@ -77,8 +90,37 @@ const TaskForm = ({ task, onSubmit, onCancel }) => {
     if (formData.dueDate && isNaN(new Date(formData.dueDate).getTime())) {
       err.dueDate = "Please provide a valid date/time";
     }
+    const hasEmptySubtask = formData.subtasks.some(
+      (item) => !String(item.title || "").trim()
+    );
+    if (hasEmptySubtask) {
+      err.subtasks = "Subtask title cannot be empty";
+    }
     setErrors(err);
     return Object.keys(err).length === 0;
+  };
+
+  const handleAddSubtask = () => {
+    setFormData((s) => ({
+      ...s,
+      subtasks: [...s.subtasks, { title: "", completed: false, completedAt: null }],
+    }));
+  };
+
+  const handleUpdateSubtask = (index, value) => {
+    setFormData((s) => ({
+      ...s,
+      subtasks: s.subtasks.map((item, i) =>
+        i === index ? { ...item, title: value } : item
+      ),
+    }));
+  };
+
+  const handleRemoveSubtask = (index) => {
+    setFormData((s) => ({
+      ...s,
+      subtasks: s.subtasks.filter((_, i) => i !== index),
+    }));
   };
 
   const handleSubmit = async () => {
@@ -90,6 +132,14 @@ const TaskForm = ({ task, onSubmit, onCancel }) => {
     const payload = {
       ...formData,
       dueDate: formData.dueDate ? new Date(formData.dueDate).toISOString() : null,
+      subtasks: formData.subtasks
+        .map((item) => ({
+          _id: item._id,
+          title: String(item.title || "").trim(),
+          completed: Boolean(item.completed),
+          completedAt: item.completed ? item.completedAt || new Date().toISOString() : null,
+        }))
+        .filter((item) => item.title),
     };
 
     try {
@@ -145,6 +195,43 @@ const TaskForm = ({ task, onSubmit, onCancel }) => {
             value={formData.description}
             onChange={handleChange}
           />
+
+          <Box>
+            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", mb: 1 }}>
+              <Typography variant="subtitle2" sx={{ color: "text.secondary" }}>
+                Checkpoints
+              </Typography>
+              <Button
+                size="small"
+                startIcon={<AddIcon />}
+                onClick={handleAddSubtask}
+                sx={{ textTransform: "none" }}
+              >
+                Add
+              </Button>
+            </Box>
+            <Stack spacing={1}>
+              {formData.subtasks.map((item, index) => (
+                <Box key={item._id || `subtask-${index}`} sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+                  <TextField
+                    label={`Checkpoint ${index + 1}`}
+                    value={item.title}
+                    onChange={(e) => handleUpdateSubtask(index, e.target.value)}
+                    fullWidth
+                    size="small"
+                  />
+                  <IconButton color="error" onClick={() => handleRemoveSubtask(index)}>
+                    <DeleteIcon />
+                  </IconButton>
+                </Box>
+              ))}
+            </Stack>
+            {errors.subtasks && (
+              <Typography variant="caption" color="error">
+                {errors.subtasks}
+              </Typography>
+            )}
+          </Box>
 
           {/* Priority pills */}
           <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>

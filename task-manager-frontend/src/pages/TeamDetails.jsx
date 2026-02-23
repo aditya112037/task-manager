@@ -65,6 +65,32 @@ const resolveMemberUser = (team, userId) => {
   return member?.user || null;
 };
 
+const withComputedProgress = (task) => {
+  const subtasks = Array.isArray(task?.subtasks) ? task.subtasks : [];
+  const totalSubtasks = subtasks.length;
+  const completedSubtasks = subtasks.filter((item) => item.completed).length;
+  const percentage =
+    totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
+
+  let status = task.status || "todo";
+  if (totalSubtasks > 0) {
+    if (completedSubtasks === totalSubtasks) status = "completed";
+    else if (completedSubtasks > 0) status = "in-progress";
+    else status = "todo";
+  }
+
+  return {
+    ...task,
+    status,
+    progress: {
+      totalSubtasks,
+      completedSubtasks,
+      percentage,
+      lastCalculatedAt: new Date().toISOString(),
+    },
+  };
+};
+
 export default function TeamDetails() {
   const { teamId: routeTeamId } = useParams();
   const { user, socketConnected } = useAuth();
@@ -798,7 +824,12 @@ export default function TeamDetails() {
     );
     
     try {
-      await teamTasksAPI.updateTask(taskId, { status: newStatus });
+      const res = await teamTasksAPI.updateTask(taskId, { status: newStatus });
+      if (res?.data?._id) {
+        setTeamTasks((prev) =>
+          prev.map((t) => (t._id === res.data._id ? res.data : t))
+        );
+      }
       showSnack("Task status updated", "success");
     } catch (err) {
       console.error("Status change error:", err);
@@ -815,12 +846,38 @@ export default function TeamDetails() {
     );
     
     try {
-      await teamTasksAPI.updateTask(taskId, { status: "completed" });
+      const res = await teamTasksAPI.updateTask(taskId, { status: "completed" });
+      if (res?.data?._id) {
+        setTeamTasks((prev) =>
+          prev.map((t) => (t._id === res.data._id ? res.data : t))
+        );
+      }
       showSnack("Task completed", "success");
     } catch (err) {
       console.error("Quick complete error:", err);
       showSnack("Failed to complete task", "error");
       // Rollback on error
+      fetchTeamTasks();
+    }
+  };
+
+  const handleSubtasksChange = async (taskId, subtasks) => {
+    const optimisticSubtasks = Array.isArray(subtasks) ? subtasks : [];
+    setTeamTasks((prev) =>
+      prev.map((t) =>
+        t._id === taskId ? withComputedProgress({ ...t, subtasks: optimisticSubtasks }) : t
+      )
+    );
+
+    try {
+      const res = await teamTasksAPI.updateTask(taskId, { subtasks: optimisticSubtasks });
+      if (res?.data?._id) {
+        setTeamTasks((prev) => prev.map((t) => (t._id === res.data._id ? res.data : t)));
+      }
+      showSnack("Subtask progress updated", "success");
+    } catch (err) {
+      console.error("Subtask update error:", err);
+      showSnack("Failed to update subtask progress", "error");
       fetchTeamTasks();
     }
   };
@@ -835,7 +892,7 @@ export default function TeamDetails() {
 
       if (editingTask) {
         // Optimistic update for edit
-        const updatedTask = { ...editingTask, ...optimisticPayload };
+        const updatedTask = withComputedProgress({ ...editingTask, ...optimisticPayload });
         setTeamTasks(prev =>
           prev.map(t => t._id === editingTask._id ? updatedTask : t)
         );
@@ -857,7 +914,7 @@ export default function TeamDetails() {
           createdBy: user,
           extensionRequest: null
         };
-        setTeamTasks(prev => [...prev, tempTask]);
+        setTeamTasks(prev => [...prev, withComputedProgress(tempTask)]);
         
         const res = await teamTasksAPI.createTask(routeTeamId, data);
         // Replace temp task with real one
@@ -1239,6 +1296,7 @@ export default function TeamDetails() {
                   onDelete={() => handleDeleteTask(t._id)}
                   onStatusChange={(taskId, newStatus) => handleStatusChange(taskId, newStatus)}
                   onQuickComplete={() => handleQuickComplete(t._id)}
+                  onSubtasksChange={handleSubtasksChange}
                   onExtensionRequested={handleRequestExtension}
                 />
               ))}

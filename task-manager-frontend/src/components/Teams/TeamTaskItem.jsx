@@ -13,6 +13,9 @@ import {
   MenuItem,
   Alert,
   Collapse,
+  Checkbox,
+  LinearProgress,
+  Divider,
 } from "@mui/material";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import EditIcon from "@mui/icons-material/Edit";
@@ -43,6 +46,7 @@ export default function TeamTaskItem({
   onDelete,
   onStatusChange,
   onQuickComplete,
+  onSubtasksChange,
   onExtensionRequested,
   currentUserId,
   isAdminOrManager = false,
@@ -72,6 +76,14 @@ export default function TeamTaskItem({
   const canDeleteTask = isAdminOrManager;
 
   const canViewComments = !isTempTask && canInteractWithTask;
+
+  const totalSubtasks = task.progress?.totalSubtasks ?? task.subtasks?.length ?? 0;
+  const completedSubtasks =
+    task.progress?.completedSubtasks ??
+    (task.subtasks || []).filter((item) => item.completed).length;
+  const progressPercentage =
+    task.progress?.percentage ??
+    (totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0);
 
   /* ------------------ status colors ------------------ */
   const priorityColors = {
@@ -135,6 +147,24 @@ export default function TeamTaskItem({
 
   const openMenu = Boolean(anchorEl);
   const showMenu = canCompleteTask || canDeleteTask || canEdit;
+
+  const canToggleSubtask = (subtask) =>
+    isAdminOrManager || resolveId(subtask.assignedTo) === myUserId;
+
+  const handleSubtaskToggle = (subtaskId, checked) => {
+    if (typeof onSubtasksChange !== "function") return;
+    const nextSubtasks = (task.subtasks || []).map((item) =>
+      item._id === subtaskId
+        ? {
+            ...item,
+            completed: checked,
+            completedAt: checked ? new Date().toISOString() : null,
+            completedBy: checked ? myUserId : null,
+          }
+        : item
+    );
+    onSubtasksChange(task._id, nextSubtasks);
+  };
 
   return (
     <>
@@ -248,6 +278,46 @@ export default function TeamTaskItem({
               </Button>
             )}
           </Stack>
+
+          {totalSubtasks > 0 && (
+            <>
+              <Divider sx={{ mt: 2 }} />
+              <Typography variant="subtitle2" sx={{ mt: 1.5 }}>
+                Checkpoints ({completedSubtasks}/{totalSubtasks})
+              </Typography>
+              <LinearProgress
+                variant="determinate"
+                value={progressPercentage}
+                sx={{ mt: 1, mb: 1.5, height: 8, borderRadius: 10 }}
+              />
+              <Stack spacing={0.5}>
+                {(task.subtasks || []).map((subtask, index) => (
+                  <Box key={subtask._id || `subtask-${index}`} sx={{ display: "flex", alignItems: "center" }}>
+                    <Checkbox
+                      size="small"
+                      checked={Boolean(subtask.completed)}
+                      onChange={(e) => handleSubtaskToggle(subtask._id, e.target.checked)}
+                      disabled={!canToggleSubtask(subtask)}
+                    />
+                    <Box>
+                      <Typography
+                        variant="body2"
+                        sx={{
+                          textDecoration: subtask.completed ? "line-through" : "none",
+                          color: subtask.completed ? "text.secondary" : "text.primary",
+                        }}
+                      >
+                        {subtask.title}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Assigned: {resolveUserName(subtask.assignedTo)}
+                      </Typography>
+                    </Box>
+                  </Box>
+                ))}
+              </Stack>
+            </>
+          )}
 
           <Stack
             direction="row"

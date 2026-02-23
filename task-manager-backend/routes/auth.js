@@ -2,6 +2,8 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/user');
+const Task = require('../models/task');
+const TTask = require('../models/TTask');
 const { protect } = require('../middleware/auth');
 
 const router = express.Router();
@@ -96,11 +98,73 @@ router.post('/login', [
 // @route   GET /api/auth/profile
 // @access  Private
 router.get('/profile', protect, async (req, res) => {
-  res.json({
-    _id: req.user._id,
-    name: req.user.name,
-    email: req.user.email
-  });
+  try {
+    const userId = req.user._id;
+
+    const [personalTasks, teamTasks] = await Promise.all([
+      Task.find({ user: userId })
+        .select("status subtasks progress")
+        .lean(),
+      TTask.find({
+        $or: [{ assignedTo: userId }, { "subtasks.assignedTo": userId }],
+      })
+        .select("status assignedTo subtasks progress")
+        .lean(),
+    ]);
+
+    const personalTotalSubtasks = personalTasks.reduce(
+      (sum, task) => sum + (task.progress?.totalSubtasks ?? task.subtasks?.length ?? 0),
+      0
+    );
+    const personalCompletedSubtasks = personalTasks.reduce(
+      (sum, task) =>
+        sum +
+        (task.progress?.completedSubtasks ??
+          (task.subtasks || []).filter((item) => item.completed).length),
+      0
+    );
+
+    const assignedTaskCount = teamTasks.filter(
+      (task) => String(task.assignedTo || "") === String(userId)
+    ).length;
+    const assignedTaskCompletedCount = teamTasks.filter(
+      (task) =>
+        String(task.assignedTo || "") === String(userId) && task.status === "completed"
+    ).length;
+
+    const assignedSubtasks = teamTasks.flatMap((task) =>
+      (task.subtasks || []).filter(
+        (item) => String(item.assignedTo || "") === String(userId)
+      )
+    );
+    const assignedSubtaskCount = assignedSubtasks.length;
+    const assignedSubtaskCompletedCount = assignedSubtasks.filter(
+      (item) => item.completed
+    ).length;
+
+    res.json({
+      _id: req.user._id,
+      name: req.user.name,
+      email: req.user.email,
+      progress: {
+        personal: {
+          totalTasks: personalTasks.length,
+          completedTasks: personalTasks.filter((task) => task.status === "completed").length,
+          totalCheckpoints: personalTotalSubtasks,
+          completedCheckpoints: personalCompletedSubtasks,
+        },
+        team: {
+          assignedTasks: assignedTaskCount,
+          completedAssignedTasks: assignedTaskCompletedCount,
+          assignedCheckpoints: assignedSubtaskCount,
+          completedAssignedCheckpoints: assignedSubtaskCompletedCount,
+        },
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
 });
 
 module.exports = router;

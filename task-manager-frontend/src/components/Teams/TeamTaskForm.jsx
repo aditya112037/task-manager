@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
   Dialog,
   DialogTitle,
@@ -12,7 +12,12 @@ import {
   FormControl,
   InputLabel,
   InputAdornment,
+  Typography,
+  IconButton,
+  Stack,
 } from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
+import DeleteIcon from "@mui/icons-material/Delete";
 
 export default function TeamTaskForm({ open, task, teamMembers, onCancel, onSubmit }) {
   const [formData, setFormData] = useState({
@@ -23,7 +28,8 @@ export default function TeamTaskForm({ open, task, teamMembers, onCancel, onSubm
     dueDate: "",
     assignedTo: "",
     color: "#4CAF50",
-    icon: "📋",
+    icon: "Task",
+    subtasks: [],
   });
 
   useEffect(() => {
@@ -33,45 +39,94 @@ export default function TeamTaskForm({ open, task, teamMembers, onCancel, onSubm
         description: task.description || "",
         priority: task.priority || "medium",
         status: task.status || "todo",
-        dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : "",
-        assignedTo: task.assignedTo?._id || "",
+        dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split("T")[0] : "",
+        assignedTo: task.assignedTo?._id || task.assignedTo || "",
         color: task.color || "#4CAF50",
-        icon: task.icon || "📋",
+        icon: task.icon || "Task",
+        subtasks: Array.isArray(task.subtasks)
+          ? task.subtasks.map((item) => ({
+              _id: item._id,
+              title: item.title || "",
+              completed: Boolean(item.completed),
+              assignedTo: item.assignedTo?._id || item.assignedTo || "",
+              completedAt: item.completedAt || null,
+              completedBy: item.completedBy?._id || item.completedBy || null,
+            }))
+          : [],
       });
-    } else {
-      setFormData({
-        title: "",
-        description: "",
-        priority: "medium",
-        status: "todo",
-        dueDate: "",
-        assignedTo: "",
-        color: "#4CAF50",
-        icon: "📋",
-      });
+      return;
     }
+
+    setFormData({
+      title: "",
+      description: "",
+      priority: "medium",
+      status: "todo",
+      dueDate: "",
+      assignedTo: "",
+      color: "#4CAF50",
+      icon: "Task",
+      subtasks: [],
+    });
   }, [task]);
+
+  const handleAddSubtask = () => {
+    setFormData((prev) => ({
+      ...prev,
+      subtasks: [...prev.subtasks, { title: "", completed: false, assignedTo: "" }],
+    }));
+  };
+
+  const handleRemoveSubtask = (index) => {
+    setFormData((prev) => ({
+      ...prev,
+      subtasks: prev.subtasks.filter((_, i) => i !== index),
+    }));
+  };
+
+  const handleSubtaskChange = (index, key, value) => {
+    setFormData((prev) => ({
+      ...prev,
+      subtasks: prev.subtasks.map((item, i) =>
+        i === index ? { ...item, [key]: value } : item
+      ),
+    }));
+  };
 
   const handleSubmit = () => {
     if (!formData.title.trim()) {
       alert("Title is required");
       return;
     }
-    
+
+    const hasEmptySubtask = formData.subtasks.some((item) => !String(item.title || "").trim());
+    if (hasEmptySubtask) {
+      alert("Every subtask needs a title");
+      return;
+    }
+
     const submitData = {
       ...formData,
       dueDate: formData.dueDate ? new Date(formData.dueDate).toISOString() : null,
       assignedTo: formData.assignedTo || null,
+      subtasks: formData.subtasks
+        .map((item) => ({
+          _id: item._id,
+          title: String(item.title || "").trim(),
+          completed: Boolean(item.completed),
+          assignedTo: item.assignedTo || null,
+          completedAt: item.completed ? item.completedAt || new Date().toISOString() : null,
+          completedBy: item.completed ? item.completedBy || null : null,
+        }))
+        .filter((item) => item.title),
     };
-    
+
     onSubmit(submitData);
   };
 
   return (
     <Dialog open={open} onClose={onCancel} maxWidth="sm" fullWidth>
-      <DialogTitle>
-        {task ? "Edit Task" : "Create New Task"}
-      </DialogTitle>
+      <DialogTitle>{task ? "Edit Task" : "Create New Task"}</DialogTitle>
       <DialogContent>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2, mt: 2 }}>
           <TextField
@@ -81,7 +136,7 @@ export default function TeamTaskForm({ open, task, teamMembers, onCancel, onSubm
             fullWidth
             required
           />
-          
+
           <TextField
             label="Description"
             value={formData.description}
@@ -90,7 +145,7 @@ export default function TeamTaskForm({ open, task, teamMembers, onCancel, onSubm
             multiline
             rows={3}
           />
-          
+
           <FormControl fullWidth>
             <InputLabel>Priority</InputLabel>
             <Select
@@ -103,7 +158,7 @@ export default function TeamTaskForm({ open, task, teamMembers, onCancel, onSubm
               <MenuItem value="high">High</MenuItem>
             </Select>
           </FormControl>
-          
+
           <FormControl fullWidth>
             <InputLabel>Status</InputLabel>
             <Select
@@ -116,7 +171,7 @@ export default function TeamTaskForm({ open, task, teamMembers, onCancel, onSubm
               <MenuItem value="completed">Completed</MenuItem>
             </Select>
           </FormControl>
-          
+
           <FormControl fullWidth>
             <InputLabel>Assigned To</InputLabel>
             <Select
@@ -132,7 +187,7 @@ export default function TeamTaskForm({ open, task, teamMembers, onCancel, onSubm
               ))}
             </Select>
           </FormControl>
-          
+
           <TextField
             label="Due Date"
             type="date"
@@ -141,7 +196,7 @@ export default function TeamTaskForm({ open, task, teamMembers, onCancel, onSubm
             fullWidth
             InputLabelProps={{ shrink: true }}
           />
-          
+
           <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
             <FormControl sx={{ flex: 1 }}>
               <TextField
@@ -157,9 +212,9 @@ export default function TeamTaskForm({ open, task, teamMembers, onCancel, onSubm
                         sx={{
                           width: 20,
                           height: 20,
-                          borderRadius: '50%',
+                          borderRadius: "50%",
                           backgroundColor: formData.color,
-                          border: '1px solid #ccc'
+                          border: "1px solid #ccc",
                         }}
                       />
                     </InputAdornment>
@@ -167,7 +222,7 @@ export default function TeamTaskForm({ open, task, teamMembers, onCancel, onSubm
                 }}
               />
             </FormControl>
-            
+
             <TextField
               label="Icon"
               value={formData.icon}
@@ -175,6 +230,56 @@ export default function TeamTaskForm({ open, task, teamMembers, onCancel, onSubm
               sx={{ flex: 1, minWidth: { xs: "100%", sm: "auto" } }}
               helperText="Emoji or short text"
             />
+          </Box>
+
+          <Box>
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1 }}>
+              <Typography variant="subtitle2" color="text.secondary">
+                Subtasks (Checkpoints)
+              </Typography>
+              <Button
+                size="small"
+                startIcon={<AddIcon />}
+                sx={{ textTransform: "none" }}
+                onClick={handleAddSubtask}
+              >
+                Add
+              </Button>
+            </Box>
+            <Stack spacing={1}>
+              {formData.subtasks.map((item, index) => (
+                <Box
+                  key={item._id || `subtask-${index}`}
+                  sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}
+                >
+                  <TextField
+                    label={`Subtask ${index + 1}`}
+                    value={item.title}
+                    onChange={(e) => handleSubtaskChange(index, "title", e.target.value)}
+                    size="small"
+                    sx={{ flex: 2, minWidth: 220 }}
+                  />
+                  <FormControl size="small" sx={{ flex: 1, minWidth: 180 }}>
+                    <InputLabel>Assignee</InputLabel>
+                    <Select
+                      value={item.assignedTo || ""}
+                      label="Assignee"
+                      onChange={(e) => handleSubtaskChange(index, "assignedTo", e.target.value)}
+                    >
+                      <MenuItem value="">Unassigned</MenuItem>
+                      {teamMembers.map((member) => (
+                        <MenuItem key={member.user._id} value={member.user._id}>
+                          {member.user.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <IconButton color="error" onClick={() => handleRemoveSubtask(index)}>
+                    <DeleteIcon />
+                  </IconButton>
+                </Box>
+              ))}
+            </Stack>
           </Box>
         </Box>
       </DialogContent>

@@ -9,6 +9,9 @@ import {
   Stack,
   Tooltip,
   Button,
+  Checkbox,
+  LinearProgress,
+  Divider,
 } from "@mui/material";
 
 import EditIcon from "@mui/icons-material/Edit";
@@ -37,23 +40,45 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
     onUpdate(task._id, { status: newStatus });
   };
 
+  const handleSubtaskToggle = (subtaskId, completed) => {
+    const nextSubtasks = (task.subtasks || []).map((item) =>
+      item._id === subtaskId
+        ? {
+            ...item,
+            completed,
+            completedAt: completed ? new Date().toISOString() : null,
+          }
+        : item
+    );
+    onUpdate(task._id, { subtasks: nextSubtasks });
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return "No due date";
     return new Date(dateString).toLocaleDateString();
   };
 
   // GOOGLE Calendar Link Fix
-  const startDate = new Date(task.dueDate);
-  const endDate = new Date(startDate.getTime() + 30 * 60 * 1000);
+  const hasDueDate = Boolean(task.dueDate);
+  const startDate = hasDueDate ? new Date(task.dueDate) : null;
+  const endDate = hasDueDate ? new Date(startDate.getTime() + 30 * 60 * 1000) : null;
 
   const fmt = (d) =>
     d.toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
 
   const googleCalendarURL =
-    `https://calendar.google.com/calendar/render?action=TEMPLATE` +
-    `&text=${encodeURIComponent(task.title)}` +
-    `&details=${encodeURIComponent(task.description || "")}` +
-    `&dates=${fmt(startDate)}/${fmt(endDate)}`;
+    hasDueDate
+      ? `https://calendar.google.com/calendar/render?action=TEMPLATE` +
+        `&text=${encodeURIComponent(task.title)}` +
+        `&details=${encodeURIComponent(task.description || "")}` +
+        `&dates=${fmt(startDate)}/${fmt(endDate)}`
+      : "#";
+
+  const totalSubtasks = task.progress?.totalSubtasks ?? task.subtasks?.length ?? 0;
+  const completedSubtasks =
+    task.progress?.completedSubtasks ??
+    (task.subtasks || []).filter((item) => item.completed).length;
+  const percentage = task.progress?.percentage ?? (totalSubtasks ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0);
 
   return (
     <Card
@@ -193,6 +218,7 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
             }}
             href={googleCalendarURL}
             target="_blank"
+            disabled={!hasDueDate}
           >
             Add to Google Calendar
           </Button>
@@ -224,6 +250,36 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
             onClick={() => handleStatusChange("completed")}
           />
         </Stack>
+
+        {totalSubtasks > 0 && (
+          <>
+            <Divider sx={{ my: 2 }} />
+            <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+              Checkpoints ({completedSubtasks}/{totalSubtasks})
+            </Typography>
+            <LinearProgress variant="determinate" value={percentage} sx={{ mb: 1.5, height: 8, borderRadius: 10 }} />
+            <Stack spacing={0.5}>
+              {(task.subtasks || []).map((item, index) => (
+                <Box key={item._id || `subtask-${index}`} sx={{ display: "flex", alignItems: "center" }}>
+                  <Checkbox
+                    checked={Boolean(item.completed)}
+                    onChange={(e) => handleSubtaskToggle(item._id, e.target.checked)}
+                    size="small"
+                  />
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      textDecoration: item.completed ? "line-through" : "none",
+                      color: item.completed ? "text.secondary" : "text.primary",
+                    }}
+                  >
+                    {item.title}
+                  </Typography>
+                </Box>
+              ))}
+            </Stack>
+          </>
+        )}
       </CardContent>
     </Card>
   );

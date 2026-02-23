@@ -41,6 +41,7 @@ function findMember(team, userId) {
     return String(id) === String(userId);
   });
 }
+const toId = (value) => String(value?._id || value || "");
 
 const ALLOWED_TASK_UPDATE_FIELDS = [
   "title",
@@ -49,6 +50,7 @@ const ALLOWED_TASK_UPDATE_FIELDS = [
   "status",
   "dueDate",
   "assignedTo",
+  "subtasks",
   "color",
   "icon",
   "isPinned",
@@ -65,9 +67,32 @@ const populateTaskForClient = async (taskDoc) => {
   return taskDoc.populate([
     { path: "assignedTo", select: "name photo" },
     { path: "createdBy", select: "name photo" },
+    { path: "subtasks.assignedTo", select: "name photo" },
+    { path: "subtasks.completedBy", select: "name photo" },
     { path: "extensionRequest.requestedBy", select: "name photo" },
     { path: "extensionRequest.reviewedBy", select: "name photo" },
   ]);
+};
+
+const normalizeTeamSubtasks = (subtasks, actorId) => {
+  if (!Array.isArray(subtasks)) return [];
+  return subtasks
+    .map((item) => {
+      const title = String(item?.title || "").trim();
+      if (!title) return null;
+      const completed = Boolean(item?.completed);
+      const assignedTo = item?.assignedTo?._id || item?.assignedTo || null;
+      const completedBy = item?.completedBy?._id || item?.completedBy || actorId;
+      return {
+        _id: item?._id,
+        title,
+        completed,
+        assignedTo,
+        completedAt: completed ? item?.completedAt || new Date() : null,
+        completedBy: completed ? completedBy : null,
+      };
+    })
+    .filter(Boolean);
 };
 
 const notifyTeamMembers = async ({
@@ -120,6 +145,8 @@ router.get("/:teamId", protect, async (req, res) => {
     const tasks = await TTask.find({ team: team._id })
       .populate("assignedTo", "name photo")
       .populate("createdBy", "name photo")
+      .populate("subtasks.assignedTo", "name photo")
+      .populate("subtasks.completedBy", "name photo")
       .sort({ createdAt: -1 });
 
     res.json(tasks);
@@ -144,6 +171,8 @@ router.get("/:teamId/extensions/pending", protect, async (req, res) => {
       "extensionRequest.status": "pending",
     })
       .populate("assignedTo", "name photo")
+      .populate("subtasks.assignedTo", "name photo")
+      .populate("subtasks.completedBy", "name photo")
       .populate("extensionRequest.requestedBy", "name photo");
 
     res.json(tasks);
@@ -167,8 +196,19 @@ router.post("/:teamId", protect, async (req, res) => {
     if (!member || !["admin", "manager"].includes(member.role))
       return res.status(403).json({ message: "Not allowed" });
 
+    const payload = { ...req.body };
+    if (Object.prototype.hasOwnProperty.call(payload, "subtasks")) {
+      payload.subtasks = normalizeTeamSubtasks(payload.subtasks, req.user._id);
+      const invalidAssignee = payload.subtasks.find(
+        (item) => item.assignedTo && !findMember(team, item.assignedTo)
+      );
+      if (invalidAssignee) {
+        return res.status(400).json({ message: "Each subtask assignee must be a team member" });
+      }
+    }
+
     const task = await TTask.create({
-      ...req.body,
+      ...payload,
       team: team._id,
       createdBy: req.user._id,
     });
@@ -221,20 +261,62 @@ router.put("/:taskId", protect, async (req, res) => {
     }
 
     if (!isAdminOrManager) {
-      const memberAllowedKeys = ["status"];
+      const memberAllowedKeys = ["status", "subtasks"];
       const updateKeys = Object.keys(updates);
-
-      if (String(task.assignedTo) !== String(req.user._id)) {
-        return res.status(403).json({ message: "Only assignee can update task status" });
-      }
 
       const hasForbiddenMemberUpdate = updateKeys.some(
         (key) => !memberAllowedKeys.includes(key)
       );
       if (hasForbiddenMemberUpdate) {
         return res.status(403).json({
-          message: "Members can only update task status",
+          message: "Members can only update task status and their assigned subtasks",
         });
+      }
+
+      if (
+        Object.prototype.hasOwnProperty.call(updates, "status") &&
+        toId(task.assignedTo) !== toId(req.user._id)
+      ) {
+        return res.status(403).json({ message: "Only assignee can update task status" });
+      }
+
+      if (Object.prototype.hasOwnProperty.call(updates, "subtasks")) {
+        const existingSubtasks = Array.isArray(task.subtasks) ? task.subtasks : [];
+        const nextSubtasks = Array.isArray(updates.subtasks) ? updates.subtasks : [];
+
+        if (nextSubtasks.length !== existingSubtasks.length) {
+          return res.status(403).json({
+            message: "Members cannot add/remove subtasks",
+          });
+        }
+
+        const existingById = new Map(existingSubtasks.map((item) => [toId(item._id), item]));
+        for (const nextItem of nextSubtasks) {
+          const currentItem = existingById.get(toId(nextItem._id));
+          if (!currentItem) {
+            return res.status(403).json({
+              message: "Members cannot add/remove subtasks",
+            });
+          }
+
+          if (
+            String(nextItem.title || "").trim() !== String(currentItem.title || "").trim() ||
+            toId(nextItem.assignedTo) !== toId(currentItem.assignedTo)
+          ) {
+            return res.status(403).json({
+              message: "Members cannot edit subtask title/assignee",
+            });
+          }
+
+          const ownershipChangedState =
+            toId(currentItem.assignedTo) !== toId(req.user._id) &&
+            Boolean(nextItem.completed) !== Boolean(currentItem.completed);
+          if (ownershipChangedState) {
+            return res.status(403).json({
+              message: "Members can only update subtasks assigned to them",
+            });
+          }
+        }
       }
     }
 
@@ -250,6 +332,16 @@ router.put("/:taskId", protect, async (req, res) => {
       const assignedMember = findMember(task.team, updates.assignedTo);
       if (!assignedMember) {
         return res.status(400).json({ message: "Assigned user must be a team member" });
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(updates, "subtasks")) {
+      updates.subtasks = normalizeTeamSubtasks(updates.subtasks, req.user._id);
+      const invalidAssignee = updates.subtasks.find(
+        (item) => item.assignedTo && !findMember(task.team, item.assignedTo)
+      );
+      if (invalidAssignee) {
+        return res.status(400).json({ message: "Each subtask assignee must be a team member" });
       }
     }
 

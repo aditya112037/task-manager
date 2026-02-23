@@ -1,5 +1,24 @@
 const mongoose = require("mongoose");
 
+const teamSubtaskSchema = new mongoose.Schema(
+  {
+    title: { type: String, required: true, trim: true, maxlength: 200 },
+    completed: { type: Boolean, default: false },
+    assignedTo: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    completedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    completedAt: { type: Date, default: null },
+  },
+  { _id: true }
+);
+
 const TTaskSchema = new mongoose.Schema(
   {
     team: {
@@ -82,9 +101,49 @@ const TTaskSchema = new mongoose.Schema(
     completedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
 
     isPinned: { type: Boolean, default: false },
+
+    subtasks: {
+      type: [teamSubtaskSchema],
+      default: [],
+    },
+
+    progress: {
+      totalSubtasks: { type: Number, default: 0 },
+      completedSubtasks: { type: Number, default: 0 },
+      percentage: { type: Number, default: 0 },
+      lastCalculatedAt: { type: Date, default: Date.now },
+    },
   },
   { timestamps: true }
 );
+
+TTaskSchema.pre("save", function syncProgressAndStatus(next) {
+  const subtasks = Array.isArray(this.subtasks) ? this.subtasks : [];
+  const totalSubtasks = subtasks.length;
+  const completedSubtasks = subtasks.filter((item) => Boolean(item.completed)).length;
+  const percentage =
+    totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
+
+  this.progress = {
+    totalSubtasks,
+    completedSubtasks,
+    percentage,
+    lastCalculatedAt: new Date(),
+  };
+
+  // Derive parent status from checkpoints when subtasks exist.
+  if (totalSubtasks > 0) {
+    if (completedSubtasks === totalSubtasks) {
+      this.status = "completed";
+    } else if (completedSubtasks > 0) {
+      this.status = "in-progress";
+    } else {
+      this.status = "todo";
+    }
+  }
+
+  next();
+});
 
 // INDEXES
 TTaskSchema.index({ team: 1, assignedTo: 1 });

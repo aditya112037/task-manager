@@ -11,6 +11,23 @@ const router = express.Router();
 // All routes are protected
 router.use(protect);
 
+const normalizePersonalSubtasks = (subtasks) => {
+  if (!Array.isArray(subtasks)) return [];
+  return subtasks
+    .map((item) => {
+      const title = String(item?.title || "").trim();
+      if (!title) return null;
+      const completed = Boolean(item?.completed);
+      return {
+        _id: item?._id,
+        title,
+        completed,
+        completedAt: completed ? item?.completedAt || new Date() : null,
+      };
+    })
+    .filter(Boolean);
+};
+
 // @desc    Get all tasks for user
 // @route   GET /api/tasks
 // @access  Private
@@ -36,8 +53,13 @@ router.post('/', [
   }
 
   try {
+    const payload = { ...req.body };
+    if (Object.prototype.hasOwnProperty.call(payload, "subtasks")) {
+      payload.subtasks = normalizePersonalSubtasks(payload.subtasks);
+    }
+
     const task = await Task.create({
-      ...req.body,
+      ...payload,
       user: req.user._id
     });
 
@@ -80,10 +102,13 @@ router.put('/:id', async (req, res) => {
     }
 
     const oldTitle = task.title;
-    task = await Task.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true
-    });
+    const updates = { ...req.body };
+    if (Object.prototype.hasOwnProperty.call(updates, "subtasks")) {
+      updates.subtasks = normalizePersonalSubtasks(updates.subtasks);
+    }
+
+    Object.assign(task, updates);
+    await task.save();
 
     await Notification.create({
       user: req.user._id,
