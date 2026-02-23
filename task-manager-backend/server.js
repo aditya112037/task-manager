@@ -9,6 +9,7 @@ const registerConferenceSocket = require("./socket/conference");
 const jwt = require("jsonwebtoken");
 const User = require("./models/user");
 const { conferences } = require("./utils/conferenceStore");
+const { recomputeExecutionScoresForAllUsers } = require("./services/executionScoreService");
 
 dotenv.config();
 connectDB();
@@ -222,6 +223,7 @@ app.get("/", (req, res) => {
     activeConferences: conferences.size,
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || "development"
+  startExecutionScoreScheduler();
   });
 });
 
@@ -257,6 +259,23 @@ app.use((req, res) => {
 /* ---------------------------------------------------
    START SERVER
 --------------------------------------------------- */
+const startExecutionScoreScheduler = () => {
+  const DAILY_MS = 24 * 60 * 60 * 1000;
+  const INITIAL_DELAY_MS = 15 * 1000;
+
+  const run = async () => {
+    try {
+      const result = await recomputeExecutionScoresForAllUsers();
+      console.log("Execution score recompute completed:", result);
+    } catch (err) {
+      console.error("Execution score recompute failed:", err.message);
+    }
+  };
+
+  setTimeout(run, INITIAL_DELAY_MS);
+  setInterval(run, DAILY_MS);
+};
+
 const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, () => {
@@ -264,6 +283,7 @@ server.listen(PORT, () => {
   console.log(`🌐 Allowed origins:`, allowedOrigins);
   console.log(`🔌 Socket.IO ready with transports: websocket, polling`);
   console.log(`📊 Environment: ${process.env.NODE_ENV || "development"}`);
+  startExecutionScoreScheduler();
 });
 
 // Handle unhandled promise rejections

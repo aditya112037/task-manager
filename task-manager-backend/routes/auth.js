@@ -5,6 +5,7 @@ const User = require('../models/user');
 const Task = require('../models/task');
 const TTask = require('../models/TTask');
 const TaskProgressHistory = require("../models/TaskProgressHistory");
+const ExecutionScoreSnapshot = require("../models/ExecutionScoreSnapshot");
 const { protect } = require('../middleware/auth');
 
 const router = express.Router();
@@ -107,7 +108,7 @@ router.get('/profile', protect, async (req, res) => {
     const since30Days = new Date(now.getTime() - THIRTY_DAYS_MS);
     const since7Days = new Date(now.getTime() - SEVEN_DAYS_MS);
 
-    const [personalTasks, teamTasks, recentHistory] = await Promise.all([
+    const [personalTasks, teamTasks, recentHistory, latestExecutionScore] = await Promise.all([
       Task.find({ user: userId })
         .select("status dueDate createdAt subtasks progress")
         .lean(),
@@ -121,6 +122,9 @@ router.get('/profile', protect, async (req, res) => {
         createdAt: { $gte: since30Days },
       })
         .select("createdAt triggerSource")
+        .lean(),
+      ExecutionScoreSnapshot.findOne({ userId })
+        .sort({ snapshotDate: -1, createdAt: -1 })
         .lean(),
     ]);
 
@@ -249,6 +253,17 @@ router.get('/profile', protect, async (req, res) => {
           averageSubtaskDurationHours,
           activityFrequency,
         },
+        executionScore: latestExecutionScore
+          ? {
+              score: latestExecutionScore.score,
+              formulaVersion: latestExecutionScore.formulaVersion,
+              snapshotDate: latestExecutionScore.snapshotDate,
+              windowStart: latestExecutionScore.windowStart,
+              windowEnd: latestExecutionScore.windowEnd,
+              breakdown: latestExecutionScore.breakdown,
+              counters: latestExecutionScore.counters,
+            }
+          : null,
       },
     });
   } catch (err) {
