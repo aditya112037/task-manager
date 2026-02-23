@@ -18,8 +18,12 @@ passport.use(
             name: profile.displayName,
             email: profile.emails[0].value,
             googleId: profile.id,
+            photo: profile.photos?.[0]?.value || null,
             password: null, // Not needed
           });
+        } else if (!user.photo && profile.photos?.[0]?.value) {
+          user.photo = profile.photos[0].value;
+          await user.save();
         }
 
         return done(null, user);

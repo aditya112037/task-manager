@@ -9,6 +9,7 @@ const { emitNotificationsChanged } = require("../utils/notificationEvents");
 const { sendPushToUsers } = require("../utils/pushNotifications");
 const { asProgress, logProgressChange } = require("../utils/progressHistory");
 const { protect } = require("../middleware/auth");
+const STALLED_DAYS = Number(process.env.STALLED_DAYS || 3);
 
 // ----------------------------------------------------
 // SOCKET HELPERS (INVALIDATION ONLY)
@@ -75,6 +76,21 @@ const populateTaskForClient = async (taskDoc) => {
   ]);
 };
 
+const decorateTaskForViewer = (taskDoc, viewerId) => {
+  const plain = typeof taskDoc.toObject === "function" ? taskDoc.toObject() : taskDoc;
+  const staleThreshold = Date.now() - STALLED_DAYS * 24 * 60 * 60 * 1000;
+  const subtasks = Array.isArray(plain.subtasks) ? plain.subtasks : [];
+  const needsAttention = subtasks.some((subtask) => {
+    const assignedTo = toId(subtask.assignedTo);
+    const myId = toId(viewerId);
+    if (!assignedTo || assignedTo !== myId) return false;
+    if (subtask.completed) return false;
+    const stamp = new Date(subtask.lastProgressAt || subtask.createdAt || Date.now()).getTime();
+    return stamp < staleThreshold;
+  });
+  return { ...plain, needsAttention };
+};
+
 const normalizeTeamSubtasks = (subtasks, actorId) => {
   if (!Array.isArray(subtasks)) return [];
   return subtasks
@@ -89,6 +105,7 @@ const normalizeTeamSubtasks = (subtasks, actorId) => {
         title,
         completed,
         createdAt: item?.createdAt || new Date(),
+        lastProgressAt: item?.lastProgressAt || new Date(),
         assignedTo,
         completedAt: completed ? item?.completedAt || new Date() : null,
         completedBy: completed ? completedBy : null,
@@ -154,7 +171,7 @@ router.get("/:teamId", protect, async (req, res) => {
       .populate("subtasks.completedBy", "name photo")
       .sort({ createdAt: -1 });
 
-    res.json(tasks);
+    res.json(tasks.map((task) => decorateTaskForViewer(task, req.user._id)));
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -180,7 +197,7 @@ router.get("/:teamId/extensions/pending", protect, async (req, res) => {
       .populate("subtasks.completedBy", "name photo")
       .populate("extensionRequest.requestedBy", "name photo");
 
-    res.json(tasks);
+    res.json(tasks.map((task) => decorateTaskForViewer(task, req.user._id)));
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -251,7 +268,7 @@ router.post("/:teamId", protect, async (req, res) => {
     invalidateTasks(team._id);
     invalidateComments(team._id, task._id);
 
-    res.status(201).json(populatedTask);
+    res.status(201).json(decorateTaskForViewer(populatedTask, req.user._id));
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -462,7 +479,7 @@ router.put("/:taskId", protect, async (req, res) => {
     invalidateTasks(task.team._id);
     invalidateComments(task.team._id, task._id);
 
-    res.json(populatedTask);
+    res.json(decorateTaskForViewer(populatedTask, req.user._id));
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -494,6 +511,7 @@ router.post("/:taskId/subtasks", protect, async (req, res) => {
       assignedTo,
       completed: false,
       createdAt: new Date(),
+      lastProgressAt: new Date(),
       completedAt: null,
       completedBy: null,
     });
@@ -521,7 +539,7 @@ router.post("/:taskId/subtasks", protect, async (req, res) => {
     const populatedTask = await populateTaskForClient(task);
     invalidateTasks(task.team._id);
     invalidateComments(task.team._id, task._id);
-    res.status(201).json(populatedTask);
+    res.status(201).json(decorateTaskForViewer(populatedTask, req.user._id));
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -549,6 +567,7 @@ router.put("/:taskId/subtasks/:subtaskId", protect, async (req, res) => {
       const title = String(req.body.title || "").trim();
       if (!title) return res.status(400).json({ message: "Subtask title is required" });
       subtask.title = title;
+      subtask.lastProgressAt = new Date();
     }
 
     if (Object.prototype.hasOwnProperty.call(req.body, "assignedTo")) {
@@ -557,6 +576,7 @@ router.put("/:taskId/subtasks/:subtaskId", protect, async (req, res) => {
         return res.status(400).json({ message: "Subtask assignee must be a team member" });
       }
       subtask.assignedTo = assignedTo;
+      subtask.lastProgressAt = new Date();
     }
 
     if (Object.prototype.hasOwnProperty.call(req.body, "completed")) {
@@ -564,6 +584,7 @@ router.put("/:taskId/subtasks/:subtaskId", protect, async (req, res) => {
       subtask.completed = completed;
       subtask.completedAt = completed ? new Date() : null;
       subtask.completedBy = completed ? req.user._id : null;
+      subtask.lastProgressAt = new Date();
     }
 
     const progressBefore = asProgress(task.progress);
@@ -591,7 +612,7 @@ router.put("/:taskId/subtasks/:subtaskId", protect, async (req, res) => {
     const populatedTask = await populateTaskForClient(task);
     invalidateTasks(task.team._id);
     invalidateComments(task.team._id, task._id);
-    res.json(populatedTask);
+    res.json(decorateTaskForViewer(populatedTask, req.user._id));
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -618,6 +639,7 @@ router.patch("/:taskId/subtasks/:subtaskId/assign", protect, async (req, res) =>
     }
 
     subtask.assignedTo = assignedTo;
+    subtask.lastProgressAt = new Date();
     const progressBefore = asProgress(task.progress);
     await task.save();
 
@@ -643,7 +665,7 @@ router.patch("/:taskId/subtasks/:subtaskId/assign", protect, async (req, res) =>
     const populatedTask = await populateTaskForClient(task);
     invalidateTasks(task.team._id);
     invalidateComments(task.team._id, task._id);
-    res.json(populatedTask);
+    res.json(decorateTaskForViewer(populatedTask, req.user._id));
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -675,6 +697,7 @@ router.patch("/:taskId/subtasks/:subtaskId/toggle", protect, async (req, res) =>
     subtask.completed = completed;
     subtask.completedAt = completed ? new Date() : null;
     subtask.completedBy = completed ? req.user._id : null;
+    subtask.lastProgressAt = new Date();
 
     const progressBefore = asProgress(task.progress);
     await task.save();
@@ -701,7 +724,7 @@ router.patch("/:taskId/subtasks/:subtaskId/toggle", protect, async (req, res) =>
     const populatedTask = await populateTaskForClient(task);
     invalidateTasks(task.team._id);
     invalidateComments(task.team._id, task._id);
-    res.json(populatedTask);
+    res.json(decorateTaskForViewer(populatedTask, req.user._id));
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -748,7 +771,7 @@ router.delete("/:taskId/subtasks/:subtaskId", protect, async (req, res) => {
     const populatedTask = await populateTaskForClient(task);
     invalidateTasks(task.team._id);
     invalidateComments(task.team._id, task._id);
-    res.json(populatedTask);
+    res.json(decorateTaskForViewer(populatedTask, req.user._id));
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -847,7 +870,7 @@ router.post("/:taskId/request-extension", protect, async (req, res) => {
     invalidateExtensions(task.team._id);
     invalidateComments(task.team._id, task._id);
 
-    res.json(populatedTask);
+    res.json(decorateTaskForViewer(populatedTask, req.user._id));
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });
@@ -906,7 +929,7 @@ router.post("/:taskId/extension/approve", protect, async (req, res) => {
     invalidateExtensions(task.team._id);
     invalidateComments(task.team._id, task._id);
 
-    res.json(populatedTask);
+    res.json(decorateTaskForViewer(populatedTask, req.user._id));
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Server error" });

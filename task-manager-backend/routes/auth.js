@@ -2,6 +2,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/user');
+const Team = require("../models/team");
 const Task = require('../models/task');
 const TTask = require('../models/TTask');
 const TaskProgressHistory = require("../models/TaskProgressHistory");
@@ -9,6 +10,7 @@ const ExecutionScoreSnapshot = require("../models/ExecutionScoreSnapshot");
 const { protect } = require('../middleware/auth');
 
 const router = express.Router();
+const STALLED_DAYS = Number(process.env.STALLED_DAYS || 3);
 
 // Generate JWT
 const generateToken = (id) => {
@@ -46,6 +48,7 @@ router.post('/register', [
       _id: user._id,
       name: user.name,
       email: user.email,
+      photo: user.photo || null,
       token: generateToken(user._id)
     });
 
@@ -84,6 +87,7 @@ router.post('/login', [
         _id: user._id,
         name: user.name,
         email: user.email,
+        photo: user.photo || null,
         token: generateToken(user._id)
       });
     }
@@ -108,14 +112,14 @@ router.get('/profile', protect, async (req, res) => {
     const since30Days = new Date(now.getTime() - THIRTY_DAYS_MS);
     const since7Days = new Date(now.getTime() - SEVEN_DAYS_MS);
 
-    const [personalTasks, teamTasks, recentHistory, latestExecutionScore] = await Promise.all([
+    const [personalTasks, teamTasks, recentHistory, latestExecutionScore, scoreHistory, teams] = await Promise.all([
       Task.find({ user: userId })
         .select("status dueDate createdAt subtasks progress")
         .lean(),
       TTask.find({
         $or: [{ assignedTo: userId }, { "subtasks.assignedTo": userId }],
       })
-        .select("status dueDate assignedTo createdAt subtasks progress")
+        .select("status dueDate assignedTo createdAt title team subtasks progress")
         .lean(),
       TaskProgressHistory.find({
         actorId: userId,
@@ -125,6 +129,13 @@ router.get('/profile', protect, async (req, res) => {
         .lean(),
       ExecutionScoreSnapshot.findOne({ userId })
         .sort({ snapshotDate: -1, createdAt: -1 })
+        .lean(),
+      ExecutionScoreSnapshot.find({ userId })
+        .sort({ snapshotDate: -1 })
+        .limit(4)
+        .lean(),
+      Team.find({ "members.user": userId })
+        .select("name members color icon")
         .lean(),
     ]);
 
@@ -171,6 +182,9 @@ router.get('/profile', protect, async (req, res) => {
         .map((subtask) => ({
           ...subtask,
           parentDueDate: task.dueDate || null,
+          parentTaskId: task._id,
+          parentTaskTitle: task.title || "Task",
+          parentTeamId: task.team || null,
         }))
     );
 
@@ -228,10 +242,120 @@ router.get('/profile', protect, async (req, res) => {
       avgCompletionsPerWeek4w: Number(((completedInLast30Days / 30) * 7).toFixed(2)),
     };
 
+    const teamIdentity = teams.map((team) => {
+      const myMembership = (team.members || []).find(
+        (member) => String(member.user) === String(userId)
+      );
+      return {
+        _id: team._id,
+        name: team.name,
+        role: myMembership?.role || "member",
+        color: team.color || null,
+        icon: team.icon || null,
+      };
+    });
+    const roleRank = { admin: 3, manager: 2, member: 1 };
+    const primaryRole =
+      teamIdentity.length > 0
+        ? [...teamIdentity]
+            .sort((a, b) => (roleRank[b.role] || 0) - (roleRank[a.role] || 0))[0]
+            .role
+        : "member";
+
+    const activeTasks =
+      personalTasks.filter((task) => task.status !== "completed").length +
+      teamTasks.filter(
+        (task) =>
+          String(task.assignedTo || "") === String(userId) && task.status !== "completed"
+      ).length;
+
+    const weeklyCompletionTrend = Array.from({ length: 4 }).map((_, index) => {
+      const end = new Date(now.getTime() - index * 7 * 24 * 60 * 60 * 1000);
+      const start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const completed = completedUserSubtasks.filter(
+        (subtask) =>
+          subtask.completedAt &&
+          new Date(subtask.completedAt) >= start &&
+          new Date(subtask.completedAt) < end
+      ).length;
+      return {
+        label: `W${4 - index}`,
+        completedSubtasks: completed,
+        start,
+        end,
+      };
+    }).reverse();
+
+    const scoreTrend = [...scoreHistory]
+      .reverse()
+      .map((snap, idx) => ({
+        label: `W${idx + 1}`,
+        score: snap.score,
+        snapshotDate: snap.snapshotDate,
+      }));
+
+    const stalledAssignedSubtasks = userScopedTeamSubtasks
+      .filter((subtask) => !subtask.completed)
+      .filter((subtask) => {
+        const checkpoint = new Date(subtask.lastProgressAt || subtask.createdAt || now);
+        return checkpoint.getTime() < now.getTime() - STALLED_DAYS * 24 * 60 * 60 * 1000;
+      });
+
+    const stalledTaskMap = new Map();
+    stalledAssignedSubtasks.forEach((subtask) => {
+      const key = String(subtask.parentTaskId || "");
+      const existing = stalledTaskMap.get(key);
+      const progressAt = new Date(subtask.lastProgressAt || subtask.createdAt || now);
+      const daysStalled = Math.max(
+        1,
+        Math.floor((now.getTime() - progressAt.getTime()) / (24 * 60 * 60 * 1000))
+      );
+      if (!existing || daysStalled > existing.maxDaysStalled) {
+        stalledTaskMap.set(key, {
+          taskId: subtask.parentTaskId || null,
+          teamId: subtask.parentTeamId || null,
+          title: subtask.parentTaskTitle || "Task",
+          stalledSubtasks: 1,
+          maxDaysStalled: daysStalled,
+        });
+      } else {
+        existing.stalledSubtasks += 1;
+      }
+    });
+    const needsAttentionTasks = Array.from(stalledTaskMap.values());
+
+    const badges = [];
+    if (onTimeRate >= 90) {
+      badges.push({
+        id: "deadline_keeper",
+        title: "Deadline Keeper",
+        description: "Maintained 90%+ on-time completion over the last 30 days.",
+      });
+    }
+    if (completedUserSubtasks.length >= 15) {
+      badges.push({
+        id: "reliable_executor",
+        title: "Reliable Executor",
+        description: "Completed 15+ subtasks in the last 30 days.",
+      });
+    }
+    if (needsAttentionTasks.length === 0 && historyEventsLast30Days >= 8) {
+      badges.push({
+        id: "consistent_progress_updater",
+        title: "Consistent Progress Updater",
+        description: "No stalled assigned tasks and steady progress updates.",
+      });
+    }
+
     res.json({
       _id: req.user._id,
       name: req.user.name,
       email: req.user.email,
+      photo: req.user.photo || null,
+      identity: {
+        primaryRole,
+        teams: teamIdentity,
+      },
       progress: {
         personal: {
           totalTasks: personalTasks.length,
@@ -251,7 +375,12 @@ router.get('/profile', protect, async (req, res) => {
           completionRate,
           onTimeRate,
           averageSubtaskDurationHours,
+          activeTasks,
           activityFrequency,
+        },
+        trend: {
+          scoreLast4Weeks: scoreTrend,
+          completionLast4Weeks: weeklyCompletionTrend,
         },
         executionScore: latestExecutionScore
           ? {
@@ -264,6 +393,15 @@ router.get('/profile', protect, async (req, res) => {
               counters: latestExecutionScore.counters,
             }
           : null,
+        badges,
+        nudges: {
+          stalledDaysThreshold: STALLED_DAYS,
+          needsAttentionTasks,
+          reminder:
+            needsAttentionTasks.length > 0
+              ? `You have ${needsAttentionTasks.length} tasks with no progress update in ${STALLED_DAYS}+ days.`
+              : null,
+        },
       },
     });
   } catch (err) {
@@ -271,5 +409,46 @@ router.get('/profile', protect, async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 });
+
+router.put(
+  "/profile/photo",
+  protect,
+  [body("imageData").notEmpty().withMessage("imageData is required")],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      const imageData = String(req.body.imageData || "");
+      const mimeMatch = imageData.match(/^data:(image\/(png|jpeg|jpg|webp));base64,/i);
+      if (!mimeMatch) {
+        return res.status(400).json({ message: "Only PNG, JPG, JPEG, or WEBP data URLs are allowed" });
+      }
+
+      const base64 = imageData.split(",")[1] || "";
+      const bytes = Buffer.byteLength(base64, "base64");
+      const MAX_BYTES = 2 * 1024 * 1024;
+      if (bytes > MAX_BYTES) {
+        return res.status(400).json({ message: "Image size must be <= 2MB" });
+      }
+
+      const user = await User.findById(req.user._id);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      user.photo = imageData;
+      await user.save();
+
+      res.json({
+        message: "Profile photo updated",
+        photo: user.photo,
+      });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ message: "Server error" });
+    }
+  }
+);
 
 module.exports = router;

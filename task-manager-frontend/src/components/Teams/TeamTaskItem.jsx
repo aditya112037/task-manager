@@ -225,6 +225,14 @@ export default function TeamTaskItem({
               color={statusColors[task.status]}
               size="small"
             />
+            {task.needsAttention && (
+              <Chip
+                label="Needs attention"
+                color="warning"
+                size="small"
+                variant="outlined"
+              />
+            )}
             <Chip
               icon={<AccessTimeIcon />}
               label={

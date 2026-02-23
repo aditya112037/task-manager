@@ -29,6 +29,11 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
 
+    photo: {
+      type: String,
+      default: null,
+    },
+
     // 🔥 NEW — user can belong to multiple teams
     teams: [
       {

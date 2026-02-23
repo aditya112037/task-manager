@@ -24,6 +24,7 @@ const normalizePersonalSubtasks = (subtasks) => {
         title,
         completed,
         createdAt: item?.createdAt || new Date(),
+        lastProgressAt: item?.lastProgressAt || new Date(),
         completedAt: completed ? item?.completedAt || new Date() : null,
       };
     })
@@ -176,6 +177,7 @@ router.post("/:id/subtasks", async (req, res) => {
       title,
       completed: false,
       createdAt: new Date(),
+      lastProgressAt: new Date(),
       completedAt: null,
     });
     await task.save();
@@ -213,11 +215,13 @@ router.put("/:id/subtasks/:subtaskId", async (req, res) => {
       const title = String(req.body.title || "").trim();
       if (!title) return res.status(400).json({ message: "Subtask title is required" });
       subtask.title = title;
+      subtask.lastProgressAt = new Date();
     }
 
     if (Object.prototype.hasOwnProperty.call(req.body, "completed")) {
       subtask.completed = Boolean(req.body.completed);
       subtask.completedAt = subtask.completed ? new Date() : null;
+      subtask.lastProgressAt = new Date();
     }
 
     const before = asProgress(task.progress);
@@ -259,6 +263,7 @@ router.patch("/:id/subtasks/:subtaskId/toggle", async (req, res) => {
         !subtask.completed;
     subtask.completed = completed;
     subtask.completedAt = completed ? new Date() : null;
+    subtask.lastProgressAt = new Date();
 
     await task.save();
 

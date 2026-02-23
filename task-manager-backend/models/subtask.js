@@ -4,6 +4,7 @@ const baseSubtaskFields = {
   title: { type: String, required: true, trim: true, maxlength: 200 },
   completed: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },
+  lastProgressAt: { type: Date, default: Date.now },
   completedAt: { type: Date, default: null },
 };
 

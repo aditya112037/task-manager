@@ -12,6 +12,7 @@ import TeamsHome from "./pages/TeamsHome";
 import TeamDetails from "./pages/TeamDetails";
 import CreateTeam from "./pages/CreateTeam";
 import JoinTeam from "./pages/JoinTeam";
+import Profile from "./pages/Profile";
 import {
   LandingPage,
   FeaturesPage,
@@ -423,6 +424,16 @@ function AppContent() {
               <ProtectedRoute>
                 <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
                   <TeamDetails />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                  <Profile />
                 </Layout>
               </ProtectedRoute>
             }
