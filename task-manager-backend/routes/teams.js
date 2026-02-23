@@ -91,7 +91,9 @@ router.get("/my", protect, async (req, res) => {
   try {
     const teams = await Team.find({
       "members.user": req.user._id,
-    }).populate("admin", "name email photo");
+    })
+      .populate("admin", "name email photo")
+      .populate("members.user", "name email photo");
 
     res.json(teams);
   } catch (err) {

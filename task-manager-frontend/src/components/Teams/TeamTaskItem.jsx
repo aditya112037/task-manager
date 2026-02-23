@@ -41,6 +41,7 @@ const resolveUserName = (u) => {
 
 export default function TeamTaskItem({
   task,
+  teamMembers = [],
   canEdit,
   onEdit,
   onDelete,
@@ -376,6 +377,7 @@ export default function TeamTaskItem({
                 <TaskComments
                   taskId={task._id}
                   myRole={isAdminOrManager ? "admin" : "member"}
+                  teamMembers={teamMembers}
                 />
               </Box>
             </Collapse>

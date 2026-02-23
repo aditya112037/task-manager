@@ -19,7 +19,7 @@ import EmojiEmotionsIcon from "@mui/icons-material/EmojiEmotions";
 import AttachFileIcon from "@mui/icons-material/AttachFile";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import FormatQuoteIcon from "@mui/icons-material/FormatQuote";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useTheme } from "@mui/material/styles";
 
 const QUICK_COMMENTS = [
@@ -40,14 +40,16 @@ const EMOJI_CATEGORIES = {
   Objects: ["💻", "📁", "📊", "📈", "📉", "🔗", "🎯", "🏆"],
 };
 
-const SUGGESTED_USERS = [
-  { name: "Alex", color: "#FF6B6B" },
-  { name: "Sam", color: "#4ECDC4" },
-  { name: "Jordan", color: "#FFD166" },
-  { name: "Taylor", color: "#06D6A0" },
-];
+const USER_COLORS = ["#FF6B6B", "#4ECDC4", "#FFD166", "#06D6A0", "#7E57C2", "#26A69A"];
 
-export default function CommentInput({ onSend, disabled = false }) {
+const buildMentionHandle = (name = "") =>
+  String(name)
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "_")
+    .replace(/[^a-z0-9_.-]/g, "");
+
+export default function CommentInput({ onSend, disabled = false, teamMembers = [] }) {
   const theme = useTheme();
   const isDarkMode = theme.palette.mode === "dark";
   
@@ -56,6 +58,28 @@ export default function CommentInput({ onSend, disabled = false }) {
   const [activeCategory, setActiveCategory] = useState("Reactions");
   const [isFocused, setIsFocused] = useState(false);
   const inputRef = useRef(null);
+  const suggestedUsers = useMemo(() => {
+    const seen = new Set();
+    const users = [];
+    for (let i = 0; i < teamMembers.length; i += 1) {
+      const raw = teamMembers[i]?.user ?? teamMembers[i];
+      const id = raw?._id || raw?.id || (typeof raw === "string" ? raw : null);
+      const name = typeof raw === "object" ? raw?.name : null;
+      if (!id || !name) continue;
+      const key = String(id);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const mentionHandle = buildMentionHandle(name);
+      if (!mentionHandle) continue;
+      users.push({
+        id: key,
+        name,
+        mentionHandle,
+        color: USER_COLORS[users.length % USER_COLORS.length],
+      });
+    }
+    return users;
+  }, [teamMembers]);
 
   const handleSend = () => {
     if (!text.trim() || disabled) return;
@@ -77,8 +101,8 @@ export default function CommentInput({ onSend, disabled = false }) {
     inputRef.current?.focus();
   };
 
-  const insertMention = (username) => {
-    setText(prev => `${prev}@${username} `);
+  const insertMention = (mentionHandle) => {
+    setText(prev => `${prev}@${mentionHandle} `);
     inputRef.current?.focus();
   };
 
@@ -214,8 +238,8 @@ export default function CommentInput({ onSend, disabled = false }) {
             }}
           />
           <AvatarGroup max={4} spacing="small">
-            {SUGGESTED_USERS.map((user, index) => (
-              <Tooltip key={index} title={`Mention @${user.name}`} placement="top">
+            {suggestedUsers.map((user) => (
+              <Tooltip key={user.id} title={`Mention @${user.mentionHandle}`} placement="top">
                 <Avatar
                   sx={{
                     width: 32,
@@ -234,7 +258,7 @@ export default function CommentInput({ onSend, disabled = false }) {
                       zIndex: 2,
                     },
                   }}
-                  onClick={() => insertMention(user.name)}
+                  onClick={() => insertMention(user.mentionHandle)}
                 >
                   <Box
                     sx={{
@@ -243,13 +267,18 @@ export default function CommentInput({ onSend, disabled = false }) {
                       color: theme.palette.getContrastText(user.color),
                     }}
                   >
-                    {user.name[0]}
-                  </Box>
-                </Avatar>
+                      {user.name[0]}
+                    </Box>
+                  </Avatar>
               </Tooltip>
             ))}
           </AvatarGroup>
         </Stack>
+        {suggestedUsers.length === 0 && (
+          <Box sx={{ mt: 1, fontSize: "0.75rem", color: "text.secondary" }}>
+            Team members will appear here for quick mentions.
+          </Box>
+        )}
       </Box>
 
       {/* Main Input Area */}

@@ -133,9 +133,10 @@ const Dashboard = () => {
     teamTasks.forEach(t => {
       // Handle both populated team object and team ID string
       const teamId = t.team?._id || t.team;
-      const teamName = t.team?.name || teams.find(team => team._id === teamId)?.name || "Unknown Team";
-      const teamColor = t.team?.color || teams.find(team => team._id === teamId)?.color;
-      const teamIcon = t.team?.icon || teams.find(team => team._id === teamId)?.icon;
+      const knownTeam = teams.find(team => String(team._id) === String(teamId));
+      const teamName = t.team?.name || knownTeam?.name || "Unknown Team";
+      const teamColor = t.team?.color || knownTeam?.color;
+      const teamIcon = t.team?.icon || knownTeam?.icon;
       
       if (!teamId) return;
       
@@ -145,6 +146,7 @@ const Dashboard = () => {
           name: teamName,
           icon: teamIcon,
           color: teamColor,
+          members: knownTeam?.members || t.team?.members || [],
           tasks: []
         };
       }
@@ -483,6 +485,7 @@ const Dashboard = () => {
                 <TeamTaskItem
                   key={task._id}
                   task={task}
+                  teamMembers={teams.find((team) => String(team._id) === String(task.team?._id || task.team))?.members || task.team?.members || []}
                   canEdit={true}
                   currentUserId={user?._id}
                   onEdit={() => handleEditTask(task)}
@@ -639,6 +642,7 @@ const Dashboard = () => {
                             <TeamTaskItem
                               key={task._id}
                               task={task}
+                              teamMembers={g.members || []}
                               canEdit={canEdit || String((task.assignedTo && (task.assignedTo._id || task.assignedTo))) === String(user?._id)}
                               currentUserId={user?._id}
                               isAdminOrManager={canEdit}

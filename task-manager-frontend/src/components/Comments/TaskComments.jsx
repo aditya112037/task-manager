@@ -6,7 +6,23 @@ import CommentInput from "./CommentInput";
 import SystemComment from "./SystemComment";
 import { useAuth } from "../../context/AuthContext";
 
-export default function TaskComments({ taskId, myRole }) {
+const dedupeCommentsById = (list = []) => {
+  const byId = new Map();
+  for (const item of list) {
+    if (!item?._id) continue;
+    const existing = byId.get(item._id);
+    if (!existing) {
+      byId.set(item._id, item);
+      continue;
+    }
+    if (existing._optimistic && !item._optimistic) {
+      byId.set(item._id, item);
+    }
+  }
+  return Array.from(byId.values());
+};
+
+export default function TaskComments({ taskId, myRole, teamMembers = [] }) {
   const { user } = useAuth();
 
   const [comments, setComments] = useState([]);
@@ -71,18 +87,34 @@ export default function TaskComments({ taskId, myRole }) {
 
     const handleCreated = (e) => {
       if (e.detail?.taskId !== taskId || !e.detail?.comment) return;
+      const incoming = e.detail.comment;
+      const incomingRequestId = incoming?.meta?.clientRequestId;
 
       setComments((prev) => {
         const next = [...prev];
-        const index = next.findIndex((c) => c._id === e.detail.comment._id);
+        const optimisticMatchIndex =
+          incomingRequestId &&
+          incoming?.author?._id &&
+          String(incoming.author._id) === String(user?._id)
+            ? next.findIndex(
+                (c) => c._optimistic && c._clientRequestId === incomingRequestId
+              )
+            : -1;
 
-        if (index >= 0) {
-          next[index] = { ...next[index], ...e.detail.comment, _optimistic: false };
-        } else {
-          next.push({ ...e.detail.comment, _optimistic: false });
+        if (optimisticMatchIndex >= 0) {
+          next[optimisticMatchIndex] = { ...incoming, _optimistic: false };
+          return sortComments(dedupeCommentsById(next));
         }
 
-        return sortComments(next);
+        const index = next.findIndex((c) => c._id === incoming._id);
+
+        if (index >= 0) {
+          next[index] = { ...next[index], ...incoming, _optimistic: false };
+        } else {
+          next.push({ ...incoming, _optimistic: false });
+        }
+
+        return sortComments(dedupeCommentsById(next));
       });
     };
 
@@ -104,7 +136,7 @@ export default function TaskComments({ taskId, myRole }) {
       window.removeEventListener("comment:deleted", handleDeleted);
       window.removeEventListener("invalidate:comments", handleInvalidate);
     };
-  }, [taskId, isTempTask, sortComments, loadComments]);
+  }, [taskId, isTempTask, sortComments, loadComments, user?._id]);
 
   /* ---------------------------------------------------
      ADD COMMENT
@@ -113,6 +145,9 @@ export default function TaskComments({ taskId, myRole }) {
     const content = String(text || "").trim();
     if (!content || isTempTask) return;
 
+    const clientRequestId = `req-${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
     const optimisticId = `temp-${Date.now()}-${Math.random()
       .toString(36)
       .slice(2, 9)}`;
@@ -126,22 +161,30 @@ export default function TaskComments({ taskId, myRole }) {
         name: user?.name || "You",
         photo: user?.photo || null,
       },
+      _clientRequestId: clientRequestId,
       _optimistic: true,
     };
 
-    setComments((prev) => sortComments([...prev, optimisticComment]));
+    setComments((prev) =>
+      sortComments(dedupeCommentsById([...prev, optimisticComment]))
+    );
 
     try {
       const res = await commentsAPI.create(taskId, {
         content,
         type: "comment",
+        clientRequestId,
       });
 
       if (res?.data?._id) {
         setComments((prev) =>
           sortComments(
-            prev.map((c) =>
-              c._id === optimisticId ? { ...res.data, _optimistic: false } : c
+            dedupeCommentsById(
+              prev.map((c) =>
+                c._id === optimisticId || c._clientRequestId === clientRequestId
+                  ? { ...res.data, _optimistic: false }
+                  : c
+              )
             )
           )
         );
@@ -233,6 +276,7 @@ export default function TaskComments({ taskId, myRole }) {
       <CommentInput
         onSend={addComment}
         disabled={loading || isTempTask}
+        teamMembers={teamMembers}
       />
     </Box>
   );

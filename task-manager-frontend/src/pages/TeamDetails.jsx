@@ -1285,6 +1285,7 @@ export default function TeamDetails() {
                 <TeamTaskItem
                   key={t._id}
                   task={t}
+                  teamMembers={team.members || []}
                   canEdit={canEditTasks || resolveUserId(t.assignedTo) === resolveUserId(user?._id)}
                   isAdminOrManager={canEditTasks}
                   currentUserId={resolveUserId(user?._id)}
