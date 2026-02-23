@@ -1,13 +1,5 @@
 const mongoose = require("mongoose");
-
-const taskSubtaskSchema = new mongoose.Schema(
-  {
-    title: { type: String, required: true, trim: true, maxlength: 200 },
-    completed: { type: Boolean, default: false },
-    completedAt: { type: Date, default: null },
-  },
-  { _id: true }
-);
+const { personalSubtaskSchema } = require("./subtask");
 
 const taskSchema = new mongoose.Schema(
   {
@@ -37,7 +29,7 @@ const taskSchema = new mongoose.Schema(
     },
 
     subtasks: {
-      type: [taskSubtaskSchema],
+      type: [personalSubtaskSchema],
       default: [],
     },
 

@@ -7,6 +7,7 @@ const mongoose = require("mongoose");
 const TaskComment = require("../models/TaskComment");
 const { emitNotificationsChanged } = require("../utils/notificationEvents");
 const { sendPushToUsers } = require("../utils/pushNotifications");
+const { asProgress, logProgressChange } = require("../utils/progressHistory");
 const { protect } = require("../middleware/auth");
 
 // ----------------------------------------------------
@@ -87,6 +88,7 @@ const normalizeTeamSubtasks = (subtasks, actorId) => {
         _id: item?._id,
         title,
         completed,
+        createdAt: item?.createdAt || new Date(),
         assignedTo,
         completedAt: completed ? item?.completedAt || new Date() : null,
         completedBy: completed ? completedBy : null,
@@ -94,6 +96,9 @@ const normalizeTeamSubtasks = (subtasks, actorId) => {
     })
     .filter(Boolean);
 };
+
+const getTriggerSource = (req, fallback) =>
+  String(req.body?.triggerSource || fallback || "unknown");
 
 const notifyTeamMembers = async ({
   teamId,
@@ -211,6 +216,17 @@ router.post("/:teamId", protect, async (req, res) => {
       ...payload,
       team: team._id,
       createdBy: req.user._id,
+    });
+
+    await logProgressChange({
+      taskType: "team",
+      taskId: task._id,
+      teamId: team._id,
+      actorId: req.user._id,
+      before: asProgress(),
+      after: task.progress,
+      triggerSource: getTriggerSource(req, "task_created"),
+      metadata: { route: "POST /api/team-tasks/:teamId" },
     });
 
     await TaskComment.create({
@@ -348,9 +364,21 @@ router.put("/:taskId", protect, async (req, res) => {
     const oldStatus = task.status;
     const oldAssigned = task.assignedTo?.toString() || null;
     const oldDueDate = task.dueDate ? new Date(task.dueDate).toISOString() : null;
+    const progressBefore = asProgress(task.progress);
 
     Object.assign(task, updates);
     await task.save();
+
+    await logProgressChange({
+      taskType: "team",
+      taskId: task._id,
+      teamId: task.team._id,
+      actorId: req.user._id,
+      before: progressBefore,
+      after: task.progress,
+      triggerSource: getTriggerSource(req, "task_updated"),
+      metadata: { route: "PUT /api/team-tasks/:taskId", updatedFields: Object.keys(updates) },
+    });
 
     if (updates.status && oldStatus !== updates.status) {
       await TaskComment.create({
@@ -434,6 +462,292 @@ router.put("/:taskId", protect, async (req, res) => {
     invalidateTasks(task.team._id);
     invalidateComments(task.team._id, task._id);
 
+    res.json(populatedTask);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+/* ---------------- CREATE SUBTASK ---------------- */
+router.post("/:taskId/subtasks", protect, async (req, res) => {
+  try {
+    const task = await TTask.findById(req.params.taskId).populate("team");
+    if (!task) return res.status(404).json({ message: "Task not found" });
+
+    const member = findMember(task.team, req.user._id);
+    if (!member || !["admin", "manager"].includes(member.role)) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    const title = String(req.body?.title || "").trim();
+    if (!title) return res.status(400).json({ message: "Subtask title is required" });
+
+    const assignedTo = req.body?.assignedTo?._id || req.body?.assignedTo || null;
+    if (assignedTo && !findMember(task.team, assignedTo)) {
+      return res.status(400).json({ message: "Subtask assignee must be a team member" });
+    }
+
+    const progressBefore = asProgress(task.progress);
+    task.subtasks.push({
+      title,
+      assignedTo,
+      completed: false,
+      createdAt: new Date(),
+      completedAt: null,
+      completedBy: null,
+    });
+    await task.save();
+
+    await logProgressChange({
+      taskType: "team",
+      taskId: task._id,
+      teamId: task.team._id,
+      actorId: req.user._id,
+      before: progressBefore,
+      after: task.progress,
+      triggerSource: getTriggerSource(req, "subtask_created"),
+      metadata: { route: "POST /api/team-tasks/:taskId/subtasks" },
+    });
+
+    await TaskComment.create({
+      task: task._id,
+      team: task.team._id,
+      type: "system",
+      action: "subtask_created",
+      meta: { title, assignedTo },
+    });
+
+    const populatedTask = await populateTaskForClient(task);
+    invalidateTasks(task.team._id);
+    invalidateComments(task.team._id, task._id);
+    res.status(201).json(populatedTask);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+/* ---------------- UPDATE SUBTASK ---------------- */
+router.put("/:taskId/subtasks/:subtaskId", protect, async (req, res) => {
+  try {
+    const task = await TTask.findById(req.params.taskId).populate("team");
+    if (!task) return res.status(404).json({ message: "Task not found" });
+
+    const member = findMember(task.team, req.user._id);
+    if (!member) return res.status(403).json({ message: "Not authorized" });
+    const isAdminOrManager = ["admin", "manager"].includes(member.role);
+
+    const subtask = task.subtasks.id(req.params.subtaskId);
+    if (!subtask) return res.status(404).json({ message: "Subtask not found" });
+
+    if (!isAdminOrManager) {
+      return res.status(403).json({ message: "Only admins/managers can edit subtask details" });
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body, "title")) {
+      const title = String(req.body.title || "").trim();
+      if (!title) return res.status(400).json({ message: "Subtask title is required" });
+      subtask.title = title;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body, "assignedTo")) {
+      const assignedTo = req.body.assignedTo?._id || req.body.assignedTo || null;
+      if (assignedTo && !findMember(task.team, assignedTo)) {
+        return res.status(400).json({ message: "Subtask assignee must be a team member" });
+      }
+      subtask.assignedTo = assignedTo;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body, "completed")) {
+      const completed = Boolean(req.body.completed);
+      subtask.completed = completed;
+      subtask.completedAt = completed ? new Date() : null;
+      subtask.completedBy = completed ? req.user._id : null;
+    }
+
+    const progressBefore = asProgress(task.progress);
+    await task.save();
+
+    await logProgressChange({
+      taskType: "team",
+      taskId: task._id,
+      teamId: task.team._id,
+      actorId: req.user._id,
+      before: progressBefore,
+      after: task.progress,
+      triggerSource: getTriggerSource(req, "subtask_updated"),
+      metadata: { route: "PUT /api/team-tasks/:taskId/subtasks/:subtaskId" },
+    });
+
+    await TaskComment.create({
+      task: task._id,
+      team: task.team._id,
+      type: "system",
+      action: "subtask_updated",
+      meta: { subtaskId: req.params.subtaskId },
+    });
+
+    const populatedTask = await populateTaskForClient(task);
+    invalidateTasks(task.team._id);
+    invalidateComments(task.team._id, task._id);
+    res.json(populatedTask);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+/* ---------------- ASSIGN SUBTASK ---------------- */
+router.patch("/:taskId/subtasks/:subtaskId/assign", protect, async (req, res) => {
+  try {
+    const task = await TTask.findById(req.params.taskId).populate("team");
+    if (!task) return res.status(404).json({ message: "Task not found" });
+
+    const member = findMember(task.team, req.user._id);
+    if (!member || !["admin", "manager"].includes(member.role)) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    const subtask = task.subtasks.id(req.params.subtaskId);
+    if (!subtask) return res.status(404).json({ message: "Subtask not found" });
+
+    const assignedTo = req.body?.assignedTo?._id || req.body?.assignedTo || null;
+    if (assignedTo && !findMember(task.team, assignedTo)) {
+      return res.status(400).json({ message: "Subtask assignee must be a team member" });
+    }
+
+    subtask.assignedTo = assignedTo;
+    const progressBefore = asProgress(task.progress);
+    await task.save();
+
+    await logProgressChange({
+      taskType: "team",
+      taskId: task._id,
+      teamId: task.team._id,
+      actorId: req.user._id,
+      before: progressBefore,
+      after: task.progress,
+      triggerSource: getTriggerSource(req, "subtask_assigned"),
+      metadata: { route: "PATCH /api/team-tasks/:taskId/subtasks/:subtaskId/assign", assignedTo },
+    });
+
+    await TaskComment.create({
+      task: task._id,
+      team: task.team._id,
+      type: "system",
+      action: assignedTo ? "subtask_assigned" : "subtask_unassigned",
+      meta: { subtaskId: req.params.subtaskId, assignedTo },
+    });
+
+    const populatedTask = await populateTaskForClient(task);
+    invalidateTasks(task.team._id);
+    invalidateComments(task.team._id, task._id);
+    res.json(populatedTask);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+/* ---------------- TOGGLE SUBTASK COMPLETION ---------------- */
+router.patch("/:taskId/subtasks/:subtaskId/toggle", protect, async (req, res) => {
+  try {
+    const task = await TTask.findById(req.params.taskId).populate("team");
+    if (!task) return res.status(404).json({ message: "Task not found" });
+
+    const member = findMember(task.team, req.user._id);
+    if (!member) return res.status(403).json({ message: "Not authorized" });
+    const isAdminOrManager = ["admin", "manager"].includes(member.role);
+
+    const subtask = task.subtasks.id(req.params.subtaskId);
+    if (!subtask) return res.status(404).json({ message: "Subtask not found" });
+
+    if (!isAdminOrManager && toId(subtask.assignedTo) !== toId(req.user._id)) {
+      return res.status(403).json({ message: "You can toggle only your assigned subtasks" });
+    }
+
+    const completed =
+      Object.prototype.hasOwnProperty.call(req.body, "completed")
+        ? Boolean(req.body.completed)
+        : !Boolean(subtask.completed);
+
+    subtask.completed = completed;
+    subtask.completedAt = completed ? new Date() : null;
+    subtask.completedBy = completed ? req.user._id : null;
+
+    const progressBefore = asProgress(task.progress);
+    await task.save();
+
+    await logProgressChange({
+      taskType: "team",
+      taskId: task._id,
+      teamId: task.team._id,
+      actorId: req.user._id,
+      before: progressBefore,
+      after: task.progress,
+      triggerSource: getTriggerSource(req, "subtask_toggled"),
+      metadata: { route: "PATCH /api/team-tasks/:taskId/subtasks/:subtaskId/toggle", completed },
+    });
+
+    await TaskComment.create({
+      task: task._id,
+      team: task.team._id,
+      type: "system",
+      action: completed ? "subtask_completed" : "subtask_reopened",
+      meta: { subtaskId: req.params.subtaskId },
+    });
+
+    const populatedTask = await populateTaskForClient(task);
+    invalidateTasks(task.team._id);
+    invalidateComments(task.team._id, task._id);
+    res.json(populatedTask);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+/* ---------------- DELETE SUBTASK ---------------- */
+router.delete("/:taskId/subtasks/:subtaskId", protect, async (req, res) => {
+  try {
+    const task = await TTask.findById(req.params.taskId).populate("team");
+    if (!task) return res.status(404).json({ message: "Task not found" });
+
+    const member = findMember(task.team, req.user._id);
+    if (!member || !["admin", "manager"].includes(member.role)) {
+      return res.status(403).json({ message: "Not authorized" });
+    }
+
+    const subtask = task.subtasks.id(req.params.subtaskId);
+    if (!subtask) return res.status(404).json({ message: "Subtask not found" });
+
+    const progressBefore = asProgress(task.progress);
+    task.subtasks.pull(req.params.subtaskId);
+    await task.save();
+
+    await logProgressChange({
+      taskType: "team",
+      taskId: task._id,
+      teamId: task.team._id,
+      actorId: req.user._id,
+      before: progressBefore,
+      after: task.progress,
+      triggerSource: getTriggerSource(req, "subtask_deleted"),
+      metadata: { route: "DELETE /api/team-tasks/:taskId/subtasks/:subtaskId" },
+    });
+
+    await TaskComment.create({
+      task: task._id,
+      team: task.team._id,
+      type: "system",
+      action: "subtask_deleted",
+      meta: { subtaskId: req.params.subtaskId },
+    });
+
+    const populatedTask = await populateTaskForClient(task);
+    invalidateTasks(task.team._id);
+    invalidateComments(task.team._id, task._id);
     res.json(populatedTask);
   } catch (err) {
     console.error(err);

@@ -1,23 +1,5 @@
 const mongoose = require("mongoose");
-
-const teamSubtaskSchema = new mongoose.Schema(
-  {
-    title: { type: String, required: true, trim: true, maxlength: 200 },
-    completed: { type: Boolean, default: false },
-    assignedTo: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      default: null,
-    },
-    completedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
-      default: null,
-    },
-    completedAt: { type: Date, default: null },
-  },
-  { _id: true }
-);
+const { teamSubtaskSchema } = require("./subtask");
 
 const TTaskSchema = new mongoose.Schema(
   {
