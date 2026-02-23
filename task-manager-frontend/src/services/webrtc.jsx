@@ -322,22 +322,31 @@ export const closeAllPeers = () => {
 export const startAudio = async () => {
   if (audioStream) return audioStream;
 
-  // Temporary isolation mode: request plain audio device capture
-  // to rule out bad constraint/device combinations.
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: true,
-  });
+  let stream = null;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+    });
+  } catch {
+    // Some browsers reject stricter constraints on specific devices.
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  }
 
   const track = stream.getAudioTracks()[0];
 
   if (track) {
     track.enabled = true;
+    track.contentHint = "speech";
 
     try {
       await track.applyConstraints({
         echoCancellation: true,
         noiseSuppression: true,
-        autoGainControl: false,
+        autoGainControl: true,
       });
     } catch {}
 

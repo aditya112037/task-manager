@@ -5,9 +5,11 @@ import {
   Grid,
   CircularProgress,
   Fab,
-  Paper
+  Paper,
+  Button,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import AssignmentTurnedInOutlinedIcon from "@mui/icons-material/AssignmentTurnedInOutlined";
 import { tasksAPI } from "../../services/api";
 import TaskForm from "./TaskForm";
 import TaskItem from "./TaskItem";
@@ -135,14 +137,27 @@ const TaskList = () => {
           ))}
         </Grid>
       ) : (
-        <Box sx={{ textAlign: "center", mt: 12 }}>
+        <Paper
+          sx={{
+            textAlign: "center",
+            mt: 8,
+            p: { xs: 3, sm: 5 },
+            borderRadius: 3,
+            border: "1px dashed",
+            borderColor: "divider",
+          }}
+        >
+          <AssignmentTurnedInOutlinedIcon sx={{ fontSize: 52, color: "text.secondary", opacity: 0.6, mb: 1.5 }} />
           <Typography variant="h6" color="text.secondary">
-            No tasks yet.
+            No tasks yet
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            Tap the + button to create your first task!
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1, mb: 2.5 }}>
+            Start small with your first task and build momentum.
           </Typography>
-        </Box>
+          <Button variant="contained" onClick={() => setShowForm(true)}>
+            Create First Task
+          </Button>
+        </Paper>
       )}
 
       {/* Floating Add Button */}

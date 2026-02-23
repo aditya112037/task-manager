@@ -25,9 +25,11 @@ import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import { teamTasksAPI, teamsAPI } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { getTeamAvatarLabel, getTeamAvatarSx } from "../utils/teamAvatar";
+import { useNavigate } from "react-router-dom";
 
 const Dashboard = () => {
   const theme = useTheme();
+  const navigate = useNavigate();
   const { user } = useAuth();
 
   const [tab, setTab] = useState(0);
@@ -52,7 +54,7 @@ const Dashboard = () => {
   const handleTabChange = (_, v) => setTab(v);
   const showSnack = (msg, sev = "success") => setSnackbar({ open: true, message: msg, severity: sev });
 
-  // ✅ CRITICAL FIX: Single source of truth - fetch ALL tasks at once
+  // Single source of truth - fetch all tasks at once
   const fetchAllTeamTasks = useCallback(async () => {
     if (teams.length === 0) {
       setTeamTasks([]);
@@ -71,7 +73,7 @@ const Dashboard = () => {
           try {
             const res = await teamTasksAPI.getTeamTasks(team._id);
             if (Array.isArray(res.data)) {
-              // ✅ Attach full team object to each task
+              // Attach full team object to each task
               return res.data.map(task => ({
                 ...task,
                 team: team  // This ensures task.team has name, color, etc.
@@ -89,7 +91,7 @@ const Dashboard = () => {
       const allTasks = results.flat();
       setTeamTasks(allTasks);
 
-      // ✅ Calculate assigned tasks from the same source
+      // Calculate assigned tasks from the same source
       const mine = allTasks.filter(
         task => String(task.assignedTo?._id || task.assignedTo) === String(user?._id)
       );
@@ -103,7 +105,7 @@ const Dashboard = () => {
     }
   }, [teams, user]);
 
-  // ✅ CRITICAL FIX: Helper function to get role in a team (no race conditions)
+  // Helper function to get role in a team (no race conditions)
   const getMyRoleInTeam = useCallback(
     (teamId) => {
       const team = teams.find(t => String(t._id) === String(teamId));
@@ -123,7 +125,7 @@ const Dashboard = () => {
   const teamTasksByTeam = useMemo(() => {
     const grouped = {};
     teamTasks.forEach(t => {
-      // ✅ FIXED: Handle both populated team object and team ID string
+      // Handle both populated team object and team ID string
       const teamId = t.team?._id || t.team;
       const teamName = t.team?.name || teams.find(team => team._id === teamId)?.name || "Unknown Team";
       const teamColor = t.team?.color || teams.find(team => team._id === teamId)?.color;
@@ -160,10 +162,10 @@ const Dashboard = () => {
     }
   }, []);
 
-  // ✅ CRITICAL FIX: Unified invalidation listeners
+  // Unified invalidation listeners
   useEffect(() => {
     const onTasksInvalidate = () => {
-      console.log("🔄 Dashboard: invalidate:tasks received");
+      console.log("Dashboard: invalidate:tasks received");
       // Refresh everything when tasks change
       fetchTeams().then(() => {
         // After teams are fetched, fetch all tasks
@@ -174,7 +176,7 @@ const Dashboard = () => {
     };
 
     const onTeamsInvalidate = () => {
-      console.log("🔄 Dashboard: invalidate:teams received");
+      console.log("Dashboard: invalidate:teams received");
       // Refresh everything when teams change
       fetchTeams().then(() => {
         // After teams are fetched, fetch all tasks
@@ -230,7 +232,7 @@ const Dashboard = () => {
 
   const handleEditTask = (task) => {
     const teamId = task.team?._id || task.team;
-    if (teamId) window.location.href = `/teams/${teamId}`;
+    if (teamId) navigate(`/teams/${teamId}`);
   };
 
   // Manual refresh function - use only when needed
@@ -519,7 +521,7 @@ const Dashboard = () => {
                 sx={{ mt: 2 }} 
                 variant="contained" 
                 size="large"
-                onClick={() => (window.location.href = "/teams")}
+                onClick={() => navigate("/teams")}
               >
                 Join or Create a Team
               </Button>
@@ -536,11 +538,11 @@ const Dashboard = () => {
               {Object.values(teamTasksByTeam)
                 .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
                 .map((g) => {
-                  // ✅ CRITICAL FIX: Use the helper function instead of inline calculation
+                  // Use the helper function instead of inline calculation
                   const role = getMyRoleInTeam(g.id);
                   const canEdit = ["admin", "manager"].includes(role);
                   
-                  // ✅ CRITICAL FIX: Filter tasks based on role
+                  // Filter tasks based on role
                   const visibleTasks = role === "member" 
                     ? g.tasks.filter(task => {
                         // Members can only see:
@@ -580,26 +582,26 @@ const Dashboard = () => {
                             fontSize: '1.5rem',
                             color: 'white'
                           }}>
-                            {g.icon || "👥"}
+                            {g.icon || "TM"}
                           </Box>
                           <Box>
                             <Typography variant="h6" fontWeight={700}>
                               {g.name}
                             </Typography>
-                            <Typography variant="body2" color="text.secondary">
-                              {visibleTaskCount} task{visibleTaskCount > 1 ? 's' : ''} • {role ? `Your role: ${role}` : 'Member'} • Live Updates
+                            <Box sx={{ display: "flex", alignItems: "center", gap: 1, flexWrap: "wrap" }}>
+                              <Typography variant="body2" color="text.secondary">
+                                {visibleTaskCount} task{visibleTaskCount > 1 ? "s" : ""} • {role ? `Your role: ${role}` : "Member"} • Live updates
+                              </Typography>
                               {role === "member" && hiddenTaskCount > 0 && (
-                                <Typography component="span" variant="caption" sx={{ ml: 1, color: 'text.secondary' }}>
-                                  ({hiddenTaskCount} hidden)
-                                </Typography>
+                                <Chip size="small" variant="outlined" label={`${hiddenTaskCount} hidden`} />
                               )}
-                            </Typography>
+                            </Box>
                           </Box>
                         </Box>
                         <Button 
                           variant="contained" 
                           size="small" 
-                          onClick={() => (window.location.href = `/teams/${g.id}`)}
+                          onClick={() => navigate(`/teams/${g.id}`)}
                           sx={{ borderRadius: 2, width: { xs: "100%", sm: "auto" } }}
                         >
                           View Team
@@ -672,7 +674,7 @@ const Dashboard = () => {
                 sx={{ mt: 2 }} 
                 variant="contained" 
                 size="large"
-                onClick={() => (window.location.href = "/teams")}
+                onClick={() => navigate("/teams")}
               >
                 Browse Teams
               </Button>
@@ -680,13 +682,15 @@ const Dashboard = () => {
           ) : (
             <Grid container spacing={3}>
               {teams.map((t) => {
-                // ✅ CRITICAL FIX: Use the helper function
+                // Use the helper function
                 const userRole = getMyRoleInTeam(t._id);
                 const assignedCount = assignedTasks.filter((a) => String(a.team?._id || a.team) === String(t._id)).length;
                 
                 return (
                   <Grid item xs={12} sm={6} md={4} key={t._id}>
                     <Paper
+                      role="button"
+                      tabIndex={0}
                       sx={{
                         p: 3,
                         borderRadius: 3,
@@ -694,15 +698,25 @@ const Dashboard = () => {
                         display: "flex",
                         flexDirection: "column",
                         cursor: "pointer",
-                        transition: "transform 0.2s, box-shadow 0.2s",
+                        touchAction: "manipulation",
+                        transition: "transform 0.18s ease, box-shadow 0.2s ease, border-color 0.2s ease",
                         border: `1px solid ${theme.palette.divider}`,
                         "&:hover": { 
                           transform: "translateY(-4px)", 
                           boxShadow: theme.shadows[8],
                           borderColor: t.color || theme.palette.primary.main
                         },
+                        "&:active": {
+                          transform: "translateY(-1px)",
+                        },
                       }}
-                      onClick={() => (window.location.href = `/teams/${t._id}`)}
+                      onClick={() => navigate(`/teams/${t._id}`)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          navigate(`/teams/${t._id}`);
+                        }
+                      }}
                     >
                       <Box sx={{ display: "flex", alignItems: "center", mb: 3 }}>
                         <Avatar
@@ -753,7 +767,7 @@ const Dashboard = () => {
                           )}
                         </Stack>
                         <Typography variant="body2" color="primary" sx={{ fontWeight: 600 }}>
-                          View →
+                          View ->
                         </Typography>
                       </Box>
                     </Paper>

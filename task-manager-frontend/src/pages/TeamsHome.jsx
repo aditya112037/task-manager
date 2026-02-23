@@ -128,7 +128,7 @@ const TeamsHome = () => {
           onChange={(e) => setInviteInput(e.target.value)}
           placeholder="e.g., ABC123 or https://yourdomain.com/join/ABC123"
           variant="outlined"
-          onKeyPress={(e) => {
+          onKeyDown={(e) => {
             if (e.key === "Enter") {
               handleJoinSubmit();
             }
@@ -242,17 +242,29 @@ const TeamsHome = () => {
         {teams.map((team) => (
           <Grid item xs={12} sm={6} md={4} key={team._id}>
             <Paper
+              role="button"
+              tabIndex={0}
               sx={{
                 p: 3,
                 borderRadius: 3,
                 cursor: "pointer",
-                transition: "0.2s",
+                touchAction: "manipulation",
+                transition: "transform 0.18s ease, box-shadow 0.2s ease",
                 "&:hover": {
                   transform: "translateY(-4px)",
                   boxShadow: theme.shadows[4],
                 },
+                "&:active": {
+                  transform: "translateY(-1px)",
+                },
               }}
               onClick={() => navigate(`/teams/${team._id}`)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  navigate(`/teams/${team._id}`);
+                }
+              }}
             >
               <Avatar
                 sx={{

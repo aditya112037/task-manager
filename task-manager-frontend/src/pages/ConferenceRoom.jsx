@@ -77,6 +77,26 @@ function RemoteAudioPlayer({ stream }) {
   const streamIdRef = useRef(null);
   const fadeTimerRef = useRef(null);
   const unmuteTimerRef = useRef(null);
+  const playBlockedRef = useRef(false);
+
+  const ensurePlayback = useCallback(() => {
+    const element = audioRef.current;
+    if (!element || !element.srcObject) return;
+
+    const playPromise = element.play();
+    if (!playPromise || !playPromise.catch) {
+      playBlockedRef.current = false;
+      return;
+    }
+
+    playPromise
+      .then(() => {
+        playBlockedRef.current = false;
+      })
+      .catch(() => {
+        playBlockedRef.current = true;
+      });
+  }, []);
 
   useEffect(() => {
     const element = audioRef.current;
@@ -109,7 +129,7 @@ function RemoteAudioPlayer({ stream }) {
         element.volume = 0.85;
       }
 
-      element.play().catch(() => {});
+      ensurePlayback();
 
       if (isNewStream) {
         unmuteTimerRef.current = setTimeout(() => {
@@ -134,7 +154,7 @@ function RemoteAudioPlayer({ stream }) {
     streamIdRef.current = null;
     element.muted = true;
     element.volume = 0;
-  }, [stream]);
+  }, [ensurePlayback, stream]);
 
   useEffect(
     () => () => {
@@ -143,6 +163,20 @@ function RemoteAudioPlayer({ stream }) {
     },
     []
   );
+
+  useEffect(() => {
+    const tryResume = () => {
+      if (!playBlockedRef.current) return;
+      ensurePlayback();
+    };
+
+    const events = ["pointerdown", "touchstart", "keydown", "visibilitychange"];
+    events.forEach((eventName) => window.addEventListener(eventName, tryResume, { passive: true }));
+
+    return () => {
+      events.forEach((eventName) => window.removeEventListener(eventName, tryResume));
+    };
+  }, [ensurePlayback]);
 
   return <audio ref={audioRef} autoPlay playsInline />;
 }

@@ -20,12 +20,14 @@ import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import WarningIcon from "@mui/icons-material/Warning";
 import ErrorIcon from "@mui/icons-material/Error";
 import InfoIcon from "@mui/icons-material/Info";
+import { useNavigate } from "react-router-dom";
 import api from "../../services/api";
 import { registerForPushNotifications } from "../../services/pushNotifications";
 import { getSocket } from "../../services/socket";
 
 const NotificationCenter = () => {
   const theme = useTheme();
+  const navigate = useNavigate();
   const [anchorEl, setAnchorEl] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -98,7 +100,7 @@ const NotificationCenter = () => {
   const openNotificationTarget = (notification) => {
     const teamId = notification?.relatedTeam?._id || notification?.relatedTeam;
     if (teamId) {
-      window.location.href = `/teams/${teamId}`;
+      navigate(`/teams/${teamId}`);
       return;
     }
     // Fallback: no related resource, just close popover.

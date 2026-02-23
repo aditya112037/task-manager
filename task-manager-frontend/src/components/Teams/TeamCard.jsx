@@ -7,12 +7,23 @@ const TeamCard = ({ team }) => {
 
   return (
     <Card
+      role="button"
+      tabIndex={0}
       sx={{
         borderRadius: 3,
         cursor: "pointer",
+        touchAction: "manipulation",
+        transition: "box-shadow 0.2s ease, transform 0.18s ease",
         "&:hover": { boxShadow: "0 6px 20px rgba(0,0,0,0.15)" },
+        "&:active": { transform: "translateY(-1px)" },
       }}
       onClick={() => navigate(`/teams/${team._id}`)}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          navigate(`/teams/${team._id}`);
+        }
+      }}
     >
       <CardContent>
         <Typography variant="h6" fontWeight={700}>
