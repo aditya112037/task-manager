@@ -20,8 +20,10 @@ import MilitaryTechIcon from "@mui/icons-material/MilitaryTech";
 import TipsAndUpdatesIcon from "@mui/icons-material/TipsAndUpdates";
 import Groups2Icon from "@mui/icons-material/Groups2";
 import EmailOutlinedIcon from "@mui/icons-material/EmailOutlined";
+import { alpha } from "@mui/material/styles";
 import { authAPI } from "../services/api";
 import { useAuth } from "../context/AuthContext";
+import { useTheme } from "@mui/material/styles";
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 
@@ -50,36 +52,40 @@ const toBars = (items = [], valueKey = "score") => {
   }));
 };
 
-const MetricCard = ({ label, value, hint, pulseDelay = "0s" }) => (
-  <Paper
-    sx={{
-      p: 2,
-      borderRadius: 3,
-      height: "100%",
-      bgcolor: "rgba(5, 18, 31, 0.62)",
-      border: "1px solid rgba(90, 152, 211, 0.2)",
-      boxShadow: "0 10px 24px rgba(0, 0, 0, 0.28)",
-      backdropFilter: "blur(8px)",
-      animation: `cardRise 540ms ease ${pulseDelay} both`,
-    }}
-  >
-    <Typography
-      variant="h5"
-      fontWeight={700}
-      sx={{ fontFamily: "'Merriweather', 'Georgia', serif" }}
+const MetricCard = ({ label, value, hint, pulseDelay = "0s" }) => {
+  const theme = useTheme();
+  const isLight = theme.palette.mode === "light";
+  return (
+    <Paper
+      sx={{
+        p: 2,
+        borderRadius: 3,
+        height: "100%",
+        bgcolor: isLight ? alpha(theme.palette.background.paper, 0.96) : "rgba(5, 18, 31, 0.62)",
+        border: `1px solid ${isLight ? alpha(theme.palette.primary.main, 0.22) : "rgba(90, 152, 211, 0.2)"}`,
+        boxShadow: isLight ? "0 8px 16px rgba(20, 45, 70, 0.08)" : "0 10px 24px rgba(0, 0, 0, 0.28)",
+        backdropFilter: "blur(8px)",
+        animation: `cardRise 540ms ease ${pulseDelay} both`,
+      }}
     >
-      {value}
-    </Typography>
-    <Typography variant="body2" sx={{ mt: 0.4, opacity: 0.95 }}>
-      {label}
-    </Typography>
-    {hint && (
-      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.3 }}>
-        {hint}
+      <Typography
+        variant="h5"
+        fontWeight={700}
+        sx={{ fontFamily: "'Merriweather', 'Georgia', serif" }}
+      >
+        {value}
       </Typography>
-    )}
-  </Paper>
-);
+      <Typography variant="body2" sx={{ mt: 0.4, opacity: 0.95 }}>
+        {label}
+      </Typography>
+      {hint && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.3 }}>
+          {hint}
+        </Typography>
+      )}
+    </Paper>
+  );
+};
 
 const TrendBars = ({ title, bars, color }) => (
   <Box sx={{ minHeight: 172 }}>
@@ -111,6 +117,8 @@ const TrendBars = ({ title, bars, color }) => (
 );
 
 export default function Profile() {
+  const theme = useTheme();
+  const isLight = theme.palette.mode === "light";
   const { user, setUser } = useAuth();
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState(null);
@@ -190,6 +198,12 @@ export default function Profile() {
 
   const completionRate = Number(metrics.completionRate ?? 0);
   const onTimeRate = Number(metrics.onTimeRate ?? 0);
+  const panelBg = isLight ? alpha(theme.palette.background.paper, 0.92) : "rgba(3, 20, 34, 0.72)";
+  const panelBorder = isLight ? alpha(theme.palette.primary.main, 0.22) : "rgba(98, 176, 234, 0.2)";
+  const heroBorder = isLight ? alpha(theme.palette.primary.main, 0.26) : "rgba(93, 180, 255, 0.16)";
+  const heroBg = isLight
+    ? "radial-gradient(circle at 20% 10%, rgba(89, 169, 224, 0.18), transparent 40%), linear-gradient(130deg, rgba(245, 251, 255, 0.96), rgba(236, 246, 253, 0.92) 55%, rgba(226, 240, 250, 0.86))"
+    : "radial-gradient(circle at 20% 10%, rgba(30, 125, 172, 0.22), transparent 40%), linear-gradient(130deg, rgba(1, 15, 31, 0.95), rgba(3, 23, 41, 0.92) 55%, rgba(7, 34, 57, 0.8))";
 
   return (
     <Box
@@ -208,10 +222,9 @@ export default function Profile() {
           mb: 2.5,
           p: { xs: 2, md: 2.6 },
           borderRadius: 4,
-          border: "1px solid rgba(93, 180, 255, 0.16)",
-          background:
-            "radial-gradient(circle at 20% 10%, rgba(30, 125, 172, 0.22), transparent 40%), linear-gradient(130deg, rgba(1, 15, 31, 0.95), rgba(3, 23, 41, 0.92) 55%, rgba(7, 34, 57, 0.8))",
-          boxShadow: "0 18px 40px rgba(0, 0, 0, 0.35)",
+          border: `1px solid ${heroBorder}`,
+          background: heroBg,
+          boxShadow: isLight ? "0 14px 28px rgba(30, 60, 90, 0.12)" : "0 18px 40px rgba(0, 0, 0, 0.35)",
         }}
       >
         <Stack direction="row" justifyContent="space-between" alignItems="center" flexWrap="wrap" gap={1.5}>
@@ -229,8 +242,8 @@ export default function Profile() {
             icon={<Groups2Icon />}
             label={`${(identity.teams || []).length} Teams Active`}
             sx={{
-              bgcolor: "rgba(16, 76, 120, 0.35)",
-              border: "1px solid rgba(106, 186, 239, 0.26)",
+              bgcolor: isLight ? alpha(theme.palette.primary.main, 0.12) : "rgba(16, 76, 120, 0.35)",
+              border: `1px solid ${isLight ? alpha(theme.palette.primary.main, 0.24) : "rgba(106, 186, 239, 0.26)"}`,
             }}
           />
         </Stack>
@@ -246,15 +259,15 @@ export default function Profile() {
       )}
 
       <Grid container spacing={2.2}>
-        <Grid item xs={12} lg={4}>
+        <Grid item xs={12} md={4}>
           <Paper
             sx={{
               p: 2.5,
               borderRadius: 4,
               height: "100%",
-              border: "1px solid rgba(86, 168, 225, 0.18)",
-              bgcolor: "rgba(2, 16, 31, 0.72)",
-              boxShadow: "0 14px 28px rgba(0, 0, 0, 0.28)",
+              border: `1px solid ${panelBorder}`,
+              bgcolor: panelBg,
+              boxShadow: isLight ? "0 10px 20px rgba(20, 45, 70, 0.09)" : "0 14px 28px rgba(0, 0, 0, 0.28)",
               animation: "cardRise 500ms ease both",
             }}
           >
@@ -285,7 +298,10 @@ export default function Profile() {
               <Chip
                 label={`Role: ${identity.primaryRole || "member"}`}
                 size="small"
-                sx={{ bgcolor: "rgba(22, 85, 122, 0.32)", border: "1px solid rgba(121, 190, 232, 0.24)" }}
+                sx={{
+                  bgcolor: isLight ? alpha(theme.palette.info.main, 0.12) : "rgba(22, 85, 122, 0.32)",
+                  border: `1px solid ${isLight ? alpha(theme.palette.info.main, 0.25) : "rgba(121, 190, 232, 0.24)"}`,
+                }}
               />
               <Button
                 variant="outlined"
@@ -296,7 +312,7 @@ export default function Profile() {
                   mt: 0.8,
                   px: 2.4,
                   borderRadius: 2.2,
-                  borderColor: "rgba(110, 198, 238, 0.45)",
+                  borderColor: isLight ? alpha(theme.palette.primary.main, 0.45) : "rgba(110, 198, 238, 0.45)",
                 }}
               >
                 {uploading ? "Uploading..." : "Upload Profile Icon"}
@@ -380,8 +396,8 @@ export default function Profile() {
                   sx={{
                     justifyContent: "flex-start",
                     borderRadius: 2,
-                    borderColor: "rgba(125, 202, 242, 0.28)",
-                    bgcolor: "rgba(4, 25, 44, 0.52)",
+                    borderColor: isLight ? alpha(theme.palette.primary.main, 0.24) : "rgba(125, 202, 242, 0.28)",
+                    bgcolor: isLight ? alpha(theme.palette.primary.main, 0.08) : "rgba(4, 25, 44, 0.52)",
                   }}
                 />
               ))}
@@ -394,14 +410,14 @@ export default function Profile() {
           </Paper>
         </Grid>
 
-        <Grid item xs={12} lg={8}>
+        <Grid item xs={12} md={8}>
           <Paper
             sx={{
               p: 2.5,
               borderRadius: 4,
-              border: "1px solid rgba(89, 171, 229, 0.2)",
-              bgcolor: "rgba(3, 19, 34, 0.72)",
-              boxShadow: "0 14px 28px rgba(0, 0, 0, 0.27)",
+              border: `1px solid ${panelBorder}`,
+              bgcolor: panelBg,
+              boxShadow: isLight ? "0 10px 20px rgba(20, 45, 70, 0.09)" : "0 14px 28px rgba(0, 0, 0, 0.27)",
               animation: "cardRise 560ms ease both",
             }}
           >
@@ -412,7 +428,10 @@ export default function Profile() {
               <Chip
                 size="small"
                 label={executionScore?.snapshotDate ? formatDateLabel(executionScore.snapshotDate) : "No snapshot yet"}
-                sx={{ bgcolor: "rgba(19, 81, 122, 0.28)", border: "1px solid rgba(116, 191, 235, 0.24)" }}
+                sx={{
+                  bgcolor: isLight ? alpha(theme.palette.info.main, 0.12) : "rgba(19, 81, 122, 0.28)",
+                  border: `1px solid ${isLight ? alpha(theme.palette.info.main, 0.24) : "rgba(116, 191, 235, 0.24)"}`,
+                }}
               />
             </Stack>
             <Grid container spacing={1.3}>
@@ -455,9 +474,9 @@ export default function Profile() {
               p: 2.5,
               borderRadius: 4,
               mt: 2,
-              border: "1px solid rgba(93, 173, 230, 0.18)",
-              bgcolor: "rgba(2, 19, 35, 0.76)",
-              boxShadow: "0 14px 28px rgba(0, 0, 0, 0.25)",
+              border: `1px solid ${panelBorder}`,
+              bgcolor: panelBg,
+              boxShadow: isLight ? "0 10px 20px rgba(20, 45, 70, 0.09)" : "0 14px 28px rgba(0, 0, 0, 0.25)",
               animation: "cardRise 620ms ease both",
             }}
           >
@@ -496,9 +515,9 @@ export default function Profile() {
               p: 2.5,
               borderRadius: 4,
               height: "100%",
-              border: "1px solid rgba(98, 176, 234, 0.2)",
-              bgcolor: "rgba(3, 20, 34, 0.72)",
-              boxShadow: "0 12px 26px rgba(0, 0, 0, 0.22)",
+              border: `1px solid ${panelBorder}`,
+              bgcolor: panelBg,
+              boxShadow: isLight ? "0 10px 20px rgba(20, 45, 70, 0.09)" : "0 12px 26px rgba(0, 0, 0, 0.22)",
               animation: "cardRise 680ms ease both",
             }}
           >
@@ -516,8 +535,8 @@ export default function Profile() {
                     size="small"
                     sx={{
                       mb: 0.5,
-                      bgcolor: "rgba(27, 120, 73, 0.22)",
-                      border: "1px solid rgba(122, 226, 171, 0.3)",
+                      bgcolor: isLight ? alpha(theme.palette.success.main, 0.12) : "rgba(27, 120, 73, 0.22)",
+                      border: `1px solid ${isLight ? alpha(theme.palette.success.main, 0.28) : "rgba(122, 226, 171, 0.3)"}`,
                     }}
                   />
                   <Typography variant="body2" color="text.secondary">
@@ -540,9 +559,9 @@ export default function Profile() {
               p: 2.5,
               borderRadius: 4,
               height: "100%",
-              border: "1px solid rgba(98, 176, 234, 0.2)",
-              bgcolor: "rgba(3, 20, 34, 0.72)",
-              boxShadow: "0 12px 26px rgba(0, 0, 0, 0.22)",
+              border: `1px solid ${panelBorder}`,
+              bgcolor: panelBg,
+              boxShadow: isLight ? "0 10px 20px rgba(20, 45, 70, 0.09)" : "0 12px 26px rgba(0, 0, 0, 0.22)",
               animation: "cardRise 740ms ease both",
             }}
           >
@@ -569,8 +588,8 @@ export default function Profile() {
                   sx={{
                     p: 1.2,
                     borderRadius: 2.4,
-                    borderColor: "rgba(118, 194, 236, 0.28)",
-                    bgcolor: "rgba(8, 30, 49, 0.66)",
+                    borderColor: isLight ? alpha(theme.palette.primary.main, 0.24) : "rgba(118, 194, 236, 0.28)",
+                    bgcolor: isLight ? alpha(theme.palette.primary.main, 0.06) : "rgba(8, 30, 49, 0.66)",
                   }}
                 >
                   <Typography variant="body2" fontWeight={600}>
