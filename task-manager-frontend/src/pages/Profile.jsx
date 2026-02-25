@@ -514,7 +514,7 @@ export default function Profile() {
               subtasks completed per 7-day window across the latest 4 weeks.
             </Alert>
           </Paper>
-          <Grid container spacing={2.2} sx={{ mt: 0.1 }}>
+          <Grid container spacing={2.2} sx={{ mt: 1.2 }}>
             <Grid item xs={12} md={6}>
               <Paper
                 sx={{
