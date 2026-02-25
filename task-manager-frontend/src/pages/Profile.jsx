@@ -514,106 +514,105 @@ export default function Profile() {
               subtasks completed per 7-day window across the latest 4 weeks.
             </Alert>
           </Paper>
+          <Grid container spacing={2.2} sx={{ mt: 0.1 }}>
+            <Grid item xs={12} md={6}>
+              <Paper
+                sx={{
+                  p: 2.5,
+                  borderRadius: 4,
+                  height: "100%",
+                  border: `1px solid ${panelBorder}`,
+                  bgcolor: panelBg,
+                  boxShadow: isLight ? "0 10px 20px rgba(20, 45, 70, 0.09)" : "0 12px 26px rgba(0, 0, 0, 0.22)",
+                  animation: "cardRise 680ms ease both",
+                }}
+              >
+                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+                  <MilitaryTechIcon sx={{ color: "#79de9e" }} />
+                  <Typography variant="h6" sx={{ fontFamily: "'Merriweather', 'Georgia', serif" }}>
+                    Recognition Badges
+                  </Typography>
+                </Stack>
+                <Stack spacing={1.2}>
+                  {badges.map((badge) => (
+                    <Box key={badge.id}>
+                      <Chip
+                        label={badge.title}
+                        size="small"
+                        sx={{
+                          mb: 0.5,
+                          bgcolor: isLight ? alpha(theme.palette.success.main, 0.12) : "rgba(27, 120, 73, 0.22)",
+                          border: `1px solid ${isLight ? alpha(theme.palette.success.main, 0.28) : "rgba(122, 226, 171, 0.3)"}`,
+                        }}
+                      />
+                      <Typography variant="body2" color="text.secondary">
+                        {badge.description}
+                      </Typography>
+                    </Box>
+                  ))}
+                  {badges.length === 0 && (
+                    <Typography variant="body2" color="text.secondary">
+                      Badges are awarded automatically from real execution behavior.
+                    </Typography>
+                  )}
+                </Stack>
+              </Paper>
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <Paper
+                sx={{
+                  p: 2.5,
+                  borderRadius: 4,
+                  height: "100%",
+                  border: `1px solid ${panelBorder}`,
+                  bgcolor: panelBg,
+                  boxShadow: isLight ? "0 10px 20px rgba(20, 45, 70, 0.09)" : "0 12px 26px rgba(0, 0, 0, 0.22)",
+                  animation: "cardRise 740ms ease both",
+                }}
+              >
+                <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+                  <TipsAndUpdatesIcon sx={{ color: "#f7c981" }} />
+                  <Typography variant="h6" sx={{ fontFamily: "'Merriweather', 'Georgia', serif" }}>
+                    Focus Nudges
+                  </Typography>
+                </Stack>
+                {nudges.reminder ? (
+                  <Alert severity="warning" sx={{ mb: 1.2, borderRadius: 2 }}>
+                    {nudges.reminder}
+                  </Alert>
+                ) : (
+                  <Alert severity="success" sx={{ mb: 1.2, borderRadius: 2 }}>
+                    No stalled assigned tasks detected.
+                  </Alert>
+                )}
+                <Stack spacing={1}>
+                  {(nudges.needsAttentionTasks || []).map((item) => (
+                    <Paper
+                      key={item.taskId || item.title}
+                      variant="outlined"
+                      sx={{
+                        p: 1.2,
+                        borderRadius: 2.4,
+                        borderColor: isLight ? alpha(theme.palette.primary.main, 0.24) : "rgba(118, 194, 236, 0.28)",
+                        bgcolor: isLight ? alpha(theme.palette.primary.main, 0.06) : "rgba(8, 30, 49, 0.66)",
+                      }}
+                    >
+                      <Typography variant="body2" fontWeight={600}>
+                        {item.title}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {item.stalledSubtasks} stalled subtask(s), up to {item.maxDaysStalled} day(s)
+                        with no progress update.
+                      </Typography>
+                    </Paper>
+                  ))}
+                </Stack>
+              </Paper>
+            </Grid>
+          </Grid>
         </Box>
       </Box>
-
-      <Grid container spacing={2.2} sx={{ mt: 0.1 }}>
-        <Grid item xs={12} md={6}>
-          <Paper
-            sx={{
-              p: 2.5,
-              borderRadius: 4,
-              height: "100%",
-              border: `1px solid ${panelBorder}`,
-              bgcolor: panelBg,
-              boxShadow: isLight ? "0 10px 20px rgba(20, 45, 70, 0.09)" : "0 12px 26px rgba(0, 0, 0, 0.22)",
-              animation: "cardRise 680ms ease both",
-            }}
-          >
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-              <MilitaryTechIcon sx={{ color: "#79de9e" }} />
-              <Typography variant="h6" sx={{ fontFamily: "'Merriweather', 'Georgia', serif" }}>
-                Recognition Badges
-              </Typography>
-            </Stack>
-            <Stack spacing={1.2}>
-              {badges.map((badge) => (
-                <Box key={badge.id}>
-                  <Chip
-                    label={badge.title}
-                    size="small"
-                    sx={{
-                      mb: 0.5,
-                      bgcolor: isLight ? alpha(theme.palette.success.main, 0.12) : "rgba(27, 120, 73, 0.22)",
-                      border: `1px solid ${isLight ? alpha(theme.palette.success.main, 0.28) : "rgba(122, 226, 171, 0.3)"}`,
-                    }}
-                  />
-                  <Typography variant="body2" color="text.secondary">
-                    {badge.description}
-                  </Typography>
-                </Box>
-              ))}
-              {badges.length === 0 && (
-                <Typography variant="body2" color="text.secondary">
-                  Badges are awarded automatically from real execution behavior.
-                </Typography>
-              )}
-            </Stack>
-          </Paper>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <Paper
-            sx={{
-              p: 2.5,
-              borderRadius: 4,
-              height: "100%",
-              border: `1px solid ${panelBorder}`,
-              bgcolor: panelBg,
-              boxShadow: isLight ? "0 10px 20px rgba(20, 45, 70, 0.09)" : "0 12px 26px rgba(0, 0, 0, 0.22)",
-              animation: "cardRise 740ms ease both",
-            }}
-          >
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-              <TipsAndUpdatesIcon sx={{ color: "#f7c981" }} />
-              <Typography variant="h6" sx={{ fontFamily: "'Merriweather', 'Georgia', serif" }}>
-                Focus Nudges
-              </Typography>
-            </Stack>
-            {nudges.reminder ? (
-              <Alert severity="warning" sx={{ mb: 1.2, borderRadius: 2 }}>
-                {nudges.reminder}
-              </Alert>
-            ) : (
-              <Alert severity="success" sx={{ mb: 1.2, borderRadius: 2 }}>
-                No stalled assigned tasks detected.
-              </Alert>
-            )}
-            <Stack spacing={1}>
-              {(nudges.needsAttentionTasks || []).map((item) => (
-                <Paper
-                  key={item.taskId || item.title}
-                  variant="outlined"
-                  sx={{
-                    p: 1.2,
-                    borderRadius: 2.4,
-                    borderColor: isLight ? alpha(theme.palette.primary.main, 0.24) : "rgba(118, 194, 236, 0.28)",
-                    bgcolor: isLight ? alpha(theme.palette.primary.main, 0.06) : "rgba(8, 30, 49, 0.66)",
-                  }}
-                >
-                  <Typography variant="body2" fontWeight={600}>
-                    {item.title}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {item.stalledSubtasks} stalled subtask(s), up to {item.maxDaysStalled} day(s)
-                    with no progress update.
-                  </Typography>
-                </Paper>
-              ))}
-            </Stack>
-          </Paper>
-        </Grid>
-      </Grid>
     </Box>
   );
 }
