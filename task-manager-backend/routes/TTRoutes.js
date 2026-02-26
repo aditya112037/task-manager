@@ -50,6 +50,7 @@ const ALLOWED_TASK_UPDATE_FIELDS = [
   "description",
   "priority",
   "status",
+  "progress",
   "dueDate",
   "assignedTo",
   "subtasks",
@@ -62,6 +63,12 @@ const isValidDate = (value) => {
   if (!value) return false;
   const d = new Date(value);
   return !Number.isNaN(d.getTime());
+};
+
+const clampPercentage = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.min(100, Math.max(0, Math.round(numeric)));
 };
 
 const populateTaskForClient = async (taskDoc) => {
@@ -91,23 +98,44 @@ const decorateTaskForViewer = (taskDoc, viewerId) => {
   return { ...plain, needsAttention };
 };
 
-const normalizeTeamSubtasks = (subtasks, actorId) => {
+const normalizeTeamSubtasks = (subtasks, actorId, existingById = new Map()) => {
   if (!Array.isArray(subtasks)) return [];
   return subtasks
     .map((item) => {
       const title = String(item?.title || "").trim();
       if (!title) return null;
-      const completed = Boolean(item?.completed);
+      const id = toId(item?._id);
+      const existing = id ? existingById.get(id) : null;
+      const alreadyCompleted =
+        Boolean(existing?.completed) ||
+        clampPercentage(existing?.progressPercentage) >= 100;
+      let progressPercentage = Object.prototype.hasOwnProperty.call(
+        item || {},
+        "progressPercentage"
+      )
+        ? clampPercentage(item.progressPercentage)
+        : Boolean(item?.completed)
+          ? 100
+          : clampPercentage(existing?.progressPercentage);
+      if (alreadyCompleted || progressPercentage >= 100) {
+        progressPercentage = 100;
+      }
+      const completed = progressPercentage >= 100;
       const assignedTo = item?.assignedTo?._id || item?.assignedTo || null;
-      const completedBy = item?.completedBy?._id || item?.completedBy || actorId;
+      const completedBy =
+        item?.completedBy?._id ||
+        item?.completedBy ||
+        existing?.completedBy ||
+        actorId;
       return {
         _id: item?._id,
         title,
+        progressPercentage,
         completed,
-        createdAt: item?.createdAt || new Date(),
+        createdAt: item?.createdAt || existing?.createdAt || new Date(),
         lastProgressAt: item?.lastProgressAt || new Date(),
         assignedTo,
-        completedAt: completed ? item?.completedAt || new Date() : null,
+        completedAt: completed ? existing?.completedAt || item?.completedAt || new Date() : null,
         completedBy: completed ? completedBy : null,
       };
     })
@@ -220,7 +248,7 @@ router.post("/:teamId", protect, async (req, res) => {
 
     const payload = { ...req.body };
     if (Object.prototype.hasOwnProperty.call(payload, "subtasks")) {
-      payload.subtasks = normalizeTeamSubtasks(payload.subtasks, req.user._id);
+      payload.subtasks = normalizeTeamSubtasks(payload.subtasks, req.user._id, new Map());
       const invalidAssignee = payload.subtasks.find(
         (item) => item.assignedTo && !findMember(team, item.assignedTo)
       );
@@ -294,7 +322,7 @@ router.put("/:taskId", protect, async (req, res) => {
     }
 
     if (!isAdminOrManager) {
-      const memberAllowedKeys = ["status", "subtasks"];
+      const memberAllowedKeys = ["status", "subtasks", "progress"];
       const updateKeys = Object.keys(updates);
 
       const hasForbiddenMemberUpdate = updateKeys.some(
@@ -311,6 +339,13 @@ router.put("/:taskId", protect, async (req, res) => {
         toId(task.assignedTo) !== toId(req.user._id)
       ) {
         return res.status(403).json({ message: "Only assignee can update task status" });
+      }
+
+      if (
+        Object.prototype.hasOwnProperty.call(updates, "progress") &&
+        toId(task.assignedTo) !== toId(req.user._id)
+      ) {
+        return res.status(403).json({ message: "Only assignee can update task progress" });
       }
 
       if (Object.prototype.hasOwnProperty.call(updates, "subtasks")) {
@@ -343,7 +378,9 @@ router.put("/:taskId", protect, async (req, res) => {
 
           const ownershipChangedState =
             toId(currentItem.assignedTo) !== toId(req.user._id) &&
-            Boolean(nextItem.completed) !== Boolean(currentItem.completed);
+            (Boolean(nextItem.completed) !== Boolean(currentItem.completed) ||
+              clampPercentage(nextItem.progressPercentage) !==
+                clampPercentage(currentItem.progressPercentage));
           if (ownershipChangedState) {
             return res.status(403).json({
               message: "Members can only update subtasks assigned to them",
@@ -369,13 +406,38 @@ router.put("/:taskId", protect, async (req, res) => {
     }
 
     if (Object.prototype.hasOwnProperty.call(updates, "subtasks")) {
-      updates.subtasks = normalizeTeamSubtasks(updates.subtasks, req.user._id);
+      const existingById = new Map(
+        (task.subtasks || []).map((item) => [toId(item._id), item])
+      );
+      updates.subtasks = normalizeTeamSubtasks(
+        updates.subtasks,
+        req.user._id,
+        existingById
+      );
       const invalidAssignee = updates.subtasks.find(
         (item) => item.assignedTo && !findMember(task.team, item.assignedTo)
       );
       if (invalidAssignee) {
         return res.status(400).json({ message: "Each subtask assignee must be a team member" });
       }
+    }
+
+    if (
+      Object.prototype.hasOwnProperty.call(updates, "progress") &&
+      task.subtasks.length === 0 &&
+      clampPercentage(task.progress?.percentage) >= 100 &&
+      clampPercentage(updates?.progress?.percentage) < 100
+    ) {
+      return res.status(400).json({ message: "Completed task progress cannot be reverted" });
+    }
+
+    if (
+      Object.prototype.hasOwnProperty.call(updates, "status") &&
+      task.subtasks.length === 0 &&
+      clampPercentage(task.progress?.percentage) >= 100 &&
+      String(updates.status) !== "completed"
+    ) {
+      return res.status(400).json({ message: "Completed task status cannot be reverted" });
     }
 
     const oldStatus = task.status;
@@ -509,6 +571,7 @@ router.post("/:taskId/subtasks", protect, async (req, res) => {
     task.subtasks.push({
       title,
       assignedTo,
+      progressPercentage: 0,
       completed: false,
       createdAt: new Date(),
       lastProgressAt: new Date(),
@@ -581,9 +644,25 @@ router.put("/:taskId/subtasks/:subtaskId", protect, async (req, res) => {
 
     if (Object.prototype.hasOwnProperty.call(req.body, "completed")) {
       const completed = Boolean(req.body.completed);
+      if (Boolean(subtask.completed) && !completed) {
+        return res.status(400).json({ message: "Completed subtask cannot be reverted" });
+      }
       subtask.completed = completed;
+      subtask.progressPercentage = completed ? 100 : 0;
       subtask.completedAt = completed ? new Date() : null;
       subtask.completedBy = completed ? req.user._id : null;
+      subtask.lastProgressAt = new Date();
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body, "progressPercentage")) {
+      const nextProgress = clampPercentage(req.body.progressPercentage);
+      if (Boolean(subtask.completed) && nextProgress < 100) {
+        return res.status(400).json({ message: "Completed subtask cannot be reverted" });
+      }
+      subtask.progressPercentage = nextProgress;
+      subtask.completed = nextProgress >= 100;
+      subtask.completedAt = subtask.completed ? subtask.completedAt || new Date() : null;
+      subtask.completedBy = subtask.completed ? subtask.completedBy || req.user._id : null;
       subtask.lastProgressAt = new Date();
     }
 
@@ -694,7 +773,12 @@ router.patch("/:taskId/subtasks/:subtaskId/toggle", protect, async (req, res) =>
         ? Boolean(req.body.completed)
         : !Boolean(subtask.completed);
 
+    if (Boolean(subtask.completed) && !completed) {
+      return res.status(400).json({ message: "Completed subtask cannot be reverted" });
+    }
+
     subtask.completed = completed;
+    subtask.progressPercentage = completed ? 100 : 0;
     subtask.completedAt = completed ? new Date() : null;
     subtask.completedBy = completed ? req.user._id : null;
     subtask.lastProgressAt = new Date();

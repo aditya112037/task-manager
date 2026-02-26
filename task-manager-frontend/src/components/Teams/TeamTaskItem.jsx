@@ -5,7 +5,6 @@ import {
   Button,
   Card,
   CardContent,
-  Checkbox,
   Chip,
   Collapse,
   Divider,
@@ -13,6 +12,7 @@ import {
   LinearProgress,
   Menu,
   MenuItem,
+  Slider,
   Stack,
   Typography,
 } from "@mui/material";
@@ -60,6 +60,15 @@ const statusLabel = (status) => {
   return "Completed";
 };
 
+const statusColors = {
+  todo: "default",
+  "in-progress": "info",
+  completed: "success",
+};
+
+const subtaskPercentage = (item) =>
+  clampPercentage(item?.progressPercentage ?? (item?.completed ? 100 : 0));
+
 export default function TeamTaskItem({
   task,
   teamMembers = [],
@@ -67,6 +76,7 @@ export default function TeamTaskItem({
   onEdit,
   onDelete,
   onSubtasksChange,
+  onTaskProgressChange,
   onExtensionRequested,
   currentUserId,
   isAdminOrManager = false,
@@ -86,27 +96,30 @@ export default function TeamTaskItem({
   const canDeleteTask = isAdminOrManager;
   const canViewComments = !isTempTask && canInteractWithTask;
 
-  const totalSubtasks = task.progress?.totalSubtasks ?? task.subtasks?.length ?? 0;
-  const completedSubtasks =
-    task.progress?.completedSubtasks ??
-    (task.subtasks || []).filter((item) => item.completed).length;
-  const progressPercentage =
-    Number.isFinite(Number(task.progress?.percentage))
-      ? clampPercentage(task.progress?.percentage)
-      : totalSubtasks > 0
-        ? clampPercentage((completedSubtasks / totalSubtasks) * 100)
-        : percentageFromStatus(task.status);
+  const subtasks = Array.isArray(task.subtasks) ? task.subtasks : [];
+  const totalSubtasks = subtasks.length;
+  const subtaskPercentages = subtasks.map((item) => subtaskPercentage(item));
+  const completedSubtasks = subtaskPercentages.filter((value) => value >= 100).length;
+  const subtaskAverage =
+    totalSubtasks > 0
+      ? Math.round(subtaskPercentages.reduce((sum, value) => sum + value, 0) / totalSubtasks)
+      : 0;
+
+  const progressPercentage = Number.isFinite(Number(task.progress?.percentage))
+    ? clampPercentage(task.progress.percentage)
+    : totalSubtasks > 0
+      ? subtaskAverage
+      : percentageFromStatus(task.status);
   const derivedStatus = statusFromPercentage(progressPercentage);
+
+  const lockedSubtaskCount = subtaskPercentages.filter((value) => value >= 100).length;
+  const minTaskPercentage =
+    totalSubtasks > 0 ? Math.ceil((lockedSubtaskCount * 100) / totalSubtasks) : 0;
 
   const priorityColors = {
     high: "error",
     medium: "warning",
     low: "success",
-  };
-  const statusColors = {
-    todo: "default",
-    "in-progress": "info",
-    completed: "success",
   };
 
   const dueStatus = useMemo(() => {
@@ -143,21 +156,85 @@ export default function TeamTaskItem({
   const openMenu = Boolean(anchorEl);
   const showMenu = canDeleteTask || canEdit;
 
-  const canToggleSubtask = (subtask) =>
-    isAdminOrManager || resolveId(subtask.assignedTo) === myUserId;
+  const canMoveSubtask = (subtask) =>
+    (isAdminOrManager || resolveId(subtask.assignedTo) === myUserId) &&
+    subtaskPercentage(subtask) < 100;
 
-  const handleSubtaskToggle = (subtaskId, checked) => {
+  const handleTaskProgressCommit = (_, value) => {
+    const requested = clampPercentage(Array.isArray(value) ? value[0] : value);
+
+    if (totalSubtasks === 0) {
+      if (progressPercentage >= 100 && requested < 100) return;
+      if (typeof onTaskProgressChange === "function") {
+        onTaskProgressChange(task._id, requested);
+      }
+      return;
+    }
+
     if (typeof onSubtasksChange !== "function") return;
-    const nextSubtasks = (task.subtasks || []).map((item) =>
-      item._id === subtaskId
-        ? {
-            ...item,
-            completed: checked,
-            completedAt: checked ? new Date().toISOString() : null,
-            completedBy: checked ? myUserId : null,
-          }
-        : item
-    );
+    const target = Math.max(minTaskPercentage, requested);
+
+    const lockedSet = new Set();
+    let lockedSum = 0;
+    subtasks.forEach((item, index) => {
+      const current = subtaskPercentage(item);
+      if (current >= 100) {
+        lockedSet.add(index);
+        lockedSum += 100;
+      }
+    });
+
+    const unlockedCount = totalSubtasks - lockedSet.size;
+    if (unlockedCount <= 0) return;
+
+    const targetSum = target * totalSubtasks;
+    const remaining = Math.max(0, targetSum - lockedSum);
+    const base = Math.floor(remaining / unlockedCount);
+    let remainder = remaining - base * unlockedCount;
+
+    const nextSubtasks = subtasks.map((item, index) => {
+      if (lockedSet.has(index)) {
+        return {
+          ...item,
+          progressPercentage: 100,
+          completed: true,
+          completedAt: item.completedAt || new Date().toISOString(),
+          completedBy: item.completedBy || myUserId || null,
+        };
+      }
+      const nextValue = clampPercentage(base + (remainder > 0 ? 1 : 0));
+      if (remainder > 0) remainder -= 1;
+      const completed = nextValue >= 100;
+      return {
+        ...item,
+        progressPercentage: nextValue,
+        completed,
+        completedAt: completed ? item.completedAt || new Date().toISOString() : null,
+        completedBy: completed ? item.completedBy || myUserId || null : null,
+      };
+    });
+
+    onSubtasksChange(task._id, nextSubtasks);
+  };
+
+  const handleSubtaskProgressCommit = (subtaskId, value) => {
+    if (typeof onSubtasksChange !== "function") return;
+    const nextProgress = clampPercentage(Array.isArray(value) ? value[0] : value);
+
+    const nextSubtasks = subtasks.map((item) => {
+      if (item._id !== subtaskId) return item;
+      const current = subtaskPercentage(item);
+      if (current >= 100) return { ...item, progressPercentage: 100, completed: true };
+      const completed = nextProgress >= 100;
+      return {
+        ...item,
+        progressPercentage: nextProgress,
+        completed,
+        completedAt: completed ? item.completedAt || new Date().toISOString() : null,
+        completedBy: completed ? item.completedBy || myUserId || null : null,
+      };
+    });
+
     onSubtasksChange(task._id, nextSubtasks);
   };
 
@@ -211,6 +288,21 @@ export default function TeamTaskItem({
             />
           </Stack>
 
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+              Task Progress: {progressPercentage}%
+            </Typography>
+            <Slider
+              value={progressPercentage}
+              min={minTaskPercentage}
+              max={100}
+              step={1}
+              valueLabelDisplay="auto"
+              onChangeCommitted={handleTaskProgressCommit}
+              disabled={!canInteractWithTask || progressPercentage >= 100}
+            />
+          </Box>
+
           <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap" }}>
             {isAssignedToMe && !task.extensionRequest?.requested && !isTempTask && (
               <Button size="small" variant="outlined" onClick={() => setOpenExtensionModal(true)}>
@@ -222,7 +314,7 @@ export default function TeamTaskItem({
                 size="small"
                 variant="outlined"
                 startIcon={showComments ? <ChatBubbleIcon /> : <ChatBubbleOutlineIcon />}
-                onClick={() => setShowComments((v) => !v)}
+                onClick={() => setShowComments((value) => !value)}
               >
                 {showComments ? "Hide Comments" : "Comments"}
               </Button>
@@ -240,38 +332,44 @@ export default function TeamTaskItem({
                 value={progressPercentage}
                 sx={{ mt: 1, mb: 1.5, height: 8, borderRadius: 10 }}
               />
-              <Stack spacing={0.5}>
-                {(task.subtasks || []).map((subtask, index) => (
-                  <Box key={subtask._id || `subtask-${index}`} sx={{ display: "flex", alignItems: "center" }}>
-                    <Checkbox
-                      size="small"
-                      checked={Boolean(subtask.completed)}
-                      onChange={(e) => handleSubtaskToggle(subtask._id, e.target.checked)}
-                      disabled={!canToggleSubtask(subtask)}
-                    />
-                    <Box>
+              <Stack spacing={1}>
+                {subtasks.map((subtask, index) => {
+                  const current = subtaskPercentage(subtask);
+                  const subtaskStatus = statusFromPercentage(current);
+                  return (
+                    <Box key={subtask._id || `subtask-${index}`}>
                       <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
                         <Typography
                           variant="body2"
-                          sx={{
-                            color: subtask.completed ? "text.secondary" : "text.primary",
-                          }}
+                          sx={{ color: current >= 100 ? "text.secondary" : "text.primary" }}
                         >
                           {subtask.title}
                         </Typography>
                         <Chip
-                          label={statusLabel(subtask.completed ? "completed" : "todo")}
-                          color={subtask.completed ? "success" : "default"}
+                          label={statusLabel(subtaskStatus)}
+                          color={statusColors[subtaskStatus]}
                           size="small"
                           variant="outlined"
                         />
                       </Stack>
+                      <Slider
+                        size="small"
+                        value={current}
+                        min={0}
+                        max={100}
+                        step={1}
+                        valueLabelDisplay="auto"
+                        onChangeCommitted={(_, value) =>
+                          handleSubtaskProgressCommit(subtask._id, value)
+                        }
+                        disabled={!canMoveSubtask(subtask)}
+                      />
                       <Typography variant="caption" color="text.secondary">
                         Assigned: {resolveUserName(subtask.assignedTo)}
                       </Typography>
                     </Box>
-                  </Box>
-                ))}
+                  );
+                })}
               </Stack>
             </>
           )}

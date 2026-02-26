@@ -68,10 +68,15 @@ const resolveMemberUser = (team, userId) => {
 const withComputedProgress = (task) => {
   const subtasks = Array.isArray(task?.subtasks) ? task.subtasks : [];
   const totalSubtasks = subtasks.length;
-  const completedSubtasks = subtasks.filter((item) => item.completed).length;
+  const subtaskPercentages = subtasks.map((item) => {
+    const raw = Number(item?.progressPercentage);
+    if (Number.isFinite(raw)) return Math.min(100, Math.max(0, Math.round(raw)));
+    return item?.completed ? 100 : 0;
+  });
+  const completedSubtasks = subtaskPercentages.filter((value) => value >= 100).length;
   const percentage =
     totalSubtasks > 0
-      ? Math.round((completedSubtasks / totalSubtasks) * 100)
+      ? Math.round(subtaskPercentages.reduce((sum, value) => sum + value, 0) / totalSubtasks)
       : Number.isFinite(Number(task?.progress?.percentage))
         ? Math.min(100, Math.max(0, Math.round(Number(task.progress.percentage))))
         : task?.status === "completed"
@@ -883,6 +888,28 @@ export default function TeamDetails() {
     }
   };
 
+  const handleTaskProgressChange = async (taskId, percentage) => {
+    const normalized = Math.min(100, Math.max(0, Math.round(Number(percentage) || 0)));
+    setTeamTasks((prev) =>
+      prev.map((t) =>
+        t._id === taskId
+          ? withComputedProgress({ ...t, progress: { ...(t.progress || {}), percentage: normalized } })
+          : t
+      )
+    );
+    try {
+      const res = await teamTasksAPI.updateTask(taskId, { progress: { percentage: normalized } });
+      if (res?.data?._id) {
+        setTeamTasks((prev) => prev.map((t) => (t._id === res.data._id ? res.data : t)));
+      }
+      showSnack("Task progress updated", "success");
+    } catch (err) {
+      console.error("Task progress update error:", err);
+      showSnack("Failed to update task progress", "error");
+      fetchTeamTasks();
+    }
+  };
+
   const handleTaskSubmit = async (data) => {
     try {
       const assignedUser = resolveMemberUser(team, data.assignedTo);
@@ -1315,6 +1342,7 @@ export default function TeamDetails() {
                   }}
                   onDelete={() => handleDeleteTask(t._id)}
                   onSubtasksChange={handleSubtasksChange}
+                  onTaskProgressChange={handleTaskProgressChange}
                   onExtensionRequested={handleRequestExtension}
                 />
               ))}

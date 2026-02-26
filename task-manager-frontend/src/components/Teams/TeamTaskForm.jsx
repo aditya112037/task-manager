@@ -45,6 +45,12 @@ export default function TeamTaskForm({ open, task, teamMembers, onCancel, onSubm
           ? task.subtasks.map((item) => ({
               _id: item._id,
               title: item.title || "",
+              progressPercentage:
+                Number.isFinite(Number(item.progressPercentage))
+                  ? Math.min(100, Math.max(0, Math.round(Number(item.progressPercentage))))
+                  : item.completed
+                    ? 100
+                    : 0,
               completed: Boolean(item.completed),
               assignedTo: item.assignedTo?._id || item.assignedTo || "",
               completedAt: item.completedAt || null,
@@ -110,6 +116,12 @@ export default function TeamTaskForm({ open, task, teamMembers, onCancel, onSubm
         .map((item) => ({
           _id: item._id,
           title: String(item.title || "").trim(),
+          progressPercentage:
+            Number.isFinite(Number(item.progressPercentage))
+              ? Math.min(100, Math.max(0, Math.round(Number(item.progressPercentage))))
+              : item.completed
+                ? 100
+                : 0,
           completed: Boolean(item.completed),
           assignedTo: item.assignedTo || null,
           completedAt: item.completed ? item.completedAt || new Date().toISOString() : null,

@@ -1,25 +1,56 @@
 import React from "react";
 import {
+  Box,
+  Button,
   Card,
   CardContent,
-  Typography,
   Chip,
+  Divider,
   IconButton,
-  Box,
+  LinearProgress,
+  Slider,
   Stack,
   Tooltip,
-  Button,
-  Checkbox,
-  LinearProgress,
-  Divider,
+  Typography,
 } from "@mui/material";
-
-import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
+import EditIcon from "@mui/icons-material/Edit";
 import EventIcon from "@mui/icons-material/Event";
 import GoogleIcon from "@mui/icons-material/Google";
-
 import { useTheme } from "@mui/material/styles";
+
+const clampPercentage = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.min(100, Math.max(0, Math.round(numeric)));
+};
+
+const percentageFromStatus = (status) => {
+  if (status === "completed") return 100;
+  if (status === "in-progress") return 50;
+  return 0;
+};
+
+const statusFromPercentage = (percentage) => {
+  if (percentage >= 100) return "completed";
+  if (percentage > 0) return "in-progress";
+  return "todo";
+};
+
+const statusLabel = (status) => {
+  if (status === "todo") return "To Do";
+  if (status === "in-progress") return "In Progress";
+  return "Completed";
+};
+
+const statusColor = {
+  todo: "default",
+  "in-progress": "info",
+  completed: "success",
+};
+
+const subtaskPercentage = (item) =>
+  clampPercentage(item?.progressPercentage ?? (item?.completed ? 100 : 0));
 
 const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
   const theme = useTheme();
@@ -30,79 +61,120 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
     low: "success",
   };
 
-  const statusColors = {
-    "todo": "default",
-    "in-progress": "info",
-    "completed": "success",
-  };
+  const subtasks = Array.isArray(task.subtasks) ? task.subtasks : [];
+  const totalSubtasks = subtasks.length;
+  const subtaskPercentages = subtasks.map((item) => subtaskPercentage(item));
+  const completedSubtasks = subtaskPercentages.filter((value) => value >= 100).length;
+  const subtaskAverage =
+    totalSubtasks > 0
+      ? Math.round(subtaskPercentages.reduce((sum, value) => sum + value, 0) / totalSubtasks)
+      : 0;
 
-  const handleSubtaskToggle = (subtaskId, completed) => {
-    const nextSubtasks = (task.subtasks || []).map((item) =>
-      item._id === subtaskId
-        ? {
-            ...item,
-            completed,
-            completedAt: completed ? new Date().toISOString() : null,
-          }
-        : item
-    );
-    onUpdate(task._id, { subtasks: nextSubtasks });
-  };
+  const taskPercentage = Number.isFinite(Number(task.progress?.percentage))
+    ? clampPercentage(task.progress.percentage)
+    : totalSubtasks > 0
+      ? subtaskAverage
+      : percentageFromStatus(task.status);
+  const taskStatus = statusFromPercentage(taskPercentage);
 
-  const formatDate = (dateString) => {
-    if (!dateString) return "No due date";
-    return new Date(dateString).toLocaleDateString();
-  };
+  const lockedSubtaskCount = subtaskPercentages.filter((value) => value >= 100).length;
+  const minTaskPercentage =
+    totalSubtasks > 0 ? Math.ceil((lockedSubtaskCount * 100) / totalSubtasks) : 0;
 
-  // GOOGLE Calendar Link Fix
   const hasDueDate = Boolean(task.dueDate);
   const startDate = hasDueDate ? new Date(task.dueDate) : null;
   const endDate = hasDueDate ? new Date(startDate.getTime() + 30 * 60 * 1000) : null;
+  const fmt = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
+  const googleCalendarURL = hasDueDate
+    ? `https://calendar.google.com/calendar/render?action=TEMPLATE` +
+      `&text=${encodeURIComponent(task.title)}` +
+      `&details=${encodeURIComponent(task.description || "")}` +
+      `&dates=${fmt(startDate)}/${fmt(endDate)}`
+    : "#";
 
-  const fmt = (d) =>
-    d.toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
+  const formatDate = (value) => (value ? new Date(value).toLocaleDateString() : "No due date");
 
-  const googleCalendarURL =
-    hasDueDate
-      ? `https://calendar.google.com/calendar/render?action=TEMPLATE` +
-        `&text=${encodeURIComponent(task.title)}` +
-        `&details=${encodeURIComponent(task.description || "")}` +
-        `&dates=${fmt(startDate)}/${fmt(endDate)}`
-      : "#";
+  const handleTaskProgressCommit = (_, value) => {
+    const requested = clampPercentage(Array.isArray(value) ? value[0] : value);
 
-  const totalSubtasks = task.progress?.totalSubtasks ?? task.subtasks?.length ?? 0;
-  const completedSubtasks =
-    task.progress?.completedSubtasks ??
-    (task.subtasks || []).filter((item) => item.completed).length;
-  const fallbackPercentageFromStatus =
-    task.status === "completed" ? 100 : task.status === "in-progress" ? 50 : 0;
-  const percentage = Number.isFinite(Number(task.progress?.percentage))
-    ? Math.min(100, Math.max(0, Math.round(Number(task.progress?.percentage))))
-    : totalSubtasks
-      ? Math.round((completedSubtasks / totalSubtasks) * 100)
-      : fallbackPercentageFromStatus;
-  const derivedStatus =
-    percentage >= 100 ? "completed" : percentage > 0 ? "in-progress" : "todo";
-  const formatStatusLabel = (value) =>
-    value === "todo" ? "To Do" : value === "in-progress" ? "In Progress" : "Completed";
-  const subtaskStatusLabel = (completed) => (completed ? "Completed" : "To Do");
-  const subtaskStatusColor = (completed) => (completed ? "success" : "default");
+    if (totalSubtasks === 0) {
+      if (taskPercentage >= 100 && requested < 100) return;
+      onUpdate(task._id, { progress: { percentage: requested } });
+      return;
+    }
+
+    const target = Math.max(minTaskPercentage, requested);
+    const lockedSet = new Set();
+    let lockedSum = 0;
+    subtasks.forEach((item, index) => {
+      const current = subtaskPercentage(item);
+      if (current >= 100) {
+        lockedSet.add(index);
+        lockedSum += 100;
+      }
+    });
+
+    const unlockedCount = totalSubtasks - lockedSet.size;
+    if (unlockedCount <= 0) return;
+
+    const targetSum = target * totalSubtasks;
+    const remaining = Math.max(0, targetSum - lockedSum);
+    const base = Math.floor(remaining / unlockedCount);
+    let remainder = remaining - base * unlockedCount;
+
+    const nextSubtasks = subtasks.map((item, index) => {
+      if (lockedSet.has(index)) {
+        return {
+          ...item,
+          progressPercentage: 100,
+          completed: true,
+          completedAt: item.completedAt || new Date().toISOString(),
+        };
+      }
+      const nextValue = clampPercentage(base + (remainder > 0 ? 1 : 0));
+      if (remainder > 0) remainder -= 1;
+      const isCompleted = nextValue >= 100;
+      return {
+        ...item,
+        progressPercentage: nextValue,
+        completed: isCompleted,
+        completedAt: isCompleted ? item.completedAt || new Date().toISOString() : null,
+      };
+    });
+
+    onUpdate(task._id, { subtasks: nextSubtasks });
+  };
+
+  const handleSubtaskProgressCommit = (subtaskId, value) => {
+    const nextProgress = clampPercentage(Array.isArray(value) ? value[0] : value);
+    const nextSubtasks = subtasks.map((item) => {
+      if (item._id !== subtaskId) return item;
+      const current = subtaskPercentage(item);
+      if (current >= 100) return { ...item, progressPercentage: 100, completed: true };
+
+      const completed = nextProgress >= 100;
+      return {
+        ...item,
+        progressPercentage: nextProgress,
+        completed,
+        completedAt: completed ? item.completedAt || new Date().toISOString() : null,
+      };
+    });
+    onUpdate(task._id, { subtasks: nextSubtasks });
+  };
 
   return (
     <Card
       sx={{
         mb: 2,
         borderRadius: 3,
-        padding: 1,
+        p: 1,
         backgroundColor: theme.palette.background.paper,
         transition: "0.2s",
-
-        // ✨ Soft shadows for light mode, subtle shadows for dark mode
         boxShadow:
           theme.palette.mode === "dark"
             ? "0 0 10px rgba(0,0,0,0.4)"
             : "0 4px 15px rgba(0,0,0,0.08)",
-
         "&:hover": {
           boxShadow:
             theme.palette.mode === "dark"
@@ -112,7 +184,6 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
       }}
     >
       <CardContent>
-        {/* HEADER */}
         <Box
           sx={{
             display: "flex",
@@ -124,29 +195,17 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
           }}
         >
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-            <Typography
-              variant="h6"
-              sx={{
-                fontWeight: 700,
-                color: theme.palette.text.primary,
-              }}
-            >
+            <Typography variant="h6" sx={{ fontWeight: 700, color: theme.palette.text.primary }}>
               {task.title}
             </Typography>
-            <Chip
-              label={formatStatusLabel(derivedStatus)}
-              color={statusColors[derivedStatus]}
-              size="small"
-            />
+            <Chip label={statusLabel(taskStatus)} color={statusColor[taskStatus]} size="small" />
           </Stack>
-
           <Box sx={{ alignSelf: { xs: "flex-end", sm: "auto" } }}>
             <Tooltip title="Edit">
               <IconButton color="primary" onClick={() => onEdit(task)}>
                 <EditIcon />
               </IconButton>
             </Tooltip>
-
             <Tooltip title="Delete">
               <IconButton color="error" onClick={() => onDelete(task._id)}>
                 <DeleteIcon />
@@ -155,27 +214,19 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
           </Box>
         </Box>
 
-        {/* DESCRIPTION */}
         {task.description && (
-          <Typography
-            variant="body2"
-            sx={{ mb: 2, color: theme.palette.text.secondary }}
-          >
+          <Typography variant="body2" sx={{ mb: 2, color: theme.palette.text.secondary }}>
             {task.description}
           </Typography>
         )}
 
-        {/* METADATA */}
         <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: "wrap", rowGap: 1 }}>
-          {/* Priority */}
           <Chip
             label={task.priority}
             color={priorityColors[task.priority]}
             size="small"
             sx={{ textTransform: "capitalize" }}
           />
-
-          {/* Date */}
           <Chip
             label={`📅 ${formatDate(task.dueDate)}`}
             variant="outlined"
@@ -183,32 +234,38 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
             sx={{
               color: theme.palette.text.primary,
               borderColor:
-                theme.palette.mode === "dark"
-                  ? "rgba(255,255,255,0.3)"
-                  : "rgba(0,0,0,0.3)",
+                theme.palette.mode === "dark" ? "rgba(255,255,255,0.3)" : "rgba(0,0,0,0.3)",
             }}
           />
         </Stack>
 
-        {/* CALENDAR BUTTONS */}
+        <Box sx={{ mb: 2 }}>
+          <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
+            Task Progress: {taskPercentage}%
+          </Typography>
+          <Slider
+            value={taskPercentage}
+            min={minTaskPercentage}
+            max={100}
+            step={1}
+            valueLabelDisplay="auto"
+            onChangeCommitted={handleTaskProgressCommit}
+            disabled={taskPercentage >= 100}
+          />
+        </Box>
+
         <Stack direction="row" spacing={2} sx={{ mb: 2, flexWrap: "wrap", rowGap: 1 }}>
           <Button
             variant="contained"
             color="secondary"
             startIcon={<EventIcon />}
-            sx={{
-              textTransform: "none",
-              borderRadius: 2,
-              px: 2,
-              width: { xs: "100%", sm: "auto" },
-            }}
+            sx={{ textTransform: "none", borderRadius: 2, px: 2, width: { xs: "100%", sm: "auto" } }}
             onClick={() => {
               window.location.href = `${process.env.REACT_APP_API_URL}/api/ics/${task._id}`;
             }}
           >
             Add to Calendar (Apple)
           </Button>
-
           <Button
             variant="outlined"
             color="primary"
@@ -218,10 +275,7 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
               borderRadius: 2,
               px: 2,
               width: { xs: "100%", sm: "auto" },
-              borderColor:
-                theme.palette.mode === "dark"
-                  ? "rgba(255,255,255,0.4)"
-                  : undefined,
+              borderColor: theme.palette.mode === "dark" ? "rgba(255,255,255,0.4)" : undefined,
             }}
             href={googleCalendarURL}
             target="_blank"
@@ -237,33 +291,48 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
             <Typography variant="subtitle2" sx={{ mb: 0.5 }}>
               Checkpoints ({completedSubtasks}/{totalSubtasks})
             </Typography>
-            <LinearProgress variant="determinate" value={percentage} sx={{ mb: 1.5, height: 8, borderRadius: 10 }} />
-            <Stack spacing={0.5}>
-              {(task.subtasks || []).map((item, index) => (
-                <Box key={item._id || `subtask-${index}`} sx={{ display: "flex", alignItems: "center" }}>
-                  <Checkbox
-                    checked={Boolean(item.completed)}
-                    onChange={(e) => handleSubtaskToggle(item._id, e.target.checked)}
-                    size="small"
-                  />
-                  <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        color: item.completed ? "text.secondary" : "text.primary",
-                      }}
-                    >
-                      {item.title}
-                    </Typography>
-                    <Chip
-                      label={subtaskStatusLabel(Boolean(item.completed))}
-                      color={subtaskStatusColor(Boolean(item.completed))}
-                      size="small"
-                      variant="outlined"
-                    />
-                  </Stack>
-                </Box>
-              ))}
+            <LinearProgress
+              variant="determinate"
+              value={taskPercentage}
+              sx={{ mb: 1.5, height: 8, borderRadius: 10 }}
+            />
+            <Stack spacing={1}>
+              {subtasks.map((item, index) => {
+                const current = subtaskPercentage(item);
+                const itemStatus = statusFromPercentage(current);
+                return (
+                  <Box key={item._id || `subtask-${index}`} sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
+                    <Box sx={{ flex: 1 }}>
+                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                        <Typography
+                          variant="body2"
+                          sx={{ color: current >= 100 ? "text.secondary" : "text.primary" }}
+                        >
+                          {item.title}
+                        </Typography>
+                        <Chip
+                          label={statusLabel(itemStatus)}
+                          color={statusColor[itemStatus]}
+                          size="small"
+                          variant="outlined"
+                        />
+                      </Stack>
+                      <Slider
+                        size="small"
+                        value={current}
+                        min={0}
+                        max={100}
+                        step={1}
+                        valueLabelDisplay="auto"
+                        onChangeCommitted={(_, value) =>
+                          handleSubtaskProgressCommit(item._id, value)
+                        }
+                        disabled={current >= 100}
+                      />
+                    </Box>
+                  </Box>
+                );
+              })}
             </Stack>
           </>
         )}

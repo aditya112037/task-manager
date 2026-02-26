@@ -12,20 +12,44 @@ const router = express.Router();
 // All routes are protected
 router.use(protect);
 
-const normalizePersonalSubtasks = (subtasks) => {
+const clampPercentage = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.min(100, Math.max(0, Math.round(numeric)));
+};
+
+const normalizePersonalSubtasks = (subtasks, existingById = new Map()) => {
   if (!Array.isArray(subtasks)) return [];
   return subtasks
     .map((item) => {
       const title = String(item?.title || "").trim();
       if (!title) return null;
-      const completed = Boolean(item?.completed);
+      const id = String(item?._id || "");
+      const existing = id ? existingById.get(id) : null;
+      const alreadyCompleted =
+        Boolean(existing?.completed) ||
+        clampPercentage(existing?.progressPercentage) >= 100;
+      let progressPercentage = Object.prototype.hasOwnProperty.call(
+        item || {},
+        "progressPercentage"
+      )
+        ? clampPercentage(item.progressPercentage)
+        : Boolean(item?.completed)
+          ? 100
+          : clampPercentage(existing?.progressPercentage);
+
+      if (alreadyCompleted || progressPercentage >= 100) {
+        progressPercentage = 100;
+      }
+      const completed = progressPercentage >= 100;
       return {
         _id: item?._id,
         title,
+        progressPercentage,
         completed,
-        createdAt: item?.createdAt || new Date(),
+        createdAt: item?.createdAt || existing?.createdAt || new Date(),
         lastProgressAt: item?.lastProgressAt || new Date(),
-        completedAt: completed ? item?.completedAt || new Date() : null,
+        completedAt: completed ? existing?.completedAt || item?.completedAt || new Date() : null,
       };
     })
     .filter(Boolean);
@@ -68,7 +92,7 @@ router.post(
     try {
       const payload = { ...req.body };
       if (Object.prototype.hasOwnProperty.call(payload, "subtasks")) {
-        payload.subtasks = normalizePersonalSubtasks(payload.subtasks);
+        payload.subtasks = normalizePersonalSubtasks(payload.subtasks, new Map());
       }
 
       const task = await Task.create({
@@ -121,8 +145,30 @@ router.put("/:id", async (req, res) => {
     const oldTitle = task.title;
     const before = asProgress(task.progress);
     const updates = { ...req.body };
+
+    if (
+      Object.prototype.hasOwnProperty.call(updates, "progress") &&
+      task.subtasks.length === 0 &&
+      clampPercentage(task.progress?.percentage) >= 100 &&
+      clampPercentage(updates?.progress?.percentage) < 100
+    ) {
+      return res.status(400).json({ message: "Completed task progress cannot be reverted" });
+    }
+
+    if (
+      Object.prototype.hasOwnProperty.call(updates, "status") &&
+      task.subtasks.length === 0 &&
+      clampPercentage(task.progress?.percentage) >= 100 &&
+      String(updates.status) !== "completed"
+    ) {
+      return res.status(400).json({ message: "Completed task status cannot be reverted" });
+    }
+
     if (Object.prototype.hasOwnProperty.call(updates, "subtasks")) {
-      updates.subtasks = normalizePersonalSubtasks(updates.subtasks);
+      const existingById = new Map(
+        (task.subtasks || []).map((item) => [String(item._id), item])
+      );
+      updates.subtasks = normalizePersonalSubtasks(updates.subtasks, existingById);
     }
 
     Object.assign(task, updates);
@@ -175,6 +221,7 @@ router.post("/:id/subtasks", async (req, res) => {
     const before = asProgress(task.progress);
     task.subtasks.push({
       title,
+      progressPercentage: 0,
       completed: false,
       createdAt: new Date(),
       lastProgressAt: new Date(),
@@ -219,8 +266,23 @@ router.put("/:id/subtasks/:subtaskId", async (req, res) => {
     }
 
     if (Object.prototype.hasOwnProperty.call(req.body, "completed")) {
+      if (Boolean(subtask.completed) && !Boolean(req.body.completed)) {
+        return res.status(400).json({ message: "Completed subtask cannot be reverted" });
+      }
       subtask.completed = Boolean(req.body.completed);
+      subtask.progressPercentage = subtask.completed ? 100 : 0;
       subtask.completedAt = subtask.completed ? new Date() : null;
+      subtask.lastProgressAt = new Date();
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body, "progressPercentage")) {
+      const nextProgress = clampPercentage(req.body.progressPercentage);
+      if (Boolean(subtask.completed) && nextProgress < 100) {
+        return res.status(400).json({ message: "Completed subtask cannot be reverted" });
+      }
+      subtask.progressPercentage = nextProgress;
+      subtask.completed = nextProgress >= 100;
+      subtask.completedAt = subtask.completed ? subtask.completedAt || new Date() : null;
       subtask.lastProgressAt = new Date();
     }
 
@@ -261,7 +323,11 @@ router.patch("/:id/subtasks/:subtaskId/toggle", async (req, res) => {
       Object.prototype.hasOwnProperty.call(req.body, "completed") ?
         Boolean(req.body.completed) :
         !subtask.completed;
+    if (Boolean(subtask.completed) && !completed) {
+      return res.status(400).json({ message: "Completed subtask cannot be reverted" });
+    }
     subtask.completed = completed;
+    subtask.progressPercentage = completed ? 100 : 0;
     subtask.completedAt = completed ? new Date() : null;
     subtask.lastProgressAt = new Date();
 

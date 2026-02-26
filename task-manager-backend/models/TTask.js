@@ -120,10 +120,28 @@ const TTaskSchema = new mongoose.Schema(
 TTaskSchema.pre("save", function syncProgressAndStatus(next) {
   const subtasks = Array.isArray(this.subtasks) ? this.subtasks : [];
   const totalSubtasks = subtasks.length;
-  const completedSubtasks = subtasks.filter((item) => Boolean(item.completed)).length;
+  let subtaskPercentageSum = 0;
+  let completedSubtasks = 0;
+  for (const subtask of subtasks) {
+    let subtaskPercentage = clampPercentage(
+      subtask?.progressPercentage ?? (subtask?.completed ? 100 : 0)
+    );
+    if (Boolean(subtask?.completed) && subtaskPercentage < 100) {
+      subtaskPercentage = 100;
+    }
+    if (subtaskPercentage >= 100) {
+      completedSubtasks += 1;
+    }
+    subtaskPercentageSum += subtaskPercentage;
+    if (subtask) {
+      subtask.progressPercentage = subtaskPercentage;
+      subtask.completed = subtaskPercentage >= 100;
+      subtask.completedAt = subtask.completed ? subtask.completedAt || new Date() : null;
+    }
+  }
   const derivedPercentage =
     totalSubtasks > 0
-      ? Math.round((completedSubtasks / totalSubtasks) * 100)
+      ? Math.round(subtaskPercentageSum / totalSubtasks)
       : clampPercentage(
           this.progress?.percentage ?? percentageFromStatus(this.status)
         );

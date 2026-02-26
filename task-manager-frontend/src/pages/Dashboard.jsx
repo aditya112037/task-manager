@@ -220,6 +220,18 @@ const Dashboard = () => {
     if (teamId) navigate(`/teams/${teamId}`);
   };
 
+  const handleTaskProgressChange = async (taskId, percentage) => {
+    try {
+      await teamTasksAPI.updateTask(taskId, {
+        progress: { percentage: Math.min(100, Math.max(0, Math.round(Number(percentage) || 0))) },
+      });
+      showSnack("Task progress updated", "success");
+    } catch (err) {
+      console.error("handleTaskProgressChange:", err);
+      showSnack(err.response?.data?.message || "Failed to update progress", "error");
+    }
+  };
+
   // Manual refresh function - use only when needed
   const handleRefresh = () => {
     Promise.all([fetchTeams(), fetchAllTeamTasks()])
@@ -467,6 +479,7 @@ const Dashboard = () => {
                   currentUserId={user?._id}
                   onEdit={() => handleEditTask(task)}
                   onDelete={() => handleDeleteTask(task._id)}
+                  onTaskProgressChange={handleTaskProgressChange}
                 />
               ))}
             </Box>
@@ -623,6 +636,7 @@ const Dashboard = () => {
                               isAdminOrManager={canEdit}
                               onEdit={() => handleEditTask(task)}
                               onDelete={() => handleDeleteTask(task._id)}
+                              onTaskProgressChange={handleTaskProgressChange}
                             />
                           ))
                         )}

@@ -50,6 +50,12 @@ const TaskForm = ({ task, onSubmit, onCancel }) => {
           ? task.subtasks.map((item) => ({
               _id: item._id,
               title: item.title || "",
+              progressPercentage:
+                Number.isFinite(Number(item.progressPercentage))
+                  ? Math.min(100, Math.max(0, Math.round(Number(item.progressPercentage))))
+                  : item.completed
+                    ? 100
+                    : 0,
               completed: Boolean(item.completed),
               completedAt: item.completedAt || null,
             }))
@@ -132,6 +138,12 @@ const TaskForm = ({ task, onSubmit, onCancel }) => {
         .map((item) => ({
           _id: item._id,
           title: String(item.title || "").trim(),
+          progressPercentage:
+            Number.isFinite(Number(item.progressPercentage))
+              ? Math.min(100, Math.max(0, Math.round(Number(item.progressPercentage))))
+              : item.completed
+                ? 100
+                : 0,
           completed: Boolean(item.completed),
           completedAt: item.completed ? item.completedAt || new Date().toISOString() : null,
         }))
