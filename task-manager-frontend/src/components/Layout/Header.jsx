@@ -8,6 +8,7 @@ import {
   IconButton,
   Menu,
   MenuItem,
+  Avatar,
 } from "@mui/material";
 
 import DarkModeIcon from "@mui/icons-material/DarkMode";
@@ -169,6 +170,18 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
           }}>
             {user?.name}
           </Typography>
+          <Avatar
+            src={user?.photo || ""}
+            sx={{
+              width: 32,
+              height: 32,
+              border: "1px solid rgba(255,255,255,0.28)",
+              fontSize: "0.85rem",
+              bgcolor: "rgba(255,255,255,0.12)",
+            }}
+          >
+            {user?.name?.[0] || "U"}
+          </Avatar>
 
           <Button
             variant="outlined"

@@ -20,10 +20,14 @@ import MilitaryTechIcon from "@mui/icons-material/MilitaryTech";
 import TipsAndUpdatesIcon from "@mui/icons-material/TipsAndUpdates";
 import Groups2Icon from "@mui/icons-material/Groups2";
 import EmailOutlinedIcon from "@mui/icons-material/EmailOutlined";
+import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
+import VerifiedIcon from "@mui/icons-material/Verified";
+import BoltIcon from "@mui/icons-material/Bolt";
 import { alpha } from "@mui/material/styles";
 import { authAPI } from "../services/api";
 import { useAuth } from "../context/AuthContext";
 import { useTheme } from "@mui/material/styles";
+import { useNavigate } from "react-router-dom";
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 
@@ -119,6 +123,7 @@ const TrendBars = ({ title, bars, color }) => (
 export default function Profile() {
   const theme = useTheme();
   const isLight = theme.palette.mode === "light";
+  const navigate = useNavigate();
   const { user, setUser } = useAuth();
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState(null);
@@ -400,11 +405,14 @@ export default function Profile() {
                   size="small"
                   variant="outlined"
                   label={`${team.name} (${team.role})`}
+                  onClick={() => navigate(`/teams/${team._id}`)}
+                  clickable
                   sx={{
                     justifyContent: "flex-start",
                     borderRadius: 2,
                     borderColor: isLight ? alpha(theme.palette.primary.main, 0.24) : "rgba(125, 202, 242, 0.28)",
                     bgcolor: isLight ? alpha(theme.palette.primary.main, 0.08) : "rgba(4, 25, 44, 0.52)",
+                    cursor: "pointer",
                   }}
                 />
               ))}
@@ -535,20 +543,44 @@ export default function Profile() {
                 </Stack>
                 <Stack spacing={1.2}>
                   {badges.map((badge) => (
-                    <Box key={badge.id}>
+                    <Paper
+                      key={badge.id}
+                      variant="outlined"
+                      sx={{
+                        p: 1.2,
+                        borderRadius: 2.5,
+                        borderColor: isLight ? alpha(theme.palette.success.main, 0.35) : "rgba(122, 226, 171, 0.3)",
+                        bgcolor: isLight ? alpha(theme.palette.success.main, 0.06) : "rgba(16, 58, 42, 0.32)",
+                      }}
+                    >
+                      <Stack direction="row" spacing={1} alignItems="flex-start">
+                        {badge.id === "deadline_keeper" ? (
+                          <VerifiedIcon sx={{ color: isLight ? "success.main" : "#83e2b8", mt: 0.2 }} />
+                        ) : badge.id === "reliable_executor" ? (
+                          <BoltIcon sx={{ color: isLight ? "warning.main" : "#f6c784", mt: 0.2 }} />
+                        ) : (
+                          <EmojiEventsIcon sx={{ color: isLight ? "info.main" : "#80d8ff", mt: 0.2 }} />
+                        )}
+                        <Box>
+                          <Typography variant="subtitle2" fontWeight={700}>
+                            {badge.title}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary">
+                            {badge.description}
+                          </Typography>
+                        </Box>
+                      </Stack>
                       <Chip
-                        label={badge.title}
+                        label="Earned"
                         size="small"
                         sx={{
-                          mb: 0.5,
+                          mt: 1,
+                          height: 22,
                           bgcolor: isLight ? alpha(theme.palette.success.main, 0.12) : "rgba(27, 120, 73, 0.22)",
                           border: `1px solid ${isLight ? alpha(theme.palette.success.main, 0.28) : "rgba(122, 226, 171, 0.3)"}`,
                         }}
                       />
-                      <Typography variant="body2" color="text.secondary">
-                        {badge.description}
-                      </Typography>
-                    </Box>
+                    </Paper>
                   ))}
                   {badges.length === 0 && (
                     <Typography variant="body2" color="text.secondary">

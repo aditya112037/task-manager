@@ -38,7 +38,7 @@ import VideocamIcon from "@mui/icons-material/Videocam";
 import GroupsIcon from "@mui/icons-material/Groups";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { teamsAPI, teamTasksAPI } from "../services/api";
+import { teamsAPI, teamTasksAPI, authAPI } from "../services/api";
 import TeamTaskItem from "../components/Teams/TeamTaskItem";
 import TeamTaskForm from "../components/Teams/TeamTaskForm";
 import { useAuth } from "../context/AuthContext";
@@ -107,6 +107,7 @@ export default function TeamDetails() {
   // Team state
   const [team, setTeam] = useState(null);
   const [loadingTeam, setLoadingTeam] = useState(true);
+  const [memberPublicProfiles, setMemberPublicProfiles] = useState({});
 
   // Task state
   const [teamTasks, setTeamTasks] = useState([]);
@@ -164,6 +165,15 @@ export default function TeamDetails() {
   const canEditTasks = myRole === "admin" || myRole === "manager";
   const isAdmin = myRole === "admin";
 
+  const getMemberPublic = useCallback(
+    (member) => {
+      const memberId = resolveUserId(member?.user);
+      if (!memberId) return null;
+      return memberPublicProfiles[memberId] || null;
+    },
+    [memberPublicProfiles]
+  );
+
   /* ---------------------------------------------------
      Helper functions
   --------------------------------------------------- */
@@ -177,6 +187,38 @@ export default function TeamDetails() {
   useEffect(() => {
     if (forcedTab === "extensions") setTab(3);
   }, [forcedTab]);
+
+  useEffect(() => {
+    const loadMemberPublicProfiles = async () => {
+      const members = team?.members || [];
+      if (members.length === 0) {
+        setMemberPublicProfiles({});
+        return;
+      }
+
+      const ids = members
+        .map((m) => resolveUserId(m.user))
+        .filter(Boolean);
+
+      try {
+        const results = await Promise.all(
+          ids.map(async (id) => {
+            try {
+              const res = await authAPI.getPublicProfile(id);
+              return [id, res.data];
+            } catch {
+              return [id, null];
+            }
+          })
+        );
+        setMemberPublicProfiles(Object.fromEntries(results.filter(([, value]) => Boolean(value))));
+      } catch {
+        setMemberPublicProfiles({});
+      }
+    };
+
+    loadMemberPublicProfiles();
+  }, [team]);
 
   /* ---------------------------------------------------
      LOAD TEAM
@@ -1212,8 +1254,26 @@ export default function TeamDetails() {
               return (
                 <Paper key={memberId} sx={{ p: 2, display: "flex", justifyContent: "space-between", flexDirection: { xs: "column", sm: "row" }, gap: 1.5 }}>
                   <Box>
-                    <Typography fontWeight={600}>{m.user?.name || "User"}</Typography>
-                    <Typography variant="body2" color="text.secondary">{m.role}</Typography>
+                    <Stack direction="row" spacing={1.2} alignItems="center">
+                      <Avatar src={m.user?.photo || ""} sx={{ width: 38, height: 38 }}>
+                        {(m.user?.name || "U")[0]}
+                      </Avatar>
+                      <Box>
+                        <Typography fontWeight={600}>{m.user?.name || "User"}</Typography>
+                        <Typography variant="body2" color="text.secondary">{m.role}</Typography>
+                      </Box>
+                    </Stack>
+                    <Stack direction="row" spacing={0.8} sx={{ mt: 1.1 }} flexWrap="wrap">
+                      {(getMemberPublic(m)?.badges || []).slice(0, 3).map((badge) => (
+                        <Chip
+                          key={`${resolveUserId(m.user)}-${badge.id}`}
+                          size="small"
+                          color="success"
+                          variant="outlined"
+                          label={badge.title}
+                        />
+                      ))}
+                    </Stack>
                   </Box>
                   <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap">
                     {isAdmin && (

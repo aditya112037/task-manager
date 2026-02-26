@@ -410,6 +410,155 @@ router.get('/profile', protect, async (req, res) => {
   }
 });
 
+// @desc    Get public teammate profile summary (badges + photo)
+// @route   GET /api/auth/profile/:userId/public
+// @access  Private (teammates only)
+router.get("/profile/:userId/public", protect, async (req, res) => {
+  try {
+    const requesterId = String(req.user._id);
+    const targetUserId = String(req.params.userId || "");
+    if (!targetUserId) {
+      return res.status(400).json({ message: "User id is required" });
+    }
+
+    // Allow self, otherwise require shared team membership
+    if (requesterId !== targetUserId) {
+      const sharedTeam = await Team.exists({
+        members: {
+          $all: [
+            { $elemMatch: { user: requesterId } },
+            { $elemMatch: { user: targetUserId } },
+          ],
+        },
+      });
+      if (!sharedTeam) {
+        return res.status(403).json({ message: "Not authorized to view this profile" });
+      }
+    }
+
+    const targetUser = await User.findById(targetUserId).select("name photo email");
+    if (!targetUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const now = new Date();
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+    const since30Days = new Date(now.getTime() - THIRTY_DAYS_MS);
+
+    const [personalTasks, teamTasks, recentHistory] = await Promise.all([
+      Task.find({ user: targetUserId })
+        .select("dueDate subtasks progress")
+        .lean(),
+      TTask.find({
+        $or: [{ assignedTo: targetUserId }, { "subtasks.assignedTo": targetUserId }],
+      })
+        .select("dueDate title team subtasks")
+        .lean(),
+      TaskProgressHistory.find({
+        actorId: targetUserId,
+        createdAt: { $gte: since30Days },
+      })
+        .select("createdAt")
+        .lean(),
+    ]);
+
+    const personalSubtasks = personalTasks.flatMap((task) =>
+      (task.subtasks || []).map((subtask) => ({
+        ...subtask,
+        parentDueDate: task.dueDate || null,
+      }))
+    );
+
+    const teamSubtasks = teamTasks.flatMap((task) =>
+      (task.subtasks || [])
+        .filter((subtask) => String(subtask.assignedTo || "") === String(targetUserId))
+        .map((subtask) => ({
+          ...subtask,
+          parentDueDate: task.dueDate || null,
+          parentTaskId: task._id,
+          parentTaskTitle: task.title || "Task",
+        }))
+    );
+
+    const allUserSubtasks = [...personalSubtasks, ...teamSubtasks];
+    const completedUserSubtasks = allUserSubtasks.filter((subtask) => subtask.completed);
+
+    const completedWithDueDate = completedUserSubtasks.filter(
+      (subtask) => subtask.parentDueDate
+    );
+    const completedOnTimeCount = completedWithDueDate.filter((subtask) => {
+      if (!subtask.completedAt) return false;
+      return new Date(subtask.completedAt) <= new Date(subtask.parentDueDate);
+    }).length;
+    const onTimeRate =
+      completedWithDueDate.length > 0
+        ? Number(((completedOnTimeCount / completedWithDueDate.length) * 100).toFixed(2))
+        : 0;
+
+    const stalledAssignedSubtasks = teamSubtasks
+      .filter((subtask) => !subtask.completed)
+      .filter((subtask) => {
+        const checkpoint = new Date(subtask.lastProgressAt || subtask.createdAt || now);
+        return checkpoint.getTime() < now.getTime() - STALLED_DAYS * 24 * 60 * 60 * 1000;
+      });
+
+    const stalledTaskMap = new Map();
+    stalledAssignedSubtasks.forEach((subtask) => {
+      const key = String(subtask.parentTaskId || "");
+      const existing = stalledTaskMap.get(key);
+      const progressAt = new Date(subtask.lastProgressAt || subtask.createdAt || now);
+      const daysStalled = Math.max(
+        1,
+        Math.floor((now.getTime() - progressAt.getTime()) / (24 * 60 * 60 * 1000))
+      );
+      if (!existing || daysStalled > existing.maxDaysStalled) {
+        stalledTaskMap.set(key, {
+          taskId: subtask.parentTaskId || null,
+          title: subtask.parentTaskTitle || "Task",
+          stalledSubtasks: 1,
+          maxDaysStalled: daysStalled,
+        });
+      } else {
+        existing.stalledSubtasks += 1;
+      }
+    });
+    const needsAttentionTasks = Array.from(stalledTaskMap.values());
+
+    const badges = [];
+    if (onTimeRate >= 90) {
+      badges.push({
+        id: "deadline_keeper",
+        title: "Deadline Keeper",
+        description: "Maintained 90%+ on-time completion over the last 30 days.",
+      });
+    }
+    if (completedUserSubtasks.length >= 15) {
+      badges.push({
+        id: "reliable_executor",
+        title: "Reliable Executor",
+        description: "Completed 15+ subtasks in the last 30 days.",
+      });
+    }
+    if (needsAttentionTasks.length === 0 && recentHistory.length >= 8) {
+      badges.push({
+        id: "consistent_progress_updater",
+        title: "Consistent Progress Updater",
+        description: "No stalled assigned tasks and steady progress updates.",
+      });
+    }
+
+    res.json({
+      _id: targetUser._id,
+      name: targetUser.name,
+      photo: targetUser.photo || null,
+      badges,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 router.put(
   "/profile/photo",
   protect,
