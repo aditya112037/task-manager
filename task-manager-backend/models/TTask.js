@@ -1,6 +1,24 @@
 const mongoose = require("mongoose");
 const { teamSubtaskSchema } = require("./subtask");
 
+const clampPercentage = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.min(100, Math.max(0, Math.round(numeric)));
+};
+
+const percentageFromStatus = (status) => {
+  if (status === "completed") return 100;
+  if (status === "in-progress") return 50;
+  return 0;
+};
+
+const statusFromPercentage = (percentage) => {
+  if (percentage >= 100) return "completed";
+  if (percentage > 0) return "in-progress";
+  return "todo";
+};
+
 const TTaskSchema = new mongoose.Schema(
   {
     team: {
@@ -103,26 +121,21 @@ TTaskSchema.pre("save", function syncProgressAndStatus(next) {
   const subtasks = Array.isArray(this.subtasks) ? this.subtasks : [];
   const totalSubtasks = subtasks.length;
   const completedSubtasks = subtasks.filter((item) => Boolean(item.completed)).length;
-  const percentage =
-    totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
+  const derivedPercentage =
+    totalSubtasks > 0
+      ? Math.round((completedSubtasks / totalSubtasks) * 100)
+      : clampPercentage(
+          this.progress?.percentage ?? percentageFromStatus(this.status)
+        );
 
   this.progress = {
     totalSubtasks,
     completedSubtasks,
-    percentage,
+    percentage: derivedPercentage,
     lastCalculatedAt: new Date(),
   };
 
-  // Derive parent status from checkpoints when subtasks exist.
-  if (totalSubtasks > 0) {
-    if (completedSubtasks === totalSubtasks) {
-      this.status = "completed";
-    } else if (completedSubtasks > 0) {
-      this.status = "in-progress";
-    } else {
-      this.status = "todo";
-    }
-  }
+  this.status = statusFromPercentage(derivedPercentage);
 
   next();
 });

@@ -7,7 +7,6 @@ import {
   TextField,
   Button,
   Box,
-  MenuItem,
   Stack,
   Typography,
   IconButton,
@@ -30,7 +29,6 @@ const TaskForm = ({ task, onSubmit, onCancel }) => {
     title: "",
     description: "",
     priority: "medium",
-    status: "todo",
     dueDate: "",
     subtasks: [],
   });
@@ -44,7 +42,6 @@ const TaskForm = ({ task, onSubmit, onCancel }) => {
         title: task.title || "",
         description: task.description || "",
         priority: task.priority || "medium",
-        status: task.status || "todo",
         // convert ISO to datetime-local if available
         dueDate: task.dueDate
           ? new Date(task.dueDate).toISOString().slice(0, 16) // yyyy-MM-ddTHH:mm
@@ -64,7 +61,6 @@ const TaskForm = ({ task, onSubmit, onCancel }) => {
         title: "",
         description: "",
         priority: "medium",
-        status: "todo",
         dueDate: "",
         subtasks: [],
       });
@@ -262,21 +258,8 @@ const TaskForm = ({ task, onSubmit, onCancel }) => {
             </Stack>
           </Box>
 
-          {/* Status + Due Date row */}
+          {/* Due Date row */}
           <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
-            <TextField
-              select
-              label="Status"
-              name="status"
-              value={formData.status}
-              onChange={handleChange}
-              sx={{ minWidth: { xs: "100%", sm: 160 }, flex: 1 }}
-            >
-              <MenuItem value="todo">To Do</MenuItem>
-              <MenuItem value="in-progress">In Progress</MenuItem>
-              <MenuItem value="completed">Completed</MenuItem>
-            </TextField>
-
             <TextField
               label="Due (optional)"
               type="datetime-local"

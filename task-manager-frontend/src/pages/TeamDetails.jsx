@@ -70,14 +70,17 @@ const withComputedProgress = (task) => {
   const totalSubtasks = subtasks.length;
   const completedSubtasks = subtasks.filter((item) => item.completed).length;
   const percentage =
-    totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
-
-  let status = task.status || "todo";
-  if (totalSubtasks > 0) {
-    if (completedSubtasks === totalSubtasks) status = "completed";
-    else if (completedSubtasks > 0) status = "in-progress";
-    else status = "todo";
-  }
+    totalSubtasks > 0
+      ? Math.round((completedSubtasks / totalSubtasks) * 100)
+      : Number.isFinite(Number(task?.progress?.percentage))
+        ? Math.min(100, Math.max(0, Math.round(Number(task.progress.percentage))))
+        : task?.status === "completed"
+          ? 100
+          : task?.status === "in-progress"
+            ? 50
+            : 0;
+  const status =
+    percentage >= 100 ? "completed" : percentage > 0 ? "in-progress" : "todo";
 
   return {
     ...task,
@@ -859,50 +862,6 @@ export default function TeamDetails() {
     }
   };
 
-  const handleStatusChange = async (taskId, newStatus) => {
-    // Optimistic update
-    setTeamTasks(prev =>
-      prev.map(t => t._id === taskId ? { ...t, status: newStatus } : t)
-    );
-    
-    try {
-      const res = await teamTasksAPI.updateTask(taskId, { status: newStatus });
-      if (res?.data?._id) {
-        setTeamTasks((prev) =>
-          prev.map((t) => (t._id === res.data._id ? res.data : t))
-        );
-      }
-      showSnack("Task status updated", "success");
-    } catch (err) {
-      console.error("Status change error:", err);
-      showSnack("Failed to update task status", "error");
-      // Rollback on error
-      fetchTeamTasks();
-    }
-  };
-
-  const handleQuickComplete = async (taskId) => {
-    // Optimistic update
-    setTeamTasks(prev =>
-      prev.map(t => t._id === taskId ? { ...t, status: "completed" } : t)
-    );
-    
-    try {
-      const res = await teamTasksAPI.updateTask(taskId, { status: "completed" });
-      if (res?.data?._id) {
-        setTeamTasks((prev) =>
-          prev.map((t) => (t._id === res.data._id ? res.data : t))
-        );
-      }
-      showSnack("Task completed", "success");
-    } catch (err) {
-      console.error("Quick complete error:", err);
-      showSnack("Failed to complete task", "error");
-      // Rollback on error
-      fetchTeamTasks();
-    }
-  };
-
   const handleSubtasksChange = async (taskId, subtasks) => {
     const optimisticSubtasks = Array.isArray(subtasks) ? subtasks : [];
     setTeamTasks((prev) =>
@@ -1355,8 +1314,6 @@ export default function TeamDetails() {
                     setShowTaskForm(true);
                   }}
                   onDelete={() => handleDeleteTask(t._id)}
-                  onStatusChange={(taskId, newStatus) => handleStatusChange(taskId, newStatus)}
-                  onQuickComplete={() => handleQuickComplete(t._id)}
                   onSubtasksChange={handleSubtasksChange}
                   onExtensionRequested={handleRequestExtension}
                 />

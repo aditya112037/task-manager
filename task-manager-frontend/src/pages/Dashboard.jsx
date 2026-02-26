@@ -203,18 +203,6 @@ const Dashboard = () => {
     };
   }, [fetchAllTeamTasks, fetchTeams, teams.length]);
 
-  // Fixed handlers - no refetch after mutations
-  const handleStatusChange = async (taskId, status) => {
-    try {
-      await teamTasksAPI.updateTask(taskId, { status });
-      // Socket event will handle UI update via invalidate:tasks
-      showSnack("Task status updated", "success");
-    } catch (err) {
-      console.error("handleStatusChange:", err);
-      showSnack(err.response?.data?.message || "Failed to update task", "error");
-    }
-  };
-
   const handleDeleteTask = async (taskId) => {
     if (!window.confirm("Delete this task?")) return;
     try {
@@ -224,17 +212,6 @@ const Dashboard = () => {
     } catch (err) {
       console.error("handleDeleteTask:", err);
       showSnack(err.response?.data?.message || "Failed to delete", "error");
-    }
-  };
-
-  const handleQuickComplete = async (taskId) => {
-    try {
-      await teamTasksAPI.updateTask(taskId, { status: "completed" });
-      // Socket event will handle UI update via invalidate:tasks
-      showSnack("Task completed", "success");
-    } catch (err) {
-      console.error("handleQuickComplete:", err);
-      showSnack(err.response?.data?.message || "Failed to complete", "error");
     }
   };
 
@@ -490,8 +467,6 @@ const Dashboard = () => {
                   currentUserId={user?._id}
                   onEdit={() => handleEditTask(task)}
                   onDelete={() => handleDeleteTask(task._id)}
-                  onStatusChange={(id, s) => handleStatusChange(id, s)}
-                  onQuickComplete={() => handleQuickComplete(task._id)}
                 />
               ))}
             </Box>
@@ -648,8 +623,6 @@ const Dashboard = () => {
                               isAdminOrManager={canEdit}
                               onEdit={() => handleEditTask(task)}
                               onDelete={() => handleDeleteTask(task._id)}
-                              onStatusChange={(id, s) => handleStatusChange(id, s)}
-                              onQuickComplete={() => handleQuickComplete(task._id)}
                             />
                           ))
                         )}

@@ -36,10 +36,6 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
     "completed": "success",
   };
 
-  const handleStatusChange = (newStatus) => {
-    onUpdate(task._id, { status: newStatus });
-  };
-
   const handleSubtaskToggle = (subtaskId, completed) => {
     const nextSubtasks = (task.subtasks || []).map((item) =>
       item._id === subtaskId
@@ -78,7 +74,19 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
   const completedSubtasks =
     task.progress?.completedSubtasks ??
     (task.subtasks || []).filter((item) => item.completed).length;
-  const percentage = task.progress?.percentage ?? (totalSubtasks ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0);
+  const fallbackPercentageFromStatus =
+    task.status === "completed" ? 100 : task.status === "in-progress" ? 50 : 0;
+  const percentage = Number.isFinite(Number(task.progress?.percentage))
+    ? Math.min(100, Math.max(0, Math.round(Number(task.progress?.percentage))))
+    : totalSubtasks
+      ? Math.round((completedSubtasks / totalSubtasks) * 100)
+      : fallbackPercentageFromStatus;
+  const derivedStatus =
+    percentage >= 100 ? "completed" : percentage > 0 ? "in-progress" : "todo";
+  const formatStatusLabel = (value) =>
+    value === "todo" ? "To Do" : value === "in-progress" ? "In Progress" : "Completed";
+  const subtaskStatusLabel = (completed) => (completed ? "Completed" : "To Do");
+  const subtaskStatusColor = (completed) => (completed ? "success" : "default");
 
   return (
     <Card
@@ -115,15 +123,22 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
             mb: 1,
           }}
         >
-          <Typography
-            variant="h6"
-            sx={{
-              fontWeight: 700,
-              color: theme.palette.text.primary,
-            }}
-          >
-            {task.title}
-          </Typography>
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+            <Typography
+              variant="h6"
+              sx={{
+                fontWeight: 700,
+                color: theme.palette.text.primary,
+              }}
+            >
+              {task.title}
+            </Typography>
+            <Chip
+              label={formatStatusLabel(derivedStatus)}
+              color={statusColors[derivedStatus]}
+              size="small"
+            />
+          </Stack>
 
           <Box sx={{ alignSelf: { xs: "flex-end", sm: "auto" } }}>
             <Tooltip title="Edit">
@@ -156,14 +171,6 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
           <Chip
             label={task.priority}
             color={priorityColors[task.priority]}
-            size="small"
-            sx={{ textTransform: "capitalize" }}
-          />
-
-          {/* Status */}
-          <Chip
-            label={task.status.replace("-", " ")}
-            color={statusColors[task.status]}
             size="small"
             sx={{ textTransform: "capitalize" }}
           />
@@ -224,33 +231,6 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
           </Button>
         </Stack>
 
-        {/* STATUS BUTTONS */}
-        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", rowGap: 1 }}>
-          <Chip
-            label="To Do"
-            clickable
-            color={task.status === "todo" ? "primary" : "default"}
-            variant={task.status === "todo" ? "filled" : "outlined"}
-            onClick={() => handleStatusChange("todo")}
-          />
-
-          <Chip
-            label="In Progress"
-            clickable
-            color={task.status === "in-progress" ? "info" : "default"}
-            variant={task.status === "in-progress" ? "filled" : "outlined"}
-            onClick={() => handleStatusChange("in-progress")}
-          />
-
-          <Chip
-            label="Completed"
-            clickable
-            color={task.status === "completed" ? "success" : "default"}
-            variant={task.status === "completed" ? "filled" : "outlined"}
-            onClick={() => handleStatusChange("completed")}
-          />
-        </Stack>
-
         {totalSubtasks > 0 && (
           <>
             <Divider sx={{ my: 2 }} />
@@ -266,14 +246,22 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
                     onChange={(e) => handleSubtaskToggle(item._id, e.target.checked)}
                     size="small"
                   />
-                  <Typography
-                    variant="body2"
-                    sx={{
-                      color: item.completed ? "text.secondary" : "text.primary",
-                    }}
-                  >
-                    {item.title}
-                  </Typography>
+                  <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: item.completed ? "text.secondary" : "text.primary",
+                      }}
+                    >
+                      {item.title}
+                    </Typography>
+                    <Chip
+                      label={subtaskStatusLabel(Boolean(item.completed))}
+                      color={subtaskStatusColor(Boolean(item.completed))}
+                      size="small"
+                      variant="outlined"
+                    />
+                  </Stack>
                 </Box>
               ))}
             </Stack>

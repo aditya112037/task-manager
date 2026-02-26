@@ -1,42 +1,63 @@
-// components/Teams/TeamTaskItem.jsx
-import React, { useState, useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import {
+  Alert,
+  Box,
+  Button,
   Card,
   CardContent,
-  Typography,
+  Checkbox,
   Chip,
+  Collapse,
+  Divider,
   IconButton,
-  Box,
-  Stack,
-  Button,
+  LinearProgress,
   Menu,
   MenuItem,
-  Alert,
-  Collapse,
-  Checkbox,
-  LinearProgress,
-  Divider,
+  Stack,
+  Typography,
 } from "@mui/material";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import EditIcon from "@mui/icons-material/Edit";
-import DeleteIcon from "@mui/icons-material/Delete";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import GoogleIcon from "@mui/icons-material/Google";
-import EventIcon from "@mui/icons-material/Event";
-import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
 import ChatBubbleIcon from "@mui/icons-material/ChatBubble";
+import ChatBubbleOutlineIcon from "@mui/icons-material/ChatBubbleOutline";
+import DeleteIcon from "@mui/icons-material/Delete";
+import EditIcon from "@mui/icons-material/Edit";
+import EventIcon from "@mui/icons-material/Event";
+import GoogleIcon from "@mui/icons-material/Google";
+import MoreVertIcon from "@mui/icons-material/MoreVert";
 import { useTheme } from "@mui/material/styles";
-import ExtensionRequestModal from "./ExtensionRequestModal";
 import TaskComments from "../Comments/TaskComments";
+import ExtensionRequestModal from "./ExtensionRequestModal";
 
-/* ------------------ helpers ------------------ */
-const resolveId = (v) => (typeof v === "object" ? v?._id : v);
+const resolveId = (value) => (typeof value === "object" ? value?._id : value);
 
-const resolveUserName = (u) => {
-  if (!u) return "Team Tasks";
-  if (typeof u === "object") return u.name || "User";
+const resolveUserName = (value) => {
+  if (!value) return "Team Tasks";
+  if (typeof value === "object") return value.name || "User";
   return "User";
+};
+
+const clampPercentage = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.min(100, Math.max(0, Math.round(numeric)));
+};
+
+const percentageFromStatus = (status) => {
+  if (status === "completed") return 100;
+  if (status === "in-progress") return 50;
+  return 0;
+};
+
+const statusFromPercentage = (percentage) => {
+  if (percentage >= 100) return "completed";
+  if (percentage > 0) return "in-progress";
+  return "todo";
+};
+
+const statusLabel = (status) => {
+  if (status === "todo") return "To Do";
+  if (status === "in-progress") return "In Progress";
+  return "Completed";
 };
 
 export default function TeamTaskItem({
@@ -45,8 +66,6 @@ export default function TeamTaskItem({
   canEdit,
   onEdit,
   onDelete,
-  onStatusChange,
-  onQuickComplete,
   onSubtasksChange,
   onExtensionRequested,
   currentUserId,
@@ -57,25 +76,14 @@ export default function TeamTaskItem({
   const [openExtensionModal, setOpenExtensionModal] = useState(false);
   const [showComments, setShowComments] = useState(false);
 
-  /* ------------------ identity ------------------ */
   const assignedUserId = resolveId(task.assignedTo);
   const myUserId = resolveId(currentUserId);
-
   const isAssignedToMe = assignedUserId === myUserId;
   const isUnassigned = !assignedUserId;
+  const isTempTask = typeof task._id === "string" && task._id.startsWith("temp-");
 
-  const isTempTask =
-    typeof task._id === "string" && task._id.startsWith("temp-");
-
-  /* ------------------ PERMISSION GATES ------------------ */
-  const canInteractWithTask =
-    isAdminOrManager || isAssignedToMe || isUnassigned;
-
-  const canCompleteTask =
-    task.status !== "completed" && canInteractWithTask;
-
+  const canInteractWithTask = isAdminOrManager || isAssignedToMe || isUnassigned;
   const canDeleteTask = isAdminOrManager;
-
   const canViewComments = !isTempTask && canInteractWithTask;
 
   const totalSubtasks = task.progress?.totalSubtasks ?? task.subtasks?.length ?? 0;
@@ -83,71 +91,57 @@ export default function TeamTaskItem({
     task.progress?.completedSubtasks ??
     (task.subtasks || []).filter((item) => item.completed).length;
   const progressPercentage =
-    task.progress?.percentage ??
-    (totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0);
+    Number.isFinite(Number(task.progress?.percentage))
+      ? clampPercentage(task.progress?.percentage)
+      : totalSubtasks > 0
+        ? clampPercentage((completedSubtasks / totalSubtasks) * 100)
+        : percentageFromStatus(task.status);
+  const derivedStatus = statusFromPercentage(progressPercentage);
 
-  /* ------------------ status colors ------------------ */
   const priorityColors = {
     high: "error",
     medium: "warning",
     low: "success",
   };
-
   const statusColors = {
     todo: "default",
     "in-progress": "info",
     completed: "success",
   };
 
-  /* ------------------ due date logic ------------------ */
   const dueStatus = useMemo(() => {
-    if (!task.dueDate)
-      return { color: "text.secondary", message: "No due date" };
-
-    if (task.status === "completed")
-      return { color: "success.main", message: "Completed" };
+    if (!task.dueDate) return { color: "text.secondary", message: "No due date" };
+    if (derivedStatus === "completed") return { color: "success.main", message: "Completed" };
 
     const now = new Date();
     const due = new Date(task.dueDate);
     const days = Math.ceil((due - now) / (1000 * 3600 * 24));
 
-    if (days < 0)
+    if (days < 0) {
       return {
         color: "error.main",
-        message: `Overdue by ${Math.abs(days)} day${
-          Math.abs(days) !== 1 ? "s" : ""
-        }`,
+        message: `Overdue by ${Math.abs(days)} day${Math.abs(days) !== 1 ? "s" : ""}`,
       };
+    }
     if (days === 0) return { color: "warning.main", message: "Due today" };
-    if (days <= 2)
-      return { color: "warning.light", message: `Due in ${days} days` };
-
+    if (days <= 2) return { color: "warning.light", message: `Due in ${days} days` };
     return { color: "text.secondary", message: `Due in ${days} days` };
-  }, [task.dueDate, task.status]);
+  }, [task.dueDate, derivedStatus]);
 
-  const formatDate = (d) =>
-    d ? new Date(d).toLocaleDateString() : "";
-
-  /* ------------------ calendar links ------------------ */
-  const getICSUrl = () =>
-    `${process.env.REACT_APP_API_URL}/api/ics/${task._id}`;
-
+  const formatDate = (value) => (value ? new Date(value).toLocaleDateString() : "");
+  const getICSUrl = () => `${process.env.REACT_APP_API_URL}/api/ics/${task._id}`;
   const getGoogleUrl = () => {
     if (!task.dueDate) return "#";
     const start = new Date(task.dueDate);
     const end = new Date(start.getTime() + 30 * 60 * 1000);
-    const fmt = (d) =>
-      d.toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
-
+    const fmt = (d) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
     return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
       task.title
-    )}&details=${encodeURIComponent(task.description || "")}&dates=${fmt(
-      start
-    )}/${fmt(end)}`;
+    )}&details=${encodeURIComponent(task.description || "")}&dates=${fmt(start)}/${fmt(end)}`;
   };
 
   const openMenu = Boolean(anchorEl);
-  const showMenu = canCompleteTask || canDeleteTask || canEdit;
+  const showMenu = canDeleteTask || canEdit;
 
   const canToggleSubtask = (subtask) =>
     isAdminOrManager || resolveId(subtask.assignedTo) === myUserId;
@@ -173,28 +167,22 @@ export default function TeamTaskItem({
         sx={{
           mb: 2,
           borderRadius: 3,
-          borderLeft: `5px solid ${
-            task.color || theme.palette.primary.main
-          }`,
+          borderLeft: `5px solid ${task.color || theme.palette.primary.main}`,
           opacity: canInteractWithTask ? 1 : 0.65,
         }}
       >
-        {dueStatus.color === "error.main" && (
-          <Alert severity="error">{dueStatus.message}</Alert>
-        )}
+        {dueStatus.color === "error.main" && <Alert severity="error">{dueStatus.message}</Alert>}
 
         <CardContent>
-          {/* HEADER */}
-          <Box sx={{ display: "flex", justifyContent: "space-between" }}>
-            <Typography variant="h6" fontWeight={700}>
-              {task.icon || "📋"} {task.title}
-            </Typography>
-
+          <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}>
+            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+              <Typography variant="h6" fontWeight={700}>
+                {task.icon || "Task"} {task.title}
+              </Typography>
+              <Chip label={statusLabel(derivedStatus)} color={statusColors[derivedStatus]} size="small" />
+            </Stack>
             {showMenu && (
-              <IconButton
-                size="small"
-                onClick={(e) => setAnchorEl(e.currentTarget)}
-              >
+              <IconButton size="small" onClick={(e) => setAnchorEl(e.currentTarget)}>
                 <MoreVertIcon />
               </IconButton>
             )}
@@ -206,81 +194,34 @@ export default function TeamTaskItem({
             </Typography>
           )}
 
-          <Typography
-            variant="caption"
-            color="text.secondary"
-            sx={{ mt: 1, display: "block" }}
-          >
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
             Assigned to: {resolveUserName(task.assignedTo)}
           </Typography>
 
           <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap" }}>
-            <Chip
-              label={task.priority}
-              color={priorityColors[task.priority]}
-              size="small"
-            />
-            <Chip
-              label={task.status}
-              color={statusColors[task.status]}
-              size="small"
-            />
+            <Chip label={task.priority} color={priorityColors[task.priority]} size="small" />
             {task.needsAttention && (
-              <Chip
-                label="Needs attention"
-                color="warning"
-                size="small"
-                variant="outlined"
-              />
+              <Chip label="Needs attention" color="warning" size="small" variant="outlined" />
             )}
             <Chip
               icon={<AccessTimeIcon />}
-              label={
-                task.dueDate
-                  ? `${formatDate(task.dueDate)} • ${dueStatus.message}`
-                  : "No due date"
-              }
+              label={task.dueDate ? `${formatDate(task.dueDate)} • ${dueStatus.message}` : "No due date"}
               variant="outlined"
               size="small"
             />
           </Stack>
 
-          {/* ACTIONS */}
           <Stack direction="row" spacing={1} sx={{ mt: 2, flexWrap: "wrap" }}>
-            {canCompleteTask && (
-              <Button
-                size="small"
-                color="success"
-                variant="contained"
-                onClick={() => onQuickComplete(task._id)}
-              >
-                Mark Complete
+            {isAssignedToMe && !task.extensionRequest?.requested && !isTempTask && (
+              <Button size="small" variant="outlined" onClick={() => setOpenExtensionModal(true)}>
+                Request Extension
               </Button>
             )}
-
-            {isAssignedToMe &&
-              !task.extensionRequest?.requested &&
-              !isTempTask && (
-                <Button
-                  size="small"
-                  variant="outlined"
-                  onClick={() => setOpenExtensionModal(true)}
-                >
-                  Request Extension
-                </Button>
-              )}
-
             {canViewComments && (
               <Button
                 size="small"
                 variant="outlined"
-                startIcon={
-                  showComments ? (
-                    <ChatBubbleIcon />
-                  ) : (
-                    <ChatBubbleOutlineIcon />
-                  )
-                }
+                startIcon={showComments ? <ChatBubbleIcon /> : <ChatBubbleOutlineIcon />}
                 onClick={() => setShowComments((v) => !v)}
               >
                 {showComments ? "Hide Comments" : "Comments"}
@@ -309,14 +250,22 @@ export default function TeamTaskItem({
                       disabled={!canToggleSubtask(subtask)}
                     />
                     <Box>
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          color: subtask.completed ? "text.secondary" : "text.primary",
-                        }}
-                      >
-                        {subtask.title}
-                      </Typography>
+                      <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: subtask.completed ? "text.secondary" : "text.primary",
+                          }}
+                        >
+                          {subtask.title}
+                        </Typography>
+                        <Chip
+                          label={statusLabel(subtask.completed ? "completed" : "todo")}
+                          color={subtask.completed ? "success" : "default"}
+                          size="small"
+                          variant="outlined"
+                        />
+                      </Stack>
                       <Typography variant="caption" color="text.secondary">
                         Assigned: {resolveUserName(subtask.assignedTo)}
                       </Typography>
@@ -327,28 +276,18 @@ export default function TeamTaskItem({
             </>
           )}
 
-          <Stack
-            direction="row"
-            spacing={2}
-            sx={{ mt: 2, mb: 1, flexWrap: "wrap", rowGap: 1 }}
-          >
+          <Stack direction="row" spacing={2} sx={{ mt: 2, mb: 1, flexWrap: "wrap", rowGap: 1 }}>
             <Button
               variant="contained"
               color="secondary"
               startIcon={<EventIcon />}
-              sx={{
-                textTransform: "none",
-                borderRadius: 2,
-                px: 2,
-                width: { xs: "100%", sm: "auto" },
-              }}
+              sx={{ textTransform: "none", borderRadius: 2, px: 2, width: { xs: "100%", sm: "auto" } }}
               onClick={() => {
                 window.location.href = getICSUrl();
               }}
             >
               Add to Calendar (Apple)
             </Button>
-
             <Button
               variant="outlined"
               color="primary"
@@ -358,10 +297,7 @@ export default function TeamTaskItem({
                 borderRadius: 2,
                 px: 2,
                 width: { xs: "100%", sm: "auto" },
-                borderColor:
-                  theme.palette.mode === "dark"
-                    ? "rgba(255,255,255,0.4)"
-                    : undefined,
+                borderColor: theme.palette.mode === "dark" ? "rgba(255,255,255,0.4)" : undefined,
               }}
               href={getGoogleUrl()}
               target="_blank"
@@ -372,16 +308,9 @@ export default function TeamTaskItem({
             </Button>
           </Stack>
 
-          {/* COMMENTS */}
           {canViewComments && (
             <Collapse in={showComments}>
-              <Box
-                sx={{
-                  mt: 3,
-                  pt: 2,
-                  borderTop: `1px solid ${theme.palette.divider}`,
-                }}
-              >
+              <Box sx={{ mt: 3, pt: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
                 <TaskComments
                   taskId={task._id}
                   myRole={isAdminOrManager ? "admin" : "member"}
@@ -392,24 +321,12 @@ export default function TeamTaskItem({
           )}
         </CardContent>
 
-        {/* MENU */}
-        <Menu
-          anchorEl={anchorEl}
-          open={openMenu}
-          onClose={() => setAnchorEl(null)}
-        >
-          {canCompleteTask && (
-            <MenuItem onClick={() => onQuickComplete(task._id)}>
-              <CheckCircleIcon fontSize="small" sx={{ mr: 1 }} /> Complete
-            </MenuItem>
-          )}
-
+        <Menu anchorEl={anchorEl} open={openMenu} onClose={() => setAnchorEl(null)}>
           {canEdit && (
             <MenuItem onClick={() => onEdit(task)}>
               <EditIcon fontSize="small" sx={{ mr: 1 }} /> Edit
             </MenuItem>
           )}
-
           {canDeleteTask && (
             <MenuItem onClick={() => onDelete(task._id)}>
               <DeleteIcon fontSize="small" sx={{ mr: 1 }} /> Delete

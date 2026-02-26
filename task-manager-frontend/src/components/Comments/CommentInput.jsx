@@ -16,7 +16,6 @@ import {
 } from "@mui/material";
 import SendIcon from "@mui/icons-material/Send";
 import EmojiEmotionsIcon from "@mui/icons-material/EmojiEmotions";
-import AttachFileIcon from "@mui/icons-material/AttachFile";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
 import FormatQuoteIcon from "@mui/icons-material/FormatQuote";
 import { useState, useRef, useEffect, useMemo } from "react";
@@ -397,22 +396,6 @@ export default function CommentInput({ onSend, disabled = false, teamMembers = [
             </IconButton>
           </Tooltip>
 
-          <Tooltip title="Attach file (coming soon)">
-            <IconButton 
-              disabled 
-              sx={{ 
-                opacity: 0.5,
-                width: 40,
-                height: 40,
-                transition: "all 0.3s",
-                "&:hover": {
-                  opacity: 0.7,
-                }
-              }}
-            >
-              <AttachFileIcon />
-            </IconButton>
-          </Tooltip>
         </Stack>
       </Box>
 

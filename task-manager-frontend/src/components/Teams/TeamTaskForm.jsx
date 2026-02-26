@@ -24,7 +24,6 @@ export default function TeamTaskForm({ open, task, teamMembers, onCancel, onSubm
     title: "",
     description: "",
     priority: "medium",
-    status: "todo",
     dueDate: "",
     assignedTo: "",
     color: "#4CAF50",
@@ -38,7 +37,6 @@ export default function TeamTaskForm({ open, task, teamMembers, onCancel, onSubm
         title: task.title || "",
         description: task.description || "",
         priority: task.priority || "medium",
-        status: task.status || "todo",
         dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split("T")[0] : "",
         assignedTo: task.assignedTo?._id || task.assignedTo || "",
         color: task.color || "#4CAF50",
@@ -61,7 +59,6 @@ export default function TeamTaskForm({ open, task, teamMembers, onCancel, onSubm
       title: "",
       description: "",
       priority: "medium",
-      status: "todo",
       dueDate: "",
       assignedTo: "",
       color: "#4CAF50",
@@ -156,19 +153,6 @@ export default function TeamTaskForm({ open, task, teamMembers, onCancel, onSubm
               <MenuItem value="low">Low</MenuItem>
               <MenuItem value="medium">Medium</MenuItem>
               <MenuItem value="high">High</MenuItem>
-            </Select>
-          </FormControl>
-
-          <FormControl fullWidth>
-            <InputLabel>Status</InputLabel>
-            <Select
-              value={formData.status}
-              label="Status"
-              onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-            >
-              <MenuItem value="todo">To Do</MenuItem>
-              <MenuItem value="in-progress">In Progress</MenuItem>
-              <MenuItem value="completed">Completed</MenuItem>
             </Select>
           </FormControl>
 
