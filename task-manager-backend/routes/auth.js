@@ -10,7 +10,7 @@ const ExecutionScoreSnapshot = require("../models/ExecutionScoreSnapshot");
 const { protect } = require('../middleware/auth');
 
 const router = express.Router();
-const STALLED_DAYS = Number(process.env.STALLED_DAYS || 3);
+const STALLED_DAYS = Number(process.env.STALLED_DAYS || 1);
 
 // Generate JWT
 const generateToken = (id) => {
