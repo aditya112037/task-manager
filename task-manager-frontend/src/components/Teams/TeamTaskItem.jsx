@@ -352,18 +352,27 @@ export default function TeamTaskItem({
                           variant="outlined"
                         />
                       </Stack>
-                      <Slider
-                        size="small"
-                        value={current}
-                        min={0}
-                        max={100}
-                        step={1}
-                        valueLabelDisplay="auto"
-                        onChangeCommitted={(_, value) =>
-                          handleSubtaskProgressCommit(subtask._id, value)
-                        }
-                        disabled={!canMoveSubtask(subtask)}
-                      />
+                      <Stack direction="row" spacing={1} alignItems="center">
+                        <Slider
+                          size="small"
+                          value={current}
+                          min={0}
+                          max={100}
+                          step={1}
+                          valueLabelDisplay="auto"
+                          onChangeCommitted={(_, value) =>
+                            handleSubtaskProgressCommit(subtask._id, value)
+                          }
+                          disabled={!canMoveSubtask(subtask)}
+                          sx={{ flex: 1 }}
+                        />
+                        <Typography
+                          variant="caption"
+                          sx={{ minWidth: 42, textAlign: "right", color: "text.secondary" }}
+                        >
+                          {current}%
+                        </Typography>
+                      </Stack>
                       <Typography variant="caption" color="text.secondary">
                         Assigned: {resolveUserName(subtask.assignedTo)}
                       </Typography>

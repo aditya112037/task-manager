@@ -330,6 +330,12 @@ const TaskItem = ({ task, onEdit, onDelete, onUpdate }) => {
                         disabled={current >= 100}
                       />
                     </Box>
+                    <Typography
+                      variant="caption"
+                      sx={{ minWidth: 42, textAlign: "right", color: "text.secondary" }}
+                    >
+                      {current}%
+                    </Typography>
                   </Box>
                 );
               })}
