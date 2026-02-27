@@ -23,18 +23,20 @@ export const LandingPage = ({ embedded = false }) => (
   <MarketingLayout
     embedded={embedded}
     title="Welcome to Task Suite"
-    subtitle="A calm, structured workspace where your team can plan clearly, collaborate confidently, and deliver on time."
+    subtitle="A Professional Tool, which provides a structured personal workspace to plan precisely and execute with perfection"
   >
     <Grid container spacing={3} sx={{ mb: 2 }}>
       <Grid item xs={12} md={7}>
         <Card sx={sectionCardSx}>
           <CardContent sx={{ p: 3.5 }}>
             <Stack spacing={2}>
-              <Chip label="Built for operations-first teams" color="secondary" sx={{ alignSelf: "flex-start" }} />
-              <Typography variant="h4">One place for tasks, meetings, and clear ownership.</Typography>
+              <Chip label="Built for result-oriented individuals" color="secondary" sx={{ alignSelf: "flex-start" }} />
+              <Typography variant="h4">One place for tasks, teamwork, meetings, and building leadership capabilities</Typography>
               <Typography variant="h6" sx={{ color: "text.primary" }}>
-                A structured execution system for team leaders who need control without micromanaging.
-              </Typography>
+                A system that provides opportunities to Implement CONTROL based on detailed analysis
+                - Develop healthy leadership without micromanagement
+                - recognises member inputs leading to high level motivation and output
+               </Typography>
               <Typography color="text.secondary">
                 Teams do not fail because of a lack of tools. They fail because execution is fragmented. Task Suite unifies
                 day-to-day delivery into one controlled workflow.
@@ -47,10 +49,7 @@ export const LandingPage = ({ embedded = false }) => (
                   Open Workspace
                 </Button>
               </Stack>
-              <Typography variant="caption" color="text.secondary">
-                No credit card required.
-              </Typography>
-            </Stack>
+              </Stack>
           </CardContent>
         </Card>
       </Grid>
@@ -60,10 +59,7 @@ export const LandingPage = ({ embedded = false }) => (
             <Card sx={sectionCardSx}>
               <CardContent sx={{ p: 3.5 }}>
                 <Stack spacing={1.2}>
-                  <Typography variant="h5">Built for leaders in control roles</Typography>
-                  <Typography color="text.secondary">
-                    Team Leads, Project Managers, Operations Managers, and Agency Founders.
-                  </Typography>
+                  <Typography variant="h5">Built for individuals who value discipline, workflow and coordination</Typography>
                   <Divider sx={{ my: 0.6 }} />
                   <Typography variant="body2" color="text.secondary">
                     Leaders demand Control, Visibility, Accountability, Deadlines, and Reduced chaos.
