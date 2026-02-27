@@ -6,6 +6,7 @@ import axios from "axios";
 const api = axios.create({
   baseURL: process.env.REACT_APP_API_URL,
   withCredentials: true,
+  timeout: 10000,
 });
 
 // -------------------------
@@ -43,7 +44,7 @@ api.interceptors.response.use(
 export const authAPI = {
   register: (data) => api.post("/api/auth/register", data),
   login: (data) => api.post("/api/auth/login", data),
-  getProfile: () => api.get("/api/auth/profile"),
+  getProfile: (config = {}) => api.get("/api/auth/profile", config),
   getPublicProfile: (userId) => api.get(`/api/auth/profile/${userId}/public`),
   uploadProfilePhoto: (imageData) => api.put("/api/auth/profile/photo", { imageData }),
 };

@@ -110,27 +110,44 @@ export const AuthProvider = ({ children }) => {
     const verifyAuth = async () => {
       const token = localStorage.getItem("token");
       const storedUser = localStorage.getItem("user");
+      let hasHydratedFromStorage = false;
 
       if (token && storedUser) {
         try {
           setUser(JSON.parse(storedUser));
+          hasHydratedFromStorage = true;
         } catch {
           localStorage.removeItem("user");
         }
       }
 
-      if (token) {
-        try {
-          const res = await authAPI.getProfile();
-          setUser(res.data);
-          localStorage.setItem("user", JSON.stringify(res.data));
-        } catch (err) {
-          console.error("Auth verification failed:", err);
-          handleLogout();
-        }
+      if (!token) {
+        setLoading(false);
+        return;
       }
 
-      setLoading(false);
+      // If a user snapshot exists, render immediately and refresh auth in background.
+      if (hasHydratedFromStorage) {
+        setLoading(false);
+      }
+
+      try {
+        const res = await authAPI.getProfile({ timeout: 6000 });
+        setUser(res.data);
+        localStorage.setItem("user", JSON.stringify(res.data));
+      } catch (err) {
+        const status = err?.response?.status;
+        if (status === 401 || status === 403) {
+          console.error("Auth verification failed:", err);
+          handleLogout();
+          return;
+        }
+
+        // Keep current local session on transient network delays/failures.
+        console.warn("Auth profile refresh skipped:", err?.message || err);
+      } finally {
+        setLoading(false);
+      }
     };
 
     verifyAuth();

@@ -1,17 +1,25 @@
 export function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
+  const isProd = process.env.NODE_ENV === "production";
 
   window.addEventListener("load", () => {
+    if (!isProd) {
+      navigator.serviceWorker.getRegistrations().then((registrations) => {
+        registrations.forEach((registration) => registration.unregister());
+      });
+      return;
+    }
+
     navigator.serviceWorker
       .register("/sw.js")
       .then((registration) => {
-        const activateAndReload = () => {
+        const activateWaitingWorker = () => {
           if (!registration.waiting) return;
           registration.waiting.postMessage({ type: "SKIP_WAITING" });
         };
 
         if (registration.waiting) {
-          activateAndReload();
+          activateWaitingWorker();
         }
 
         registration.addEventListener("updatefound", () => {
@@ -20,16 +28,9 @@ export function registerServiceWorker() {
 
           installingWorker.addEventListener("statechange", () => {
             if (installingWorker.state === "installed" && navigator.serviceWorker.controller) {
-              activateAndReload();
+              activateWaitingWorker();
             }
           });
-        });
-
-        let refreshing = false;
-        navigator.serviceWorker.addEventListener("controllerchange", () => {
-          if (refreshing) return;
-          refreshing = true;
-          window.location.reload();
         });
       })
       .catch((error) => {
