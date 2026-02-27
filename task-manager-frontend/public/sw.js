@@ -1,91 +1,110 @@
-const CACHE_NAME = 'task-suite-v1';
-const APP_SHELL = ['/', '/index.html', '/manifest.json', '/favicon.ico', '/logo192.png', '/logo512.png'];
+const CACHE_NAME = "task-suite-v2";
+const APP_SHELL = ["/", "/index.html", "/manifest.json", "/favicon.ico", "/logo192.png", "/logo512.png"];
 
-self.addEventListener('install', (event) => {
+self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting())
   );
 });
 
-self.addEventListener('activate', (event) => {
+self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key)))
-    ).then(() => self.clients.claim())
+    caches
+      .keys()
+      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+      .then(() => self.clients.claim())
   );
 });
 
-self.addEventListener('fetch', (event) => {
+self.addEventListener("fetch", (event) => {
   const { request } = event;
 
-  if (request.method !== 'GET') return;
+  if (request.method !== "GET") return;
 
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  if (request.mode === 'navigate') {
+  if (request.mode === "navigate") {
     event.respondWith(
       fetch(request)
         .then((response) => {
           const copy = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put('/index.html', copy));
+          caches.open(CACHE_NAME).then((cache) => cache.put("/index.html", copy));
           return response;
         })
-        .catch(() => caches.match('/index.html'))
+        .catch(() => caches.match("/index.html"))
+    );
+    return;
+  }
+
+  if (request.destination === "script" || request.destination === "style" || request.destination === "document") {
+    event.respondWith(
+      fetch(request)
+        .then((networkResponse) => {
+          const responseClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, responseClone));
+          return networkResponse;
+        })
+        .catch(() => caches.match(request))
     );
     return;
   }
 
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
-      if (cachedResponse) return cachedResponse;
+      const networkFetch = fetch(request)
+        .then((networkResponse) => {
+          const responseClone = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, responseClone));
+          return networkResponse;
+        })
+        .catch(() => cachedResponse);
 
-      return fetch(request).then((networkResponse) => {
-        const responseClone = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, responseClone));
-        return networkResponse;
-      });
+      return cachedResponse || networkFetch;
     })
   );
 });
 
-self.addEventListener('push', (event) => {
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
+self.addEventListener("push", (event) => {
   if (!event.data) return;
 
   let payload = {};
   try {
     payload = event.data.json();
   } catch {
-    payload = { title: 'Task Manager', body: event.data.text() };
+    payload = { title: "Task Manager", body: event.data.text() };
   }
 
-  const title = payload.title || 'Task Manager';
+  const title = payload.title || "Task Manager";
   const options = {
-    body: payload.body || '',
-    icon: payload.icon || '/logo192.png',
-    badge: payload.badge || '/logo192.png',
-    tag: payload.tag || 'task-manager',
-    data: payload.data || { url: payload.url || '/' },
+    body: payload.body || "",
+    icon: payload.icon || "/logo192.png",
+    badge: payload.badge || "/logo192.png",
+    tag: payload.tag || "task-manager",
+    data: payload.data || { url: payload.url || "/" },
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
-self.addEventListener('notificationclick', (event) => {
+self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
-  const url =
-    event.notification?.data?.url ||
-    event.notification?.data?.path ||
-    '/';
+  const url = event.notification?.data?.url || event.notification?.data?.path || "/";
 
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
       for (const client of windowClients) {
-        if ('navigate' in client) {
+        if ("navigate" in client) {
           return client.navigate(url).then(() => client.focus());
         }
-        if ('focus' in client) {
+        if ("focus" in client) {
           return client.focus();
         }
       }
