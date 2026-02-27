@@ -34,8 +34,12 @@ export const LandingPage = ({ embedded = false }) => (
               <Typography variant="h4">One place for tasks, teamwork, meetings, and building leadership capabilities</Typography>
               <Typography variant="h6" sx={{ color: "text.primary" }}>
                 A system that provides opportunities to Implement CONTROL based on detailed analysis
-                - Develop healthy leadership without micromanagement
+                <br>
+                - Building healthy leadership without micromanagement
+                </br>
+                <br>
                 - recognises member inputs leading to high level motivation and output
+                </br>
                </Typography>
               <Typography color="text.secondary">
                 Teams do not fail because of a lack of tools. They fail because execution is fragmented. Task Suite unifies
