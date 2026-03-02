@@ -24,6 +24,7 @@ import DashboardIcon from "@mui/icons-material/Dashboard";
 import GroupIcon from "@mui/icons-material/Group";
 import InstallDesktopIcon from "@mui/icons-material/InstallDesktop";
 import PersonIcon from "@mui/icons-material/Person";
+import AutoStoriesIcon from "@mui/icons-material/AutoStories";
 
 import { Link, useLocation } from "react-router-dom";
 
@@ -307,6 +308,47 @@ const Sidebar = ({ open, toggleSidebar, isMobile = false }) => {
               {showLabel && (
                 <ListItemText
                   primary="Profile"
+                  sx={{ opacity: showLabel ? 1 : 0 }}
+                />
+              )}
+            </ListItemButton>
+
+            <ListItemButton
+              component={Link}
+              to="/journal"
+              onClick={isMobile ? toggleSidebar : undefined}
+              selected={location.pathname.startsWith("/journal")}
+              sx={{
+                color: theme.palette.sidebar.text,
+                borderRadius: 2,
+                mb: 1,
+                justifyContent: showLabel ? "initial" : "center",
+                px: showLabel ? 2 : 1,
+                minHeight: 50,
+                "&.Mui-selected": {
+                  backgroundColor: theme.palette.sidebar.active || theme.palette.sidebar.hover,
+                  "&:hover": {
+                    backgroundColor: theme.palette.sidebar.active || theme.palette.sidebar.hover,
+                  }
+                },
+                "&:hover": {
+                  backgroundColor: theme.palette.sidebar.hover,
+                }
+              }}
+            >
+              <ListItemIcon
+                sx={{
+                  color: theme.palette.sidebar.text,
+                  minWidth: 0,
+                  mr: showLabel ? 2 : "auto",
+                  justifyContent: "center",
+                }}
+              >
+                <AutoStoriesIcon />
+              </ListItemIcon>
+              {showLabel && (
+                <ListItemText
+                  primary="Journal"
                   sx={{ opacity: showLabel ? 1 : 0 }}
                 />
               )}

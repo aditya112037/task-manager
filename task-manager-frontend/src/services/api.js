@@ -147,4 +147,17 @@ export const commentsAPI = {
     api.delete(`/api/comments/${commentId}`),
 };
 
+// -------------------------
+// JOURNALS API
+// -------------------------
+export const journalsAPI = {
+  getEntries: (params = {}) => api.get("/api/journals", { params }),
+  getEntry: (id) => api.get(`/api/journals/${id}`),
+  createEntry: (data) => api.post("/api/journals", data),
+  updateEntry: (id, data) => api.put(`/api/journals/${id}`, data),
+  toggleFavorite: (id) => api.patch(`/api/journals/${id}/favorite`),
+  deleteEntry: (id) => api.delete(`/api/journals/${id}`),
+  getInsights: (days = 30) => api.get("/api/journals/insights/summary", { params: { days } }),
+};
+
 export default api;

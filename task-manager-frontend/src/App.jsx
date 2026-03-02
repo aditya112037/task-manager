@@ -13,6 +13,7 @@ import TeamDetails from "./pages/TeamDetails";
 import CreateTeam from "./pages/CreateTeam";
 import JoinTeam from "./pages/JoinTeam";
 import Profile from "./pages/Profile";
+import JournalHub from "./pages/JournalHub";
 import {
   LandingPage,
   FeaturesPage,
@@ -434,6 +435,16 @@ function AppContent() {
               <ProtectedRoute>
                 <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
                   <Profile />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/journal"
+            element={
+              <ProtectedRoute>
+                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                  <JournalHub />
                 </Layout>
               </ProtectedRoute>
             }

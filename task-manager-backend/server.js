@@ -211,6 +211,7 @@ app.use("/api/team-tasks", require("./routes/TTRoutes"));
 app.use("/api/comments", require("./routes/taskComments"));
 app.use("/api/notifications", require("./routes/notifications"));
 app.use("/api/ics", require("./routes/ics"));
+app.use("/api/journals", require("./routes/journals"));
 
 /* ---------------------------------------------------
    HEALTH CHECK (IMPORTANT!)
