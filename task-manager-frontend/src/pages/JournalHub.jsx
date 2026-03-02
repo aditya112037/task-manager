@@ -293,15 +293,18 @@ const EntryCard = ({ entry, onFavorite, onEdit, onDelete, onView }) => (
           </>
         );
       })()}
-      {(entry.attachments || []).length > 0 && (
+      {(entry.attachments || []).some((att) => att.type !== "image") && (
         <Stack direction="row" sx={{ mt: 1.2, flexWrap: "wrap", gap: 0.8 }}>
-          {(entry.attachments || []).slice(0, 3).map((att, idx) => (
+          {(entry.attachments || [])
+            .filter((att) => att.type !== "image")
+            .slice(0, 3)
+            .map((att, idx) => (
             <Chip
               key={`${entry._id}-att-${idx}`}
               size="small"
               color="primary"
               variant="outlined"
-              label={att.type === "link" ? "Link" : att.type === "audio" ? "Audio" : "Image"}
+              label={att.type === "link" ? "Link" : "Audio"}
             />
           ))}
         </Stack>
@@ -380,7 +383,7 @@ const JournalHub = () => {
       setInsights(insightsRes.data || null);
     } catch (err) {
       console.error(err);
-      setError(err?.response?.data?.message || "Failed to load journal data");
+      setError(err?.response?.data?.message || "Failed to load insights data");
     } finally {
       setLoading(false);
     }
@@ -411,7 +414,7 @@ const JournalHub = () => {
       const last = localStorage.getItem(REMINDER_LAST_KEY);
       if (last === today) return;
       localStorage.setItem(REMINDER_LAST_KEY, today);
-      const reminder = new Notification("Journal Reminder", {
+      const reminder = new Notification("Insights Reminder", {
         body: "Take 2 minutes to write today's reflection.",
       });
       reminder.onclick = () => window.focus();
@@ -595,7 +598,7 @@ const JournalHub = () => {
   };
 
   const handleDelete = async (entryId) => {
-    if (!window.confirm("Delete this journal entry?")) return;
+    if (!window.confirm("Delete this insights entry?")) return;
     try {
       await journalsAPI.deleteEntry(entryId);
       await loadEntries();
@@ -661,7 +664,7 @@ const JournalHub = () => {
       return (
         <Paper sx={{ p: 6, textAlign: "center", borderRadius: 3 }}>
           <Typography variant="h6" gutterBottom>
-            No journal entries yet
+            No insights yet
           </Typography>
           <Typography color="text.secondary" sx={{ mb: 2 }}>
             Start with a quick daily check-in.
@@ -797,7 +800,7 @@ const JournalHub = () => {
         <Stack direction={{ xs: "column", md: "row" }} spacing={2} justifyContent="space-between">
           <Box>
             <Typography variant="h4" fontWeight={700}>
-              Journal
+              Insights
             </Typography>
             <Typography variant="body1" color="text.secondary">
               Capture your day with reflections, mood, gratitude, and highlights.
@@ -939,7 +942,7 @@ const JournalHub = () => {
       )}
 
       <Dialog open={viewOpen} onClose={closeViewDialog} fullWidth maxWidth="md">
-        <DialogTitle>{viewingEntry?.title || "Journal Entry"}</DialogTitle>
+        <DialogTitle>{viewingEntry?.title || "Insight Entry"}</DialogTitle>
         <DialogContent dividers>
           {viewingEntry ? (
             <Stack spacing={2}>
@@ -1065,7 +1068,7 @@ const JournalHub = () => {
       </Dialog>
 
       <Dialog open={dialogOpen} onClose={closeDialog} fullWidth maxWidth="md">
-        <DialogTitle>{editing ? "Edit Entry" : "New Journal Entry"}</DialogTitle>
+        <DialogTitle>{editing ? "Edit Entry" : "New Insight Entry"}</DialogTitle>
         <DialogContent dividers>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <TextField
@@ -1193,7 +1196,7 @@ const JournalHub = () => {
                     sx={{ p: 1.2, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}
                   >
                     <Stack direction="row" spacing={1} alignItems="center" sx={{ overflow: "hidden" }}>
-                      <Chip size="small" label={att.type === "audio" ? "Audio" : "Image"} />
+                      <Chip size="small" label={att.type === "audio" ? "Audio" : "Media"} />
                       <Typography variant="body2" noWrap>
                         {att.caption || `${att.type} attachment`}
                       </Typography>

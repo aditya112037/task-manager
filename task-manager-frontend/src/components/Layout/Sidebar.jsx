@@ -315,9 +315,9 @@ const Sidebar = ({ open, toggleSidebar, isMobile = false }) => {
 
             <ListItemButton
               component={Link}
-              to="/journal"
+              to="/insights"
               onClick={isMobile ? toggleSidebar : undefined}
-              selected={location.pathname.startsWith("/journal")}
+              selected={location.pathname.startsWith("/insights") || location.pathname.startsWith("/journal")}
               sx={{
                 color: theme.palette.sidebar.text,
                 borderRadius: 2,
@@ -348,7 +348,7 @@ const Sidebar = ({ open, toggleSidebar, isMobile = false }) => {
               </ListItemIcon>
               {showLabel && (
                 <ListItemText
-                  primary="Journal"
+                  primary="Insights"
                   sx={{ opacity: showLabel ? 1 : 0 }}
                 />
               )}

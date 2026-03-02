@@ -440,7 +440,7 @@ function AppContent() {
             }
           />
           <Route
-            path="/journal"
+            path="/insights"
             element={
               <ProtectedRoute>
                 <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
@@ -449,6 +449,7 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
+          <Route path="/journal" element={<Navigate to="/insights" replace />} />
           <Route
             path="/conference/:conferenceId"
             element={
