@@ -522,13 +522,12 @@ export default function Profile() {
               subtasks completed per 7-day window across the latest 4 weeks.
             </Alert>
           </Paper>
-          <Grid container spacing={2.2} sx={{ mt: 1.2 }}>
+          <Grid container spacing={2.2} alignItems="flex-start" sx={{ mt: 1.2 }}>
             <Grid item xs={12} md={6}>
               <Paper
                 sx={{
                   p: 2.5,
                   borderRadius: 4,
-                  height: "100%",
                   border: `1px solid ${panelBorder}`,
                   bgcolor: panelBg,
                   boxShadow: isLight ? "0 10px 20px rgba(20, 45, 70, 0.09)" : "0 12px 26px rgba(0, 0, 0, 0.22)",
@@ -596,7 +595,6 @@ export default function Profile() {
                 sx={{
                   p: 2.5,
                   borderRadius: 4,
-                  height: "100%",
                   border: `1px solid ${panelBorder}`,
                   bgcolor: panelBg,
                   boxShadow: isLight ? "0 10px 20px rgba(20, 45, 70, 0.09)" : "0 12px 26px rgba(0, 0, 0, 0.22)",

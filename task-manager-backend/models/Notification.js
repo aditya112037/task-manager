@@ -32,7 +32,8 @@ const notificationSchema = new mongoose.Schema(
   "task_commented",
   "team_joined",
   "team_left",
-  "team_role_updated"
+  "team_role_updated",
+  "focus_nudge"
 ],
       required: true,
     },

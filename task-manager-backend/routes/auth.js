@@ -5,12 +5,15 @@ const User = require('../models/user');
 const Team = require("../models/team");
 const Task = require('../models/task');
 const TTask = require('../models/TTask');
+const Notification = require("../models/Notification");
 const TaskProgressHistory = require("../models/TaskProgressHistory");
 const ExecutionScoreSnapshot = require("../models/ExecutionScoreSnapshot");
+const { emitNotificationsChanged } = require("../utils/notificationEvents");
 const { protect } = require('../middleware/auth');
 
 const router = express.Router();
 const STALLED_DAYS = Number(process.env.STALLED_DAYS || 2);
+const NUDGE_NOTIFICATION_DEDUPE_HOURS = Number(process.env.NUDGE_NOTIFICATION_DEDUPE_HOURS || 12);
 
 // Generate JWT
 const generateToken = (id) => {
@@ -323,6 +326,43 @@ router.get('/profile', protect, async (req, res) => {
       }
     });
     const needsAttentionTasks = Array.from(stalledTaskMap.values());
+    const nudgeReminder =
+      needsAttentionTasks.length > 0
+        ? `You have ${needsAttentionTasks.length} tasks with no progress update in ${STALLED_DAYS}+ days.`
+        : null;
+
+    if (needsAttentionTasks.length > 0) {
+      const signature = needsAttentionTasks
+        .map(
+          (item) =>
+            `${String(item.taskId || "")}:${Number(item.stalledSubtasks || 0)}:${Number(item.maxDaysStalled || 0)}`
+        )
+        .sort()
+        .join("|");
+      const dedupeSince = new Date(now.getTime() - NUDGE_NOTIFICATION_DEDUPE_HOURS * 60 * 60 * 1000);
+      const existingNudge = await Notification.findOne({
+        user: userId,
+        type: "focus_nudge",
+        "metadata.signature": signature,
+        createdAt: { $gte: dedupeSince },
+      }).select("_id");
+
+      if (!existingNudge) {
+        await Notification.create({
+          user: userId,
+          type: "focus_nudge",
+          title: "Focus Nudge",
+          message: nudgeReminder,
+          metadata: {
+            signature,
+            stalledDaysThreshold: STALLED_DAYS,
+            needsAttentionCount: needsAttentionTasks.length,
+            needsAttentionTasks: needsAttentionTasks.slice(0, 10),
+          },
+        });
+        emitNotificationsChanged([userId]);
+      }
+    }
 
     const badges = [];
     if (onTimeRate >= 90) {
@@ -397,10 +437,7 @@ router.get('/profile', protect, async (req, res) => {
         nudges: {
           stalledDaysThreshold: STALLED_DAYS,
           needsAttentionTasks,
-          reminder:
-            needsAttentionTasks.length > 0
-              ? `You have ${needsAttentionTasks.length} tasks with no progress update in ${STALLED_DAYS}+ days.`
-              : null,
+          reminder: nudgeReminder,
         },
       },
     });

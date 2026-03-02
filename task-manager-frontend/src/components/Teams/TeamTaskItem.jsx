@@ -294,7 +294,7 @@ export default function TeamTaskItem({
             </Typography>
             <Slider
               value={progressPercentage}
-              min={minTaskPercentage}
+              min={0}
               max={100}
               step={1}
               valueLabelDisplay="auto"

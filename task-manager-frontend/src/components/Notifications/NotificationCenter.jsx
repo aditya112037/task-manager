@@ -115,6 +115,8 @@ const NotificationCenter = () => {
         return <WarningIcon color="warning" />;
       case "task_overdue":
         return <ErrorIcon color="error" />;
+      case "focus_nudge":
+        return <WarningIcon color="warning" />;
       case "extension_approved":
         return <CheckCircleIcon color="success" />;
       default:
