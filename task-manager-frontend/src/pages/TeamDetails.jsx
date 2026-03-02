@@ -377,21 +377,32 @@ export default function TeamDetails() {
       setLoadingConference(false);
       
       if (active && conf) {
-        const newConference = {
-          conferenceId: conf.conferenceId,
-          teamId: conf.teamId,
-          createdBy: conf.createdBy,
-          speakerMode: conf.speakerMode,
-          startedAt: conf.startedAt,
-          // ✅ FIX 3: Add participantCount to conference state
-          participantCount: conf.participantCount ?? 0,
-        };
-        
-        // ✅ FIX 4: Remove "same conference" comparison during creation
-        // Server state is authoritative - always update
-        console.log("🔄 Updating conference state (server authoritative)");
-        setConference(newConference);
-        conferenceRef.current = newConference;
+        // Preserve last known participant count if state payload omits it.
+        // This avoids 1 -> 0 flicker when `conference:state` arrives after
+        // `conference:participants` during create/join handshakes.
+        setConference((prev) => {
+          const fallbackCount =
+            prev?.conferenceId === conf.conferenceId ?
+              prev?.participantCount :
+              conferenceRef.current?.conferenceId === conf.conferenceId ?
+                conferenceRef.current?.participantCount :
+                0;
+
+          const newConference = {
+            conferenceId: conf.conferenceId,
+            teamId: conf.teamId,
+            createdBy: conf.createdBy,
+            speakerMode: conf.speakerMode,
+            startedAt: conf.startedAt,
+            participantCount:
+              Number.isFinite(Number(conf.participantCount)) ?
+                Number(conf.participantCount) :
+                Number(fallbackCount || 0),
+          };
+
+          conferenceRef.current = newConference;
+          return newConference;
+        });
       } else {
         // ✅ FIX 1: DO NOT clear immediately – wait for confirmation
         if (conferenceRef.current) {
