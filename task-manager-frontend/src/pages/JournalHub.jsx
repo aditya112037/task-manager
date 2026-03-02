@@ -39,6 +39,8 @@ import TimelineIcon from "@mui/icons-material/Timeline";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import VisibilityIcon from "@mui/icons-material/Visibility";
 import { journalsAPI } from "../services/api";
 
 const MOOD_OPTIONS = [
@@ -135,7 +137,7 @@ const getCalendarCells = (monthDate) => {
   return cells;
 };
 
-const EntryCard = ({ entry, onFavorite, onEdit, onDelete }) => (
+const EntryCard = ({ entry, onFavorite, onEdit, onDelete, onView }) => (
   <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
     <CardContent sx={{ flexGrow: 1 }}>
       <Stack direction="row" justifyContent="space-between" spacing={1}>
@@ -160,6 +162,39 @@ const EntryCard = ({ entry, onFavorite, onEdit, onDelete }) => (
         {String(entry.content || "").slice(0, 220) || "No content"}
         {String(entry.content || "").length > 220 ? "..." : ""}
       </Typography>
+      {(() => {
+        const media = (entry.attachments || []).filter((item) => item.type === "image" || item.type === "audio");
+        const previewImage = media.find((item) => item.type === "image");
+        const previewAudio = media.find((item) => item.type === "audio");
+        return (
+          <>
+            {previewImage?.url && (
+              <Box sx={{ mt: 1.5 }}>
+                <Box
+                  component="img"
+                  src={previewImage.url}
+                  alt={previewImage.caption || "Journal image"}
+                  sx={{
+                    width: "100%",
+                    height: 150,
+                    borderRadius: 1.5,
+                    objectFit: "cover",
+                    border: "1px solid",
+                    borderColor: "divider",
+                  }}
+                />
+              </Box>
+            )}
+            {previewAudio?.url && (
+              <Box sx={{ mt: 1.3 }}>
+                <audio controls preload="none" style={{ width: "100%" }}>
+                  <source src={previewAudio.url} />
+                </audio>
+              </Box>
+            )}
+          </>
+        );
+      })()}
       {(entry.attachments || []).length > 0 && (
         <Stack direction="row" sx={{ mt: 1.2, flexWrap: "wrap", gap: 0.8 }}>
           {(entry.attachments || []).slice(0, 3).map((att, idx) => (
@@ -182,6 +217,9 @@ const EntryCard = ({ entry, onFavorite, onEdit, onDelete }) => (
       )}
     </CardContent>
     <CardActions>
+      <Button size="small" startIcon={<VisibilityIcon />} onClick={() => onView(entry)}>
+        View
+      </Button>
       <Button size="small" startIcon={<EditIcon />} onClick={() => onEdit(entry)}>
         Edit
       </Button>
@@ -199,6 +237,8 @@ const JournalHub = () => {
   const [error, setError] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [viewingEntry, setViewingEntry] = useState(null);
+  const [viewOpen, setViewOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [viewMode, setViewMode] = useState("list");
   const [selectedDate, setSelectedDate] = useState("");
@@ -330,6 +370,16 @@ const JournalHub = () => {
     setDialogOpen(false);
     setEditing(null);
     setForm(emptyForm);
+  };
+
+  const openViewDialog = (entry) => {
+    setViewingEntry(entry);
+    setViewOpen(true);
+  };
+
+  const closeViewDialog = () => {
+    setViewOpen(false);
+    setViewingEntry(null);
   };
 
   const submitEntry = async () => {
@@ -493,7 +543,13 @@ const JournalHub = () => {
       <Grid container spacing={2}>
         {visibleEntries.map((entry) => (
           <Grid item xs={12} md={6} lg={4} key={entry._id}>
-            <EntryCard entry={entry} onFavorite={handleFavoriteToggle} onEdit={openEditDialog} onDelete={handleDelete} />
+            <EntryCard
+              entry={entry}
+              onFavorite={handleFavoriteToggle}
+              onEdit={openEditDialog}
+              onDelete={handleDelete}
+              onView={openViewDialog}
+            />
           </Grid>
         ))}
       </Grid>
@@ -525,6 +581,7 @@ const JournalHub = () => {
                     onFavorite={handleFavoriteToggle}
                     onEdit={openEditDialog}
                     onDelete={handleDelete}
+                    onView={openViewDialog}
                   />
                 </Grid>
               ))}
@@ -747,6 +804,132 @@ const JournalHub = () => {
       ) : (
         renderList()
       )}
+
+      <Dialog open={viewOpen} onClose={closeViewDialog} fullWidth maxWidth="md">
+        <DialogTitle>{viewingEntry?.title || "Journal Entry"}</DialogTitle>
+        <DialogContent dividers>
+          {viewingEntry ? (
+            <Stack spacing={2}>
+              <Typography variant="caption" color="text.secondary">
+                {new Date(viewingEntry.entryDate || viewingEntry.createdAt).toLocaleString()}
+              </Typography>
+              <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
+                <Chip size="small" label={`Mood: ${viewingEntry.mood || "neutral"}`} />
+                <Chip size="small" variant="outlined" label={`Energy: ${viewingEntry.energy || 3}/5`} />
+                <Chip size="small" variant="outlined" label={`${viewingEntry.wordCount || 0} words`} />
+              </Stack>
+              <Typography variant="body1" sx={{ whiteSpace: "pre-line" }}>
+                {viewingEntry.content || "No content"}
+              </Typography>
+
+              {((viewingEntry.attachments || []).filter((item) => item.type === "image").length > 0) && (
+                <Box>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Images
+                  </Typography>
+                  <Grid container spacing={1.2}>
+                    {(viewingEntry.attachments || [])
+                      .filter((item) => item.type === "image")
+                      .map((item, idx) => (
+                        <Grid item xs={12} sm={6} key={`view-image-${idx}`}>
+                          <Box
+                            component="img"
+                            src={item.url}
+                            alt={item.caption || `Image ${idx + 1}`}
+                            sx={{
+                              width: "100%",
+                              borderRadius: 2,
+                              maxHeight: 280,
+                              objectFit: "cover",
+                              border: "1px solid",
+                              borderColor: "divider",
+                            }}
+                          />
+                          {item.caption ? (
+                            <Typography variant="caption" color="text.secondary">
+                              {item.caption}
+                            </Typography>
+                          ) : null}
+                        </Grid>
+                      ))}
+                  </Grid>
+                </Box>
+              )}
+
+              {((viewingEntry.attachments || []).filter((item) => item.type === "audio").length > 0) && (
+                <Box>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Audio
+                  </Typography>
+                  <Stack spacing={1}>
+                    {(viewingEntry.attachments || [])
+                      .filter((item) => item.type === "audio")
+                      .map((item, idx) => (
+                        <Paper key={`view-audio-${idx}`} sx={{ p: 1.2 }}>
+                          <Typography variant="body2" sx={{ mb: 0.7 }}>
+                            {item.caption || `Audio ${idx + 1}`}
+                          </Typography>
+                          <audio controls preload="metadata" style={{ width: "100%" }}>
+                            <source src={item.url} />
+                          </audio>
+                        </Paper>
+                      ))}
+                  </Stack>
+                </Box>
+              )}
+
+              {((viewingEntry.attachments || []).filter((item) => item.type === "link").length > 0) && (
+                <Box>
+                  <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                    Links
+                  </Typography>
+                  <Stack spacing={1}>
+                    {(viewingEntry.attachments || [])
+                      .filter((item) => item.type === "link")
+                      .map((item, idx) => (
+                        <Button
+                          key={`view-link-${idx}`}
+                          variant="outlined"
+                          component="a"
+                          href={item.url}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          endIcon={<OpenInNewIcon />}
+                          sx={{ justifyContent: "flex-start" }}
+                        >
+                          {item.caption || item.url}
+                        </Button>
+                      ))}
+                  </Stack>
+                </Box>
+              )}
+
+              {(viewingEntry.tags || []).length > 0 && (
+                <Stack direction="row" sx={{ flexWrap: "wrap", gap: 0.8 }}>
+                  {(viewingEntry.tags || []).map((tag) => (
+                    <Chip key={`view-tag-${tag}`} size="small" variant="outlined" label={`#${tag}`} />
+                  ))}
+                </Stack>
+              )}
+            </Stack>
+          ) : null}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeViewDialog}>Close</Button>
+          {viewingEntry ? (
+            <Button
+              onClick={() => {
+                closeViewDialog();
+                openEditDialog(viewingEntry);
+              }}
+              variant="contained"
+              startIcon={<EditIcon />}
+            >
+              Edit Entry
+            </Button>
+          ) : null}
+        </DialogActions>
+      </Dialog>
 
       <Dialog open={dialogOpen} onClose={closeDialog} fullWidth maxWidth="md">
         <DialogTitle>{editing ? "Edit Entry" : "New Journal Entry"}</DialogTitle>
