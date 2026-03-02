@@ -113,13 +113,20 @@ const normalizeList = (values, maxItems = 10, maxLen = 80) => {
     .slice(0, maxItems);
 };
 
+const countWords = (value) => {
+  const text = String(value || "").trim();
+  if (!text) return 0;
+  const words = text.match(/\S+/g);
+  return words ? words.length : 0;
+};
+
 journalEntrySchema.pre("save", function normalizeJournalFields(next) {
   this.title = String(this.title || "").trim() || "Untitled Entry";
   this.content = String(this.content || "").trim();
   this.tags = normalizeList(this.tags, 12, 36).map((tag) => tag.toLowerCase());
   this.gratitude = normalizeList(this.gratitude, 5, 160);
   this.highlights = normalizeList(this.highlights, 8, 220);
-  this.wordCount = this.content ? this.content.split(/\s+/).filter(Boolean).length : 0;
+  this.wordCount = countWords(this.content);
   next();
 });
 

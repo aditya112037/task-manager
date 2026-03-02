@@ -63,6 +63,81 @@ const TEMPLATE_OPTIONS = [
   { value: "travel-log", label: "Travel Log" },
 ];
 
+const MOOD_TONE = {
+  awful: "Be gentle. Keep this short and honest.",
+  sad: "Write softly. Name what hurts and what helps.",
+  anxious: "Ground yourself. Focus on what is in your control.",
+  low: "Keep it simple. One small win is enough.",
+  neutral: "Document clearly. Keep it balanced and practical.",
+  calm: "Reflect steadily and capture what worked.",
+  good: "Build momentum by noting progress and gratitude.",
+  excited: "Channel energy into clear next steps.",
+  grateful: "Lean into appreciation and relationships.",
+  great: "Celebrate boldly and define a meaningful next move.",
+};
+
+const MOOD_CARD_STYLE = {
+  awful: { borderColor: "error.dark", glow: "rgba(211,47,47,0.16)" },
+  sad: { borderColor: "error.main", glow: "rgba(244,67,54,0.14)" },
+  anxious: { borderColor: "warning.main", glow: "rgba(237,108,2,0.18)" },
+  low: { borderColor: "warning.dark", glow: "rgba(255,167,38,0.14)" },
+  neutral: { borderColor: "divider", glow: "rgba(148,163,184,0.12)" },
+  calm: { borderColor: "info.main", glow: "rgba(2,136,209,0.16)" },
+  good: { borderColor: "success.main", glow: "rgba(46,125,50,0.14)" },
+  excited: { borderColor: "secondary.main", glow: "rgba(156,39,176,0.16)" },
+  grateful: { borderColor: "primary.main", glow: "rgba(2,136,209,0.16)" },
+  great: { borderColor: "success.light", glow: "rgba(56,142,60,0.24)" },
+};
+
+const formatPromptDate = (value) => {
+  const d = new Date(value || Date.now());
+  return d.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+};
+
+const createTemplateDraft = (template, mood, entryDate) => {
+  const tone = MOOD_TONE[mood] || MOOD_TONE.neutral;
+  const dateLabel = formatPromptDate(entryDate);
+
+  if (template === "morning-intent") {
+    return {
+      title: `Morning Intent - ${dateLabel}`,
+      content: `Tone: ${tone}\n\nTop focus for today:\n- \n\nWhy this matters:\n- \n\nWhat I will protect (time/energy):\n- \n\nPotential friction + response plan:\n- \n\nOne promise to myself:\n- `,
+      gratitudeInput: "fresh start, support system",
+      highlightsInput: "most important outcome for tonight",
+    };
+  }
+
+  if (template === "day-review") {
+    return {
+      title: `Day Review - ${dateLabel}`,
+      content: `Tone: ${tone}\n\nWhat happened today:\n- \n\nWhat I handled well:\n- \n\nWhat felt hard:\n- \n\nLesson to carry forward:\n- \n\nTomorrow's first step:\n- `,
+      gratitudeInput: "one person, one moment",
+      highlightsInput: "key win, key learning",
+    };
+  }
+
+  if (template === "travel-log") {
+    return {
+      title: `Travel Log - ${dateLabel}`,
+      content: `Tone: ${tone}\n\nWhere I went:\n- \n\nBest moment:\n- \n\nPeople I met:\n- \n\nFood / culture notes:\n- \n\nPractical notes for future me:\n- `,
+      gratitudeInput: "local kindness, safe travel",
+      highlightsInput: "favorite place, must-repeat experience",
+    };
+  }
+
+  return {
+    title: `Freeform - ${dateLabel}`,
+    content: `Tone: ${tone}\n\nWrite freely.\n`,
+    gratitudeInput: "",
+    highlightsInput: "",
+  };
+};
+
 const REMINDER_ENABLED_KEY = "journalReminderEnabled";
 const REMINDER_TIME_KEY = "journalReminderTime";
 const REMINDER_LAST_KEY = "journalReminderLastDate";
@@ -102,6 +177,19 @@ const parseCommaInput = (value) =>
     .map((item) => item.trim())
     .filter(Boolean);
 
+const countWordsFromContent = (value) => {
+  const text = String(value || "").trim();
+  if (!text) return 0;
+  const words = text.match(/\S+/g);
+  return words ? words.length : 0;
+};
+
+const getDisplayWordCount = (entry) => {
+  const backendCount = Number(entry?.wordCount || 0);
+  const computed = countWordsFromContent(entry?.content || "");
+  return Math.max(backendCount, computed);
+};
+
 const fileToDataUrl = (file) =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -138,7 +226,17 @@ const getCalendarCells = (monthDate) => {
 };
 
 const EntryCard = ({ entry, onFavorite, onEdit, onDelete, onView }) => (
-  <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+  <Card
+    sx={{
+      height: "100%",
+      display: "flex",
+      flexDirection: "column",
+      border: "1px solid",
+      borderColor: MOOD_CARD_STYLE[entry.mood || "neutral"]?.borderColor || "divider",
+      boxShadow: `0 0 0 1px ${MOOD_CARD_STYLE[entry.mood || "neutral"]?.glow || "transparent"}, 0 10px 22px rgba(0,0,0,0.08)`,
+      backgroundImage: `linear-gradient(180deg, ${MOOD_CARD_STYLE[entry.mood || "neutral"]?.glow || "transparent"} 0%, transparent 42%)`,
+    }}
+  >
     <CardContent sx={{ flexGrow: 1 }}>
       <Stack direction="row" justifyContent="space-between" spacing={1}>
         <Typography variant="h6" sx={{ pr: 1 }}>
@@ -156,7 +254,7 @@ const EntryCard = ({ entry, onFavorite, onEdit, onDelete, onView }) => (
       <Stack direction="row" spacing={1} sx={{ mt: 1, mb: 1, flexWrap: "wrap", gap: 1 }}>
         <Chip size="small" label={`Mood: ${entry.mood || "neutral"}`} />
         <Chip size="small" variant="outlined" label={`Energy: ${entry.energy || 3}/5`} />
-        <Chip size="small" variant="outlined" label={`${entry.wordCount || 0} words`} />
+        <Chip size="small" variant="outlined" label={`${getDisplayWordCount(entry)} words`} />
       </Stack>
       <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: "pre-line" }}>
         {String(entry.content || "").slice(0, 220) || "No content"}
@@ -337,8 +435,19 @@ const JournalHub = () => {
   };
 
   const openCreateDialog = () => {
+    const now = new Date();
+    const draft = createTemplateDraft("freeform", "neutral", now);
     setEditing(null);
-    setForm({ ...emptyForm, entryDate: toLocalInputValue(new Date()) });
+    setForm({
+      ...emptyForm,
+      template: "freeform",
+      mood: "neutral",
+      entryDate: toLocalInputValue(now),
+      title: draft.title,
+      content: draft.content,
+      gratitudeInput: draft.gratitudeInput,
+      highlightsInput: draft.highlightsInput,
+    });
     setDialogOpen(true);
   };
 
@@ -370,6 +479,30 @@ const JournalHub = () => {
     setDialogOpen(false);
     setEditing(null);
     setForm(emptyForm);
+  };
+
+  const applyTemplateToForm = (templateValue, moodValue, dateValue) => {
+    const draft = createTemplateDraft(templateValue, moodValue, dateValue || new Date());
+    setForm((prev) => ({
+      ...prev,
+      template: templateValue,
+      title: draft.title,
+      content: draft.content,
+      gratitudeInput: draft.gratitudeInput,
+      highlightsInput: draft.highlightsInput,
+    }));
+  };
+
+  const updateToneLine = (content, moodValue) => {
+    const toneLine = `Tone: ${MOOD_TONE[moodValue] || MOOD_TONE.neutral}`;
+    const text = String(content || "");
+    if (!text.trim()) return `${toneLine}\n\n`;
+    if (text.startsWith("Tone: ")) {
+      const firstBreak = text.indexOf("\n");
+      if (firstBreak === -1) return toneLine;
+      return `${toneLine}${text.slice(firstBreak)}`;
+    }
+    return `${toneLine}\n\n${text}`;
   };
 
   const openViewDialog = (entry) => {
@@ -816,7 +949,7 @@ const JournalHub = () => {
               <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
                 <Chip size="small" label={`Mood: ${viewingEntry.mood || "neutral"}`} />
                 <Chip size="small" variant="outlined" label={`Energy: ${viewingEntry.energy || 3}/5`} />
-                <Chip size="small" variant="outlined" label={`${viewingEntry.wordCount || 0} words`} />
+                <Chip size="small" variant="outlined" label={`${getDisplayWordCount(viewingEntry)} words`} />
               </Stack>
               <Typography variant="body1" sx={{ whiteSpace: "pre-line" }}>
                 {viewingEntry.content || "No content"}
@@ -955,7 +1088,17 @@ const JournalHub = () => {
               <Grid item xs={12} md={4}>
                 <FormControl fullWidth>
                   <InputLabel>Mood</InputLabel>
-                  <Select label="Mood" value={form.mood} onChange={(e) => setForm((prev) => ({ ...prev, mood: e.target.value }))}>
+                  <Select
+                    label="Mood"
+                    value={form.mood}
+                    onChange={(e) =>
+                      setForm((prev) => ({
+                        ...prev,
+                        mood: e.target.value,
+                        content: updateToneLine(prev.content, e.target.value),
+                      }))
+                    }
+                  >
                     {MOOD_OPTIONS.map((mood) => (
                       <MenuItem key={mood.value} value={mood.value}>
                         {mood.label}
@@ -981,6 +1124,17 @@ const JournalHub = () => {
                 </FormControl>
               </Grid>
             </Grid>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }}>
+              <Button
+                variant="outlined"
+                onClick={() => applyTemplateToForm(form.template, form.mood, form.entryDate || new Date())}
+              >
+                Apply Selected Template
+              </Button>
+              <Typography variant="caption" color="text.secondary">
+                {MOOD_TONE[form.mood] || MOOD_TONE.neutral}
+              </Typography>
+            </Stack>
             <Box>
               <Typography gutterBottom>Energy ({form.energy}/5)</Typography>
               <Slider
@@ -1001,6 +1155,9 @@ const JournalHub = () => {
               value={form.content}
               onChange={(e) => setForm((prev) => ({ ...prev, content: e.target.value }))}
             />
+            <Typography variant="caption" color="text.secondary">
+              Word Count: {countWordsFromContent(form.content)}
+            </Typography>
             <TextField
               label="Tags (comma separated)"
               fullWidth
