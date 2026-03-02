@@ -522,8 +522,16 @@ export default function Profile() {
               subtasks completed per 7-day window across the latest 4 weeks.
             </Alert>
           </Paper>
-          <Grid container spacing={2.2} alignItems="flex-start" sx={{ mt: 1.2 }}>
-            <Grid item xs={12} md={6}>
+          <Box
+            sx={{
+              mt: 1.2,
+              display: "grid",
+              gap: 2.2,
+              alignItems: "start",
+              gridTemplateColumns: { xs: "1fr", md: "minmax(0, 1fr) minmax(0, 1fr)" },
+            }}
+          >
+            <Box>
               <Paper
                 sx={{
                   p: 2.5,
@@ -588,9 +596,9 @@ export default function Profile() {
                   )}
                 </Stack>
               </Paper>
-            </Grid>
+            </Box>
 
-            <Grid item xs={12} md={6}>
+            <Box>
               <Paper
                 sx={{
                   p: 2.5,
@@ -639,8 +647,8 @@ export default function Profile() {
                   ))}
                 </Stack>
               </Paper>
-            </Grid>
-          </Grid>
+            </Box>
+          </Box>
         </Box>
       </Box>
     </Box>
