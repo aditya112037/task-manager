@@ -94,6 +94,17 @@ const sanitizePayload = (body = {}) => {
   if (Object.prototype.hasOwnProperty.call(payload, "highlights")) {
     payload.highlights = toArray(payload.highlights);
   }
+  if (Object.prototype.hasOwnProperty.call(payload, "attachments")) {
+    const list = Array.isArray(payload.attachments) ? payload.attachments : [];
+    payload.attachments = list
+      .map((item) => ({
+        type: String(item?.type || "").trim(),
+        url: String(item?.url || "").trim(),
+        caption: String(item?.caption || "").trim().slice(0, 240),
+      }))
+      .filter((item) => ["image", "audio", "link"].includes(item.type) && Boolean(item.url))
+      .slice(0, 12);
+  }
   return payload;
 };
 

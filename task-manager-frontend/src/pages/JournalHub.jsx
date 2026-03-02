@@ -64,6 +64,8 @@ const TEMPLATE_OPTIONS = [
 const REMINDER_ENABLED_KEY = "journalReminderEnabled";
 const REMINDER_TIME_KEY = "journalReminderTime";
 const REMINDER_LAST_KEY = "journalReminderLastDate";
+const MAX_MEDIA_FILES = 8;
+const MAX_MEDIA_BYTES = 4 * 1024 * 1024;
 
 const emptyForm = {
   title: "",
@@ -76,6 +78,8 @@ const emptyForm = {
   gratitudeInput: "",
   highlightsInput: "",
   locationLabel: "",
+  linkInput: "",
+  attachments: [],
 };
 
 const toLocalInputValue = (value) => {
@@ -95,6 +99,14 @@ const parseCommaInput = (value) =>
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+
+const fileToDataUrl = (file) =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
+    reader.readAsDataURL(file);
+  });
 
 const toDateKey = (value) => {
   const date = new Date(value);
@@ -148,6 +160,19 @@ const EntryCard = ({ entry, onFavorite, onEdit, onDelete }) => (
         {String(entry.content || "").slice(0, 220) || "No content"}
         {String(entry.content || "").length > 220 ? "..." : ""}
       </Typography>
+      {(entry.attachments || []).length > 0 && (
+        <Stack direction="row" sx={{ mt: 1.2, flexWrap: "wrap", gap: 0.8 }}>
+          {(entry.attachments || []).slice(0, 3).map((att, idx) => (
+            <Chip
+              key={`${entry._id}-att-${idx}`}
+              size="small"
+              color="primary"
+              variant="outlined"
+              label={att.type === "link" ? "Link" : att.type === "audio" ? "Audio" : "Image"}
+            />
+          ))}
+        </Stack>
+      )}
       {(entry.tags || []).length > 0 && (
         <Stack direction="row" sx={{ mt: 1.5, flexWrap: "wrap", gap: 0.8 }}>
           {entry.tags.slice(0, 6).map((tag) => (
@@ -279,6 +304,10 @@ const JournalHub = () => {
 
   const openEditDialog = (entry) => {
     setEditing(entry);
+    const existingLinks = (entry.attachments || [])
+      .filter((item) => item.type === "link" && String(item.url || "").startsWith("http"))
+      .map((item) => item.url)
+      .join(", ");
     setForm({
       title: entry.title || "",
       content: entry.content || "",
@@ -290,6 +319,8 @@ const JournalHub = () => {
       gratitudeInput: (entry.gratitude || []).join(", "),
       highlightsInput: (entry.highlights || []).join(", "),
       locationLabel: entry.location?.label || "",
+      linkInput: existingLinks,
+      attachments: (entry.attachments || []).filter((item) => item.type !== "link"),
     });
     setDialogOpen(true);
   };
@@ -304,6 +335,9 @@ const JournalHub = () => {
   const submitEntry = async () => {
     try {
       setSaving(true);
+      const linkAttachments = parseCommaInput(form.linkInput)
+        .filter((url) => /^https?:\/\//i.test(url))
+        .map((url) => ({ type: "link", url, caption: "" }));
       const payload = {
         title: form.title,
         content: form.content,
@@ -315,6 +349,7 @@ const JournalHub = () => {
         gratitude: parseCommaInput(form.gratitudeInput),
         highlights: parseCommaInput(form.highlightsInput),
         location: { label: form.locationLabel || "" },
+        attachments: [...(form.attachments || []), ...linkAttachments].slice(0, 12),
       };
       if (editing?._id) {
         await journalsAPI.updateEntry(editing._id, payload);
@@ -329,6 +364,51 @@ const JournalHub = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleMediaUpload = async (event) => {
+    const files = Array.from(event.target.files || []);
+    if (files.length === 0) return;
+    try {
+      const current = form.attachments || [];
+      const remainingSlots = Math.max(0, MAX_MEDIA_FILES - current.length);
+      const accepted = files.slice(0, remainingSlots);
+      const nextAttachments = [];
+      for (const file of accepted) {
+        if (file.size > MAX_MEDIA_BYTES) {
+          setError(`"${file.name}" exceeds 4MB and was skipped.`);
+          continue;
+        }
+        const type = file.type.startsWith("image/")
+          ? "image"
+          : file.type.startsWith("audio/")
+            ? "audio"
+            : "";
+        if (!type) continue;
+        const dataUrl = await fileToDataUrl(file);
+        nextAttachments.push({
+          type,
+          url: dataUrl,
+          caption: file.name,
+        });
+      }
+      setForm((prev) => ({
+        ...prev,
+        attachments: [...(prev.attachments || []), ...nextAttachments].slice(0, MAX_MEDIA_FILES),
+      }));
+    } catch (err) {
+      console.error(err);
+      setError("Failed to upload media.");
+    } finally {
+      event.target.value = "";
+    }
+  };
+
+  const removeAttachment = (index) => {
+    setForm((prev) => ({
+      ...prev,
+      attachments: (prev.attachments || []).filter((_, i) => i !== index),
+    }));
   };
 
   const handleDelete = async (entryId) => {
@@ -755,6 +835,41 @@ const JournalHub = () => {
               fullWidth
               value={form.highlightsInput}
               onChange={(e) => setForm((prev) => ({ ...prev, highlightsInput: e.target.value }))}
+            />
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.2} alignItems={{ sm: "center" }}>
+              <Button variant="outlined" component="label">
+                Upload Media
+                <input hidden type="file" accept="image/*,audio/*" multiple onChange={handleMediaUpload} />
+              </Button>
+              <Typography variant="caption" color="text.secondary">
+                Images/audio up to 4MB each, max {MAX_MEDIA_FILES} files.
+              </Typography>
+            </Stack>
+            {(form.attachments || []).length > 0 && (
+              <Stack spacing={1}>
+                {(form.attachments || []).map((att, index) => (
+                  <Paper
+                    key={`att-${index}`}
+                    sx={{ p: 1.2, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}
+                  >
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ overflow: "hidden" }}>
+                      <Chip size="small" label={att.type === "audio" ? "Audio" : "Image"} />
+                      <Typography variant="body2" noWrap>
+                        {att.caption || `${att.type} attachment`}
+                      </Typography>
+                    </Stack>
+                    <Button size="small" color="error" onClick={() => removeAttachment(index)}>
+                      Remove
+                    </Button>
+                  </Paper>
+                ))}
+              </Stack>
+            )}
+            <TextField
+              label="Links (comma separated https URLs)"
+              fullWidth
+              value={form.linkInput}
+              onChange={(e) => setForm((prev) => ({ ...prev, linkInput: e.target.value }))}
             />
             <TextField
               label="Location"
