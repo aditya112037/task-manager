@@ -12,6 +12,7 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   FormControl,
   FormControlLabel,
   Grid,
@@ -32,13 +33,24 @@ import FavoriteIcon from "@mui/icons-material/Favorite";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import AddIcon from "@mui/icons-material/Add";
+import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
+import ViewAgendaIcon from "@mui/icons-material/ViewAgenda";
+import TimelineIcon from "@mui/icons-material/Timeline";
+import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import NotificationsActiveIcon from "@mui/icons-material/NotificationsActive";
 import { journalsAPI } from "../services/api";
 
 const MOOD_OPTIONS = [
   { value: "awful", label: "Awful" },
+  { value: "sad", label: "Sad" },
+  { value: "anxious", label: "Anxious" },
   { value: "low", label: "Low" },
   { value: "neutral", label: "Neutral" },
+  { value: "calm", label: "Calm" },
   { value: "good", label: "Good" },
+  { value: "excited", label: "Excited" },
+  { value: "grateful", label: "Grateful" },
   { value: "great", label: "Great" },
 ];
 
@@ -48,6 +60,10 @@ const TEMPLATE_OPTIONS = [
   { value: "day-review", label: "Day Review" },
   { value: "travel-log", label: "Travel Log" },
 ];
+
+const REMINDER_ENABLED_KEY = "journalReminderEnabled";
+const REMINDER_TIME_KEY = "journalReminderTime";
+const REMINDER_LAST_KEY = "journalReminderLastDate";
 
 const emptyForm = {
   title: "",
@@ -80,6 +96,77 @@ const parseCommaInput = (value) =>
     .map((item) => item.trim())
     .filter(Boolean);
 
+const toDateKey = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const monthLabel = (date) =>
+  date.toLocaleString(undefined, { month: "long", year: "numeric" });
+
+const getCalendarCells = (monthDate) => {
+  const start = new Date(monthDate.getFullYear(), monthDate.getMonth(), 1);
+  const daysInMonth = new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 0).getDate();
+  const firstDay = start.getDay();
+  const cells = [];
+  for (let i = 0; i < firstDay; i += 1) {
+    cells.push({ key: `blank-${i}`, day: null });
+  }
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const d = new Date(monthDate.getFullYear(), monthDate.getMonth(), day);
+    cells.push({ key: `day-${day}`, day, dateKey: toDateKey(d) });
+  }
+  return cells;
+};
+
+const EntryCard = ({ entry, onFavorite, onEdit, onDelete }) => (
+  <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
+    <CardContent sx={{ flexGrow: 1 }}>
+      <Stack direction="row" justifyContent="space-between" spacing={1}>
+        <Typography variant="h6" sx={{ pr: 1 }}>
+          {entry.title || "Untitled Entry"}
+        </Typography>
+        <Tooltip title={entry.isFavorite ? "Unfavorite" : "Favorite"}>
+          <IconButton onClick={() => onFavorite(entry._id)} size="small">
+            {entry.isFavorite ? <FavoriteIcon color="error" /> : <FavoriteBorderIcon />}
+          </IconButton>
+        </Tooltip>
+      </Stack>
+      <Typography variant="caption" color="text.secondary">
+        {new Date(entry.entryDate || entry.createdAt).toLocaleString()}
+      </Typography>
+      <Stack direction="row" spacing={1} sx={{ mt: 1, mb: 1, flexWrap: "wrap", gap: 1 }}>
+        <Chip size="small" label={`Mood: ${entry.mood || "neutral"}`} />
+        <Chip size="small" variant="outlined" label={`Energy: ${entry.energy || 3}/5`} />
+        <Chip size="small" variant="outlined" label={`${entry.wordCount || 0} words`} />
+      </Stack>
+      <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: "pre-line" }}>
+        {String(entry.content || "").slice(0, 220) || "No content"}
+        {String(entry.content || "").length > 220 ? "..." : ""}
+      </Typography>
+      {(entry.tags || []).length > 0 && (
+        <Stack direction="row" sx={{ mt: 1.5, flexWrap: "wrap", gap: 0.8 }}>
+          {entry.tags.slice(0, 6).map((tag) => (
+            <Chip key={`${entry._id}-${tag}`} size="small" variant="outlined" label={`#${tag}`} />
+          ))}
+        </Stack>
+      )}
+    </CardContent>
+    <CardActions>
+      <Button size="small" startIcon={<EditIcon />} onClick={() => onEdit(entry)}>
+        Edit
+      </Button>
+      <Button size="small" color="error" startIcon={<DeleteOutlineIcon />} onClick={() => onDelete(entry._id)}>
+        Delete
+      </Button>
+    </CardActions>
+  </Card>
+);
+
 const JournalHub = () => {
   const [entries, setEntries] = useState([]);
   const [insights, setInsights] = useState(null);
@@ -88,6 +175,9 @@ const JournalHub = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [viewMode, setViewMode] = useState("list");
+  const [selectedDate, setSelectedDate] = useState("");
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
 
   const [filters, setFilters] = useState({
     search: "",
@@ -97,23 +187,30 @@ const JournalHub = () => {
 
   const [form, setForm] = useState(emptyForm);
 
-  const moodCounts = useMemo(() => {
-    if (!insights?.moodDistribution) return [];
-    return insights.moodDistribution;
-  }, [insights]);
+  const [reminderEnabled, setReminderEnabled] = useState(
+    localStorage.getItem(REMINDER_ENABLED_KEY) === "true"
+  );
+  const [reminderTime, setReminderTime] = useState(
+    localStorage.getItem(REMINDER_TIME_KEY) || "21:00"
+  );
+  const [notificationPermission, setNotificationPermission] = useState(
+    typeof Notification !== "undefined" ? Notification.permission : "denied"
+  );
+
+  const moodCounts = useMemo(() => insights?.moodDistribution || [], [insights]);
 
   const loadEntries = useCallback(async () => {
     try {
       setError("");
       setLoading(true);
-      const params = { limit: 50 };
+      const params = { limit: 120 };
       if (filters.search.trim()) params.search = filters.search.trim();
       if (filters.mood) params.mood = filters.mood;
       if (filters.favorite) params.favorite = true;
 
       const [entriesRes, insightsRes] = await Promise.all([
         journalsAPI.getEntries(params),
-        journalsAPI.getInsights(30),
+        journalsAPI.getInsights(180),
       ]);
 
       setEntries(entriesRes.data?.entries || []);
@@ -127,11 +224,52 @@ const JournalHub = () => {
   }, [filters.favorite, filters.mood, filters.search]);
 
   useEffect(() => {
-    const id = setTimeout(() => {
-      loadEntries();
-    }, 250);
+    const id = setTimeout(() => loadEntries(), 200);
     return () => clearTimeout(id);
   }, [loadEntries]);
+
+  useEffect(() => {
+    localStorage.setItem(REMINDER_ENABLED_KEY, String(reminderEnabled));
+  }, [reminderEnabled]);
+
+  useEffect(() => {
+    localStorage.setItem(REMINDER_TIME_KEY, reminderTime);
+  }, [reminderTime]);
+
+  useEffect(() => {
+    const tick = () => {
+      if (!reminderEnabled || notificationPermission !== "granted") return;
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, "0");
+      const mm = String(now.getMinutes()).padStart(2, "0");
+      const current = `${hh}:${mm}`;
+      if (current !== reminderTime) return;
+      const today = toDateKey(now);
+      const last = localStorage.getItem(REMINDER_LAST_KEY);
+      if (last === today) return;
+      localStorage.setItem(REMINDER_LAST_KEY, today);
+      const reminder = new Notification("Journal Reminder", {
+        body: "Take 2 minutes to write today's reflection.",
+      });
+      reminder.onclick = () => window.focus();
+    };
+    const interval = setInterval(tick, 30000);
+    return () => clearInterval(interval);
+  }, [notificationPermission, reminderEnabled, reminderTime]);
+
+  const askNotificationPermission = async () => {
+    if (typeof Notification === "undefined") {
+      setError("Notifications are not supported in this browser.");
+      return;
+    }
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationPermission(permission);
+    } catch (err) {
+      console.error(err);
+      setError("Could not request notification permission.");
+    }
+  };
 
   const openCreateDialog = () => {
     setEditing(null);
@@ -178,13 +316,11 @@ const JournalHub = () => {
         highlights: parseCommaInput(form.highlightsInput),
         location: { label: form.locationLabel || "" },
       };
-
       if (editing?._id) {
         await journalsAPI.updateEntry(editing._id, payload);
       } else {
         await journalsAPI.createEntry(payload);
       }
-
       closeDialog();
       await loadEntries();
     } catch (err) {
@@ -216,6 +352,175 @@ const JournalHub = () => {
     }
   };
 
+  const entriesByDay = useMemo(() => {
+    const map = new Map();
+    for (const entry of entries) {
+      const key = toDateKey(entry.entryDate || entry.createdAt);
+      if (!key) continue;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key).push(entry);
+    }
+    for (const items of map.values()) {
+      items.sort((a, b) => new Date(b.entryDate || b.createdAt) - new Date(a.entryDate || a.createdAt));
+    }
+    return map;
+  }, [entries]);
+
+  const visibleEntries = useMemo(() => {
+    if (!selectedDate) return entries;
+    return entries.filter((entry) => toDateKey(entry.entryDate || entry.createdAt) === selectedDate);
+  }, [entries, selectedDate]);
+
+  const timelineGroups = useMemo(() => {
+    const grouped = {};
+    visibleEntries.forEach((entry) => {
+      const key = toDateKey(entry.entryDate || entry.createdAt);
+      if (!key) return;
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(entry);
+    });
+    return Object.keys(grouped)
+      .sort((a, b) => new Date(b) - new Date(a))
+      .map((key) => ({
+        dateKey: key,
+        entries: grouped[key].sort((a, b) => new Date(b.entryDate || b.createdAt) - new Date(a.entryDate || a.createdAt)),
+      }));
+  }, [visibleEntries]);
+
+  const calendarCells = useMemo(() => getCalendarCells(calendarMonth), [calendarMonth]);
+
+  const changeMonth = (offset) => {
+    setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + offset, 1));
+  };
+
+  const renderList = () => {
+    if (visibleEntries.length === 0) {
+      return (
+        <Paper sx={{ p: 6, textAlign: "center", borderRadius: 3 }}>
+          <Typography variant="h6" gutterBottom>
+            No journal entries yet
+          </Typography>
+          <Typography color="text.secondary" sx={{ mb: 2 }}>
+            Start with a quick daily check-in.
+          </Typography>
+          <Button variant="contained" onClick={openCreateDialog}>
+            Create First Entry
+          </Button>
+        </Paper>
+      );
+    }
+    return (
+      <Grid container spacing={2}>
+        {visibleEntries.map((entry) => (
+          <Grid item xs={12} md={6} lg={4} key={entry._id}>
+            <EntryCard entry={entry} onFavorite={handleFavoriteToggle} onEdit={openEditDialog} onDelete={handleDelete} />
+          </Grid>
+        ))}
+      </Grid>
+    );
+  };
+
+  const renderTimeline = () => {
+    if (timelineGroups.length === 0) {
+      return <Alert severity="info">No entries match this date/filter selection.</Alert>;
+    }
+    return (
+      <Stack spacing={2}>
+        {timelineGroups.map((group) => (
+          <Paper key={group.dateKey} sx={{ p: 2.5, borderRadius: 3 }}>
+            <Typography variant="h6" sx={{ mb: 1 }}>
+              {new Date(`${group.dateKey}T00:00:00`).toLocaleDateString(undefined, {
+                weekday: "long",
+                month: "long",
+                day: "numeric",
+                year: "numeric",
+              })}
+            </Typography>
+            <Divider sx={{ mb: 2 }} />
+            <Grid container spacing={2}>
+              {group.entries.map((entry) => (
+                <Grid item xs={12} md={6} key={entry._id}>
+                  <EntryCard
+                    entry={entry}
+                    onFavorite={handleFavoriteToggle}
+                    onEdit={openEditDialog}
+                    onDelete={handleDelete}
+                  />
+                </Grid>
+              ))}
+            </Grid>
+          </Paper>
+        ))}
+      </Stack>
+    );
+  };
+
+  const renderCalendar = () => (
+    <Paper sx={{ p: 2.5, borderRadius: 3 }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+        <Button startIcon={<ChevronLeftIcon />} onClick={() => changeMonth(-1)}>
+          Prev
+        </Button>
+        <Typography variant="h6">{monthLabel(calendarMonth)}</Typography>
+        <Button endIcon={<ChevronRightIcon />} onClick={() => changeMonth(1)}>
+          Next
+        </Button>
+      </Stack>
+      <Grid container spacing={1}>
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+          <Grid item xs key={d}>
+            <Typography align="center" variant="caption" color="text.secondary">
+              {d}
+            </Typography>
+          </Grid>
+        ))}
+      </Grid>
+      <Grid container spacing={1} sx={{ mt: 0.5 }}>
+        {calendarCells.map((cell) => {
+          if (!cell.day) {
+            return (
+              <Grid item xs key={cell.key}>
+                <Box sx={{ height: 84 }} />
+              </Grid>
+            );
+          }
+          const count = entriesByDay.get(cell.dateKey)?.length || 0;
+          const active = selectedDate === cell.dateKey;
+          return (
+            <Grid item xs key={cell.key}>
+              <Paper
+                onClick={() => setSelectedDate((prev) => (prev === cell.dateKey ? "" : cell.dateKey))}
+                sx={{
+                  height: 84,
+                  p: 1,
+                  cursor: "pointer",
+                  border: "1px solid",
+                  borderColor: active ? "primary.main" : "divider",
+                  backgroundColor: active ? "action.selected" : "background.paper",
+                }}
+              >
+                <Typography variant="body2" fontWeight={700}>
+                  {cell.day}
+                </Typography>
+                {count > 0 && (
+                  <Chip size="small" color="primary" variant={active ? "filled" : "outlined"} label={`${count} entries`} />
+                )}
+              </Paper>
+            </Grid>
+          );
+        })}
+      </Grid>
+      <Stack direction="row" spacing={1} sx={{ mt: 2 }}>
+        <Button variant="outlined" size="small" onClick={() => setSelectedDate("")}>
+          Clear Date Filter
+        </Button>
+        <Button variant="outlined" size="small" onClick={() => setViewMode("timeline")}>
+          Open Timeline
+        </Button>
+      </Stack>
+    </Paper>
+  );
+
   return (
     <Container maxWidth="xl" sx={{ pb: 6 }}>
       <Paper sx={{ p: 3, mb: 3, borderRadius: 3 }}>
@@ -245,8 +550,8 @@ const JournalHub = () => {
               onChange={(e) => setFilters((prev) => ({ ...prev, search: e.target.value }))}
             />
           </Grid>
-          <Grid item xs={12} md={3}>
-            <FormControl fullWidth size="small">
+          <Grid item xs={12} md={4}>
+            <FormControl fullWidth size="small" sx={{ minWidth: 220 }}>
               <InputLabel>Mood</InputLabel>
               <Select
                 label="Mood"
@@ -262,7 +567,7 @@ const JournalHub = () => {
               </Select>
             </FormControl>
           </Grid>
-          <Grid item xs={12} md={3}>
+          <Grid item xs={12} md={2}>
             <FormControlLabel
               control={
                 <Switch
@@ -283,17 +588,69 @@ const JournalHub = () => {
 
       {insights && (
         <Paper sx={{ p: 2, mb: 3, borderRadius: 3 }}>
-          <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems={{ md: "center" }}>
+          <Stack direction={{ xs: "column", md: "row" }} spacing={1.2} alignItems={{ md: "center" }} sx={{ flexWrap: "wrap" }}>
             <Chip label={`Entries: ${insights.totalEntries || 0}`} />
             <Chip label={`Unique Days: ${insights.uniqueDays || 0}`} />
             <Chip label={`Favorites: ${insights.favoriteCount || 0}`} />
             <Chip label={`Avg Words: ${insights.avgWordsPerEntry || 0}`} />
+            <Chip color="success" variant="outlined" label={`Current Streak: ${insights?.streak?.current || 0} day(s)`} />
+            <Chip color="secondary" variant="outlined" label={`Best Streak: ${insights?.streak?.longest || 0} day(s)`} />
             {moodCounts.slice(0, 3).map((item) => (
               <Chip key={item.mood} variant="outlined" label={`${item.mood}: ${item.count}`} />
             ))}
           </Stack>
         </Paper>
       )}
+
+      <Paper sx={{ p: 2, mb: 3, borderRadius: 3 }}>
+        <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems={{ md: "center" }} justifyContent="space-between">
+          <Stack direction="row" spacing={1}>
+            <Button
+              variant={viewMode === "list" ? "contained" : "outlined"}
+              startIcon={<ViewAgendaIcon />}
+              onClick={() => setViewMode("list")}
+            >
+              List
+            </Button>
+            <Button
+              variant={viewMode === "timeline" ? "contained" : "outlined"}
+              startIcon={<TimelineIcon />}
+              onClick={() => setViewMode("timeline")}
+            >
+              Timeline
+            </Button>
+            <Button
+              variant={viewMode === "calendar" ? "contained" : "outlined"}
+              startIcon={<CalendarMonthIcon />}
+              onClick={() => setViewMode("calendar")}
+            >
+              Calendar
+            </Button>
+          </Stack>
+
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1} alignItems={{ sm: "center" }}>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <NotificationsActiveIcon fontSize="small" color={reminderEnabled ? "primary" : "disabled"} />
+              <FormControlLabel
+                control={<Switch checked={reminderEnabled} onChange={(e) => setReminderEnabled(e.target.checked)} />}
+                label="Daily reminder"
+              />
+            </Stack>
+            <TextField
+              type="time"
+              size="small"
+              label="Reminder Time"
+              InputLabelProps={{ shrink: true }}
+              value={reminderTime}
+              onChange={(e) => setReminderTime(e.target.value)}
+              sx={{ minWidth: 145 }}
+            />
+            <Button size="small" variant="outlined" onClick={askNotificationPermission}>
+              {notificationPermission === "granted" ? "Notifications Enabled" : "Enable Notifications"}
+            </Button>
+          </Stack>
+        </Stack>
+      </Paper>
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
@@ -303,71 +660,12 @@ const JournalHub = () => {
 
       {loading ? (
         <Typography color="text.secondary">Loading entries...</Typography>
-      ) : entries.length === 0 ? (
-        <Paper sx={{ p: 6, textAlign: "center", borderRadius: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            No journal entries yet
-          </Typography>
-          <Typography color="text.secondary" sx={{ mb: 2 }}>
-            Start with a quick daily check-in.
-          </Typography>
-          <Button variant="contained" onClick={openCreateDialog}>
-            Create First Entry
-          </Button>
-        </Paper>
+      ) : viewMode === "calendar" ? (
+        renderCalendar()
+      ) : viewMode === "timeline" ? (
+        renderTimeline()
       ) : (
-        <Grid container spacing={2}>
-          {entries.map((entry) => (
-            <Grid item xs={12} md={6} lg={4} key={entry._id}>
-              <Card sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
-                <CardContent sx={{ flexGrow: 1 }}>
-                  <Stack direction="row" justifyContent="space-between" spacing={1}>
-                    <Typography variant="h6" sx={{ pr: 1 }}>
-                      {entry.title || "Untitled Entry"}
-                    </Typography>
-                    <Tooltip title={entry.isFavorite ? "Unfavorite" : "Favorite"}>
-                      <IconButton onClick={() => handleFavoriteToggle(entry._id)} size="small">
-                        {entry.isFavorite ? <FavoriteIcon color="error" /> : <FavoriteBorderIcon />}
-                      </IconButton>
-                    </Tooltip>
-                  </Stack>
-                  <Typography variant="caption" color="text.secondary">
-                    {new Date(entry.entryDate || entry.createdAt).toLocaleString()}
-                  </Typography>
-                  <Stack direction="row" spacing={1} sx={{ mt: 1, mb: 1, flexWrap: "wrap", gap: 1 }}>
-                    <Chip size="small" label={`Mood: ${entry.mood || "neutral"}`} />
-                    <Chip size="small" variant="outlined" label={`Energy: ${entry.energy || 3}/5`} />
-                    <Chip size="small" variant="outlined" label={`${entry.wordCount || 0} words`} />
-                  </Stack>
-                  <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: "pre-line" }}>
-                    {String(entry.content || "").slice(0, 220) || "No content"}
-                    {String(entry.content || "").length > 220 ? "..." : ""}
-                  </Typography>
-                  {(entry.tags || []).length > 0 && (
-                    <Stack direction="row" sx={{ mt: 1.5, flexWrap: "wrap", gap: 0.8 }}>
-                      {entry.tags.slice(0, 6).map((tag) => (
-                        <Chip key={`${entry._id}-${tag}`} size="small" variant="outlined" label={`#${tag}`} />
-                      ))}
-                    </Stack>
-                  )}
-                </CardContent>
-                <CardActions>
-                  <Button size="small" startIcon={<EditIcon />} onClick={() => openEditDialog(entry)}>
-                    Edit
-                  </Button>
-                  <Button
-                    size="small"
-                    color="error"
-                    startIcon={<DeleteOutlineIcon />}
-                    onClick={() => handleDelete(entry._id)}
-                  >
-                    Delete
-                  </Button>
-                </CardActions>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
+        renderList()
       )}
 
       <Dialog open={dialogOpen} onClose={closeDialog} fullWidth maxWidth="md">
@@ -394,11 +692,7 @@ const JournalHub = () => {
               <Grid item xs={12} md={4}>
                 <FormControl fullWidth>
                   <InputLabel>Mood</InputLabel>
-                  <Select
-                    label="Mood"
-                    value={form.mood}
-                    onChange={(e) => setForm((prev) => ({ ...prev, mood: e.target.value }))}
-                  >
+                  <Select label="Mood" value={form.mood} onChange={(e) => setForm((prev) => ({ ...prev, mood: e.target.value }))}>
                     {MOOD_OPTIONS.map((mood) => (
                       <MenuItem key={mood.value} value={mood.value}>
                         {mood.label}

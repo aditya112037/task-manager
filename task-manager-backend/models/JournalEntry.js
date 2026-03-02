@@ -2,7 +2,18 @@ const mongoose = require("mongoose");
 
 const ATTACHMENT_TYPES = ["image", "audio", "link"];
 const JOURNAL_TEMPLATES = ["freeform", "morning-intent", "day-review", "travel-log"];
-const MOOD_OPTIONS = ["awful", "low", "neutral", "good", "great"];
+const MOOD_OPTIONS = [
+  "awful",
+  "sad",
+  "anxious",
+  "low",
+  "neutral",
+  "calm",
+  "good",
+  "excited",
+  "grateful",
+  "great",
+];
 const WEATHER_OPTIONS = ["sunny", "cloudy", "rainy", "stormy", "snowy", "windy", "unknown"];
 
 const attachmentSchema = new mongoose.Schema(

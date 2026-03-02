@@ -127,6 +127,55 @@ router.get("/insights/summary", async (req, res) => {
     const favoriteCount = entries.filter((entry) => entry.isFavorite).length;
     const totalWords = entries.reduce((sum, entry) => sum + Number(entry.wordCount || 0), 0);
     const avgWords = entries.length > 0 ? Math.round(totalWords / entries.length) : 0;
+    const allDaysSorted = Array.from(
+      new Set(
+        entries
+          .map((entry) => {
+            const d = new Date(entry.entryDate);
+            const year = d.getUTCFullYear();
+            const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+            const day = String(d.getUTCDate()).padStart(2, "0");
+            return `${year}-${month}-${day}`;
+          })
+          .filter(Boolean)
+      )
+    ).sort();
+
+    let longestStreak = 0;
+    let currentRun = 0;
+    for (let i = 0; i < allDaysSorted.length; i += 1) {
+      if (i === 0) {
+        currentRun = 1;
+      } else {
+        const prev = new Date(`${allDaysSorted[i - 1]}T00:00:00.000Z`).getTime();
+        const curr = new Date(`${allDaysSorted[i]}T00:00:00.000Z`).getTime();
+        const dayDiff = Math.round((curr - prev) / (24 * 60 * 60 * 1000));
+        currentRun = dayDiff === 1 ? currentRun + 1 : 1;
+      }
+      if (currentRun > longestStreak) longestStreak = currentRun;
+    }
+
+    let currentStreak = 0;
+    if (allDaysSorted.length > 0) {
+      const latest = new Date(`${allDaysSorted[allDaysSorted.length - 1]}T00:00:00.000Z`);
+      const today = new Date();
+      const todayUTC = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+      const latestUTC = Date.UTC(latest.getUTCFullYear(), latest.getUTCMonth(), latest.getUTCDate());
+      const gapDays = Math.round((todayUTC - latestUTC) / (24 * 60 * 60 * 1000));
+      if (gapDays <= 1) {
+        currentStreak = 1;
+        for (let i = allDaysSorted.length - 1; i > 0; i -= 1) {
+          const curr = new Date(`${allDaysSorted[i]}T00:00:00.000Z`).getTime();
+          const prev = new Date(`${allDaysSorted[i - 1]}T00:00:00.000Z`).getTime();
+          const dayDiff = Math.round((curr - prev) / (24 * 60 * 60 * 1000));
+          if (dayDiff === 1) {
+            currentStreak += 1;
+          } else {
+            break;
+          }
+        }
+      }
+    }
 
     res.json({
       days,
@@ -135,6 +184,10 @@ router.get("/insights/summary", async (req, res) => {
       favoriteCount,
       totalWords,
       avgWordsPerEntry: avgWords,
+      streak: {
+        current: currentStreak,
+        longest: longestStreak,
+      },
       moodDistribution: moodAgg.map((item) => ({ mood: item._id, count: item.count })),
       topTags: tagAgg.map((item) => ({ tag: item._id, count: item.count })),
     });
