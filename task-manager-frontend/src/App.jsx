@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from "react";
-import { ThemeProvider, createTheme, CssBaseline, Box } from "@mui/material";
+import { ThemeProvider, createTheme, CssBaseline } from "@mui/material";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Layout from "./components/Layout/Layout";
@@ -25,7 +25,6 @@ import {
   SecurityPage,
   BlogPage,
 } from "./pages/public/MarketingPages";
-import Aurora from "./components/effects/Aurora";
 
 const THEME_PRESETS = {
   light: {
@@ -196,29 +195,6 @@ const THEME_PRESETS = {
       },
     },
   },
-  aurora: {
-    label: "Aurora",
-    palette: {
-      mode: "dark",
-      primary: { main: "#7cff67", light: "#a3ff98", dark: "#43c43a", contrastText: "#071406" },
-      secondary: { main: "#b19eef", light: "#cdbdf7", dark: "#7f67c9", contrastText: "#110a1f" },
-      background: { default: "#0f0d24", paper: "rgba(19, 16, 45, 0.82)" },
-      text: { primary: "#efeaff", secondary: "#b8b1d4" },
-      divider: "rgba(177, 158, 239, 0.2)",
-      sidebar: {
-        background: "linear-gradient(198deg, #0a091d 0%, #121032 58%, #1b1650 100%)",
-        hover: "rgba(124, 255, 103, 0.18)",
-        active: "rgba(177, 158, 239, 0.26)",
-        text: "#f1ecff",
-      },
-      header: { background: "rgba(14, 12, 34, 0.9)" },
-      page: {
-        backgroundColor: "#0b0920",
-        backgroundImage: "none",
-        selection: "rgba(177, 158, 239, 0.32)",
-      },
-    },
-  },
 };
 
 const ProtectedRoute = ({ children }) => {
@@ -260,7 +236,6 @@ function AppContent() {
     () => {
       const activeTheme = THEME_PRESETS[themeMode] || THEME_PRESETS.light;
       const activePalette = activeTheme.palette;
-      const isAuroraTheme = themeMode === "aurora";
       const containedPrimaryGradient = `linear-gradient(135deg, ${activePalette.primary.main} 0%, ${activePalette.primary.dark} 100%)`;
       const containedSecondaryGradient = `linear-gradient(135deg, ${activePalette.secondary.main} 0%, ${activePalette.secondary.dark} 100%)`;
       const tabsGradient = `linear-gradient(90deg, ${activePalette.primary.main} 0%, ${activePalette.secondary.main} 100%)`;
@@ -311,12 +286,12 @@ function AppContent() {
           MuiCssBaseline: {
             styleOverrides: {
               body: {
-                backgroundColor: isAuroraTheme
-                  ? "#0b0920"
-                  : activePalette.page.backgroundColor,
-                backgroundImage: isAuroraTheme
-                  ? "none"
-                  : activePalette.page.backgroundImage,
+                backgroundColor: activePalette.page.backgroundColor,
+                backgroundImage: activePalette.page.backgroundImage,
+                backgroundAttachment: "scroll",
+                "@media (pointer: fine)": {
+                  backgroundAttachment: "fixed",
+                },
                 transition: "background-color 0.35s ease, color 0.35s ease",
               },
               "::selection": {
@@ -328,10 +303,7 @@ function AppContent() {
             styleOverrides: {
               root: ({ theme }) => ({
                 backgroundImage: "none",
-                backdropFilter: isAuroraTheme ? "blur(16px)" : "blur(10px)",
-                backgroundColor: isAuroraTheme
-                  ? "rgba(20, 18, 50, 0.45)"
-                  : theme.palette.background.paper,
+                backdropFilter: "blur(10px)",
                 border: `1px solid ${theme.palette.divider}`,
               }),
             },
@@ -339,10 +311,7 @@ function AppContent() {
           MuiCard: {
             styleOverrides: {
               root: ({ theme }) => ({
-                backgroundColor: isAuroraTheme
-                  ? "rgba(25, 22, 60, 0.45)"
-                  : theme.palette.background.paper,
-                backdropFilter: isAuroraTheme ? "blur(18px)" : undefined,
+                backgroundColor: theme.palette.background.paper,
                 border: `1px solid ${theme.palette.divider}`,
                 boxShadow: theme.shadows[3],
               }),
@@ -353,7 +322,7 @@ function AppContent() {
               root: ({ theme }) => ({
                 boxShadow: "none",
                 borderBottom: `1px solid ${theme.palette.divider}`,
-                backdropFilter: isAuroraTheme ? "blur(8px)" : "blur(14px)",
+                backdropFilter: "blur(14px)",
               }),
             },
           },
@@ -406,7 +375,7 @@ function AppContent() {
             styleOverrides: {
               root: ({ theme }) => ({
                 borderRadius: 10,
-                backdropFilter: isAuroraTheme ? "blur(3px)" : "blur(8px)",
+                backdropFilter: "blur(8px)",
                 borderColor: theme.palette.divider,
               }),
             },
@@ -460,24 +429,8 @@ function AppContent() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      {themeMode === "aurora" && (
-        <Aurora
-          colorStops={["#7cff67", "#B19EEF", "#5227FF"]}
-          blend={0.75}
-          amplitude={1.3}
-          speed={0.9}
-        />
-      )}
-      <Box
-        sx={{
-          position: "relative",
-          zIndex: 1,
-          minHeight: "100dvh",
-          background: "transparent",
-        }}
-      >
-        <Router>
-          <Routes>
+      <Router>
+        <Routes>
           <Route
             path="/login"
             element={
@@ -657,9 +610,8 @@ function AppContent() {
             }
           />
           <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Router>
-      </Box>
+        </Routes>
+      </Router>
     </ThemeProvider>
   );
 }
