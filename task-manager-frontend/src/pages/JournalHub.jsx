@@ -190,6 +190,14 @@ const getDisplayWordCount = (entry) => {
   return Math.max(backendCount, computed);
 };
 
+const parseTimeToMinutes = (value) => {
+  const [hh, mm] = String(value || "")
+    .split(":")
+    .map((part) => Number(part));
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+  return hh * 60 + mm;
+};
+
 const fileToDataUrl = (file) =>
   new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -403,23 +411,32 @@ const JournalHub = () => {
   }, [reminderTime]);
 
   useEffect(() => {
-    const tick = () => {
+    const maybeSendReminder = () => {
       if (!reminderEnabled || notificationPermission !== "granted") return;
+
       const now = new Date();
-      const hh = String(now.getHours()).padStart(2, "0");
-      const mm = String(now.getMinutes()).padStart(2, "0");
-      const current = `${hh}:${mm}`;
-      if (current !== reminderTime) return;
       const today = toDateKey(now);
       const last = localStorage.getItem(REMINDER_LAST_KEY);
       if (last === today) return;
+
+      const targetMinutes = parseTimeToMinutes(reminderTime);
+      if (targetMinutes === null) return;
+
+      const nowMinutes = now.getHours() * 60 + now.getMinutes();
+      if (nowMinutes < targetMinutes) return;
+
       localStorage.setItem(REMINDER_LAST_KEY, today);
       const reminder = new Notification("Insights Reminder", {
         body: "Take 2 minutes to write today's reflection.",
       });
       reminder.onclick = () => window.focus();
     };
-    const interval = setInterval(tick, 30000);
+
+    // Run once immediately (handles opening app after reminder time).
+    maybeSendReminder();
+
+    // Then check every minute.
+    const interval = setInterval(maybeSendReminder, 60000);
     return () => clearInterval(interval);
   }, [notificationPermission, reminderEnabled, reminderTime]);
 
@@ -435,6 +452,21 @@ const JournalHub = () => {
       console.error(err);
       setError("Could not request notification permission.");
     }
+  };
+
+  const sendTestNotification = () => {
+    if (typeof Notification === "undefined") {
+      setError("Notifications are not supported in this browser.");
+      return;
+    }
+    if (notificationPermission !== "granted") {
+      setError("Enable notifications first.");
+      return;
+    }
+    const test = new Notification("Insights Test Notification", {
+      body: "Notifications are working.",
+    });
+    test.onclick = () => window.focus();
   };
 
   const openCreateDialog = () => {
@@ -920,6 +952,9 @@ const JournalHub = () => {
             />
             <Button size="small" variant="outlined" onClick={askNotificationPermission}>
               {notificationPermission === "granted" ? "Notifications Enabled" : "Enable Notifications"}
+            </Button>
+            <Button size="small" variant="outlined" onClick={sendTestNotification}>
+              Test Notification
             </Button>
           </Stack>
         </Stack>
