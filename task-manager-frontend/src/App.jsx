@@ -312,14 +312,12 @@ function AppContent() {
           MuiCssBaseline: {
             styleOverrides: {
               body: {
-                backgroundColor: activePalette.page.backgroundColor,
+                backgroundColor: isAuroraTheme
+                  ? "#0b0920"
+                  : activePalette.page.backgroundColor,
                 backgroundImage: isAuroraTheme
-                  ? "linear-gradient(180deg, #0d0b20 0%, #0f0d24 100%)"
+                  ? "none"
                   : activePalette.page.backgroundImage,
-                backgroundAttachment: "scroll",
-                "@media (pointer: fine)": {
-                  backgroundAttachment: "fixed",
-                },
                 transition: "background-color 0.35s ease, color 0.35s ease",
               },
               "::selection": {
@@ -331,7 +329,10 @@ function AppContent() {
             styleOverrides: {
               root: ({ theme }) => ({
                 backgroundImage: "none",
-                backdropFilter: isAuroraTheme ? "blur(4px)" : "blur(10px)",
+                backdropFilter: isAuroraTheme ? "blur(16px)" : "blur(10px)",
+                backgroundColor: isAuroraTheme
+                  ? "rgba(20, 18, 50, 0.45)"
+                  : theme.palette.background.paper,
                 border: `1px solid ${theme.palette.divider}`,
               }),
             },
@@ -460,8 +461,8 @@ function AppContent() {
       {themeMode === "aurora" && (
         <Aurora
           colorStops={["#7cff67", "#B19EEF", "#5227FF"]}
-          blend={0.72}
-          amplitude={1.12}
+          blend={0.75}
+          amplitude={1.3}
           speed={0.9}
         />
       )}

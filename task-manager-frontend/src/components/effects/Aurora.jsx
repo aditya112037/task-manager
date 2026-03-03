@@ -123,7 +123,7 @@ const fragment = `
     finalColor = (finalColor - vec3(midPoint)) * contrast + vec3(midPoint);
     finalColor = clamp(finalColor, 0.0, 1.0);
 
-    gl_FragColor = vec4(finalColor, smoothstep(0.0, 1.0, finalNoise) * 0.8);
+    gl_FragColor = vec4(finalColor, smoothstep(0.0, 1.0, finalNoise) * 1.2);
   }
 `;
 
@@ -240,7 +240,7 @@ const Aurora = (props) => {
         position: "fixed",
         inset: 0,
         pointerEvents: "none",
-        zIndex: 0,
+        zIndex: -1,
       }}
     />
   );
