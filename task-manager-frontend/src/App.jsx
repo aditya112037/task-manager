@@ -213,9 +213,8 @@ const THEME_PRESETS = {
       },
       header: { background: "rgba(14, 12, 34, 0.9)" },
       page: {
-        backgroundColor: "#0f0d24",
-        backgroundImage:
-          "radial-gradient(circle at 14% 10%, rgba(124, 255, 103, 0.16), transparent 30%), radial-gradient(circle at 86% 8%, rgba(177, 158, 239, 0.16), transparent 34%), linear-gradient(180deg, #0d0b20 0%, #0f0d24 100%)",
+        backgroundColor: "#0b0920",
+        backgroundImage: "none",
         selection: "rgba(177, 158, 239, 0.32)",
       },
     },
@@ -340,7 +339,10 @@ function AppContent() {
           MuiCard: {
             styleOverrides: {
               root: ({ theme }) => ({
-                backgroundColor: theme.palette.background.paper,
+                backgroundColor: isAuroraTheme
+                  ? "rgba(25, 22, 60, 0.45)"
+                  : theme.palette.background.paper,
+                backdropFilter: isAuroraTheme ? "blur(18px)" : undefined,
                 border: `1px solid ${theme.palette.divider}`,
                 boxShadow: theme.shadows[3],
               }),
@@ -466,7 +468,14 @@ function AppContent() {
           speed={0.9}
         />
       )}
-      <Box sx={{ position: "relative", zIndex: 1 }}>
+      <Box
+        sx={{
+          position: "relative",
+          zIndex: 1,
+          minHeight: "100dvh",
+          background: "transparent",
+        }}
+      >
         <Router>
           <Routes>
           <Route

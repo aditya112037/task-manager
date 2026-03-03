@@ -141,6 +141,7 @@ const Aurora = (props) => {
 
   useEffect(() => {
     if (!ctnDom.current) return undefined;
+    if (!window.WebGLRenderingContext) return undefined;
     const container = ctnDom.current;
 
     const renderer = new Renderer({

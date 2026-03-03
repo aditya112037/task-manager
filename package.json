@@ -2,8 +2,10 @@
   "dependencies": {
     "@getbrevo/brevo": "^3.0.1",
     "axios": "^1.13.1",
+    "gasp": "^0.0.2",
     "gsap": "^3.14.2",
     "nodemailer": "^7.0.10",
+    "ogl": "^1.0.11",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
     "recharts": "^3.6.0",

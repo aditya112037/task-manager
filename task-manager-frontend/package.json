@@ -12,6 +12,7 @@
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^13.5.0",
     "axios": "^1.13.1",
+    "gasp": "^0.0.2",
     "gsap": "^3.14.2",
     "ogl": "^1.0.11",
     "passport": "^0.7.0",
