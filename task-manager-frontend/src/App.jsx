@@ -170,11 +170,11 @@ const THEME_PRESETS = {
         selection: "rgba(61, 232, 255, 0.4)",
         effects: {
           layerOne:
-            "repeating-linear-gradient(120deg, rgba(61, 232, 255, 0.09) 0, rgba(61, 232, 255, 0.09) 1px, transparent 1px, transparent 18px)",
-          layerOneAnimation: "themeGridDrift 24s linear infinite",
+            "repeating-linear-gradient(90deg, rgba(61, 232, 255, 0.13) 0, rgba(61, 232, 255, 0.13) 1px, transparent 1px, transparent 18px), repeating-linear-gradient(0deg, rgba(255, 79, 216, 0.08) 0, rgba(255, 79, 216, 0.08) 2px, transparent 2px, transparent 26px)",
+          layerOneAnimation: "themeCyberGrid 18s linear infinite",
           layerTwo:
-            "radial-gradient(circle at 20% 35%, rgba(61, 232, 255, 0.22) 0%, transparent 48%), radial-gradient(circle at 78% 62%, rgba(255, 79, 216, 0.18) 0%, transparent 50%)",
-          layerTwoAnimation: "themeGlowPulse 11s ease-in-out infinite alternate",
+            "radial-gradient(circle at 20% 35%, rgba(61, 232, 255, 0.24) 0%, transparent 48%), radial-gradient(circle at 78% 62%, rgba(255, 79, 216, 0.22) 0%, transparent 50%), linear-gradient(110deg, transparent 0%, rgba(61, 232, 255, 0.14) 45%, transparent 100%)",
+          layerTwoAnimation: "themeNeonFlicker 7s steps(20, end) infinite",
         },
       },
     },
@@ -227,11 +227,11 @@ const THEME_PRESETS = {
         selection: "rgba(99, 247, 217, 0.35)",
         effects: {
           layerOne:
-            "radial-gradient(circle at 18% 42%, rgba(99, 247, 217, 0.2) 0%, transparent 46%), radial-gradient(circle at 80% 60%, rgba(131, 168, 255, 0.16) 0%, transparent 52%)",
-          layerOneAnimation: "themeAuroraShift 15s ease-in-out infinite alternate",
+            "linear-gradient(110deg, rgba(99, 247, 217, 0.1) 8%, transparent 36%, rgba(131, 168, 255, 0.14) 58%, transparent 82%), radial-gradient(circle at 24% 44%, rgba(99, 247, 217, 0.22) 0%, transparent 48%), radial-gradient(circle at 78% 58%, rgba(131, 168, 255, 0.18) 0%, transparent 52%)",
+          layerOneAnimation: "themeAuroraRibbon 20s ease-in-out infinite alternate",
           layerTwo:
-            "linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.08) 45%, transparent 100%)",
-          layerTwoAnimation: "themeSheenSweep 14s linear infinite",
+            "radial-gradient(circle at 14% 26%, rgba(147, 255, 227, 0.16) 0%, transparent 42%), radial-gradient(circle at 84% 34%, rgba(167, 189, 255, 0.14) 0%, transparent 44%)",
+          layerTwoAnimation: "themeAuroraShimmer 10s ease-in-out infinite",
         },
       },
     },
@@ -260,11 +260,11 @@ const THEME_PRESETS = {
         selection: "rgba(255, 138, 43, 0.36)",
         effects: {
           layerOne:
-            "repeating-linear-gradient(30deg, rgba(255, 179, 110, 0.08) 0, rgba(255, 179, 110, 0.08) 2px, transparent 2px, transparent 20px)",
-          layerOneAnimation: "themeGridDrift 28s linear infinite",
+            "radial-gradient(circle at 12% 112%, rgba(255, 128, 39, 0.34) 0%, transparent 42%), radial-gradient(circle at 34% 108%, rgba(255, 183, 94, 0.24) 0%, transparent 36%), radial-gradient(circle at 58% 114%, rgba(255, 98, 38, 0.3) 0%, transparent 40%), radial-gradient(circle at 78% 110%, rgba(255, 151, 70, 0.24) 0%, transparent 36%)",
+          layerOneAnimation: "themeFlameRise 6.8s ease-in-out infinite",
           layerTwo:
-            "radial-gradient(circle at 26% 48%, rgba(255, 138, 43, 0.24) 0%, transparent 45%), radial-gradient(circle at 70% 62%, rgba(255, 209, 102, 0.18) 0%, transparent 52%)",
-          layerTwoAnimation: "themeGlowPulse 9s ease-in-out infinite alternate",
+            "linear-gradient(0deg, rgba(255, 138, 43, 0.16) 0%, transparent 46%), radial-gradient(circle at 26% 48%, rgba(255, 138, 43, 0.22) 0%, transparent 45%), radial-gradient(circle at 70% 62%, rgba(255, 209, 102, 0.16) 0%, transparent 52%)",
+          layerTwoAnimation: "themeHeatHaze 9s ease-in-out infinite alternate",
         },
       },
     },
@@ -293,11 +293,11 @@ const THEME_PRESETS = {
         selection: "rgba(200, 169, 95, 0.34)",
         effects: {
           layerOne:
-            "linear-gradient(115deg, rgba(200, 169, 95, 0.12) 0%, transparent 34%, rgba(76, 210, 255, 0.08) 62%, transparent 100%)",
-          layerOneAnimation: "themeAuroraShift 18s ease-in-out infinite alternate",
+            "radial-gradient(circle at 8% 18%, rgba(255, 255, 255, 0.18) 0 1px, transparent 1.2px), radial-gradient(circle at 22% 42%, rgba(255, 255, 255, 0.15) 0 1px, transparent 1.2px), radial-gradient(circle at 37% 70%, rgba(200, 169, 95, 0.2) 0 1.2px, transparent 1.5px), radial-gradient(circle at 64% 24%, rgba(255, 255, 255, 0.14) 0 1px, transparent 1.2px), radial-gradient(circle at 82% 58%, rgba(76, 210, 255, 0.2) 0 1.1px, transparent 1.4px), radial-gradient(circle at 92% 34%, rgba(255, 255, 255, 0.12) 0 1px, transparent 1.2px)",
+          layerOneAnimation: "themeGalaxyDrift 26s linear infinite",
           layerTwo:
-            "linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.07) 48%, transparent 100%)",
-          layerTwoAnimation: "themeSheenSweep 18s linear infinite",
+            "radial-gradient(circle at 24% 42%, rgba(97, 121, 205, 0.16) 0%, transparent 42%), radial-gradient(circle at 74% 30%, rgba(200, 169, 95, 0.16) 0%, transparent 42%), radial-gradient(circle at 58% 72%, rgba(76, 210, 255, 0.12) 0%, transparent 44%)",
+          layerTwoAnimation: "themeGalaxyTwinkle 8s ease-in-out infinite alternate",
         },
       },
     },
@@ -452,6 +452,46 @@ function AppContent() {
                 "50%": { transform: "translate3d(2%, -2%, 0) rotate(1deg)" },
                 "100%": { transform: "translate3d(-1%, 1%, 0) rotate(-1deg)" },
               },
+              "@keyframes themeCyberGrid": {
+                "0%": { transform: "translate3d(0, 0, 0)" },
+                "100%": { transform: "translate3d(-6%, 3%, 0)" },
+              },
+              "@keyframes themeNeonFlicker": {
+                "0%": { opacity: 0.54 },
+                "12%": { opacity: 0.84 },
+                "20%": { opacity: 0.52 },
+                "28%": { opacity: 0.88 },
+                "44%": { opacity: 0.62 },
+                "65%": { opacity: 0.9 },
+                "78%": { opacity: 0.56 },
+                "100%": { opacity: 0.82 },
+              },
+              "@keyframes themeAuroraRibbon": {
+                "0%": { transform: "translate3d(-3%, 0, 0) rotate(-1deg)", opacity: 0.58 },
+                "50%": { transform: "translate3d(2%, -2%, 0) rotate(1deg)", opacity: 0.84 },
+                "100%": { transform: "translate3d(-1%, 1%, 0) rotate(-0.8deg)", opacity: 0.66 },
+              },
+              "@keyframes themeAuroraShimmer": {
+                "0%": { opacity: 0.34, transform: "scale(1)" },
+                "100%": { opacity: 0.76, transform: "scale(1.06)" },
+              },
+              "@keyframes themeFlameRise": {
+                "0%": { transform: "translate3d(0, 2%, 0) scale(1, 1)", opacity: 0.56 },
+                "50%": { transform: "translate3d(0, -2%, 0) scale(1.02, 1.06)", opacity: 0.82 },
+                "100%": { transform: "translate3d(0, 1%, 0) scale(1, 1)", opacity: 0.62 },
+              },
+              "@keyframes themeHeatHaze": {
+                "0%": { transform: "translate3d(-1%, 0, 0)", filter: "blur(2px)" },
+                "100%": { transform: "translate3d(1%, -1%, 0)", filter: "blur(3.2px)" },
+              },
+              "@keyframes themeGalaxyDrift": {
+                "0%": { transform: "translate3d(0, 0, 0) scale(1)" },
+                "100%": { transform: "translate3d(-2%, 2%, 0) scale(1.04)" },
+              },
+              "@keyframes themeGalaxyTwinkle": {
+                "0%": { opacity: 0.32, transform: "scale(1)" },
+                "100%": { opacity: 0.68, transform: "scale(1.08)" },
+              },
               "@keyframes themeSheenSweep": {
                 "0%": { transform: "translateX(-28%)" },
                 "100%": { transform: "translateX(28%)" },
@@ -583,7 +623,7 @@ function AppContent() {
     () =>
       Object.entries(THEME_PRESETS).map(([value, config]) => ({
         value,
-        label: config.premium ? `${config.label} Premium` : config.label,
+        label: config.label,
       })),
     []
   );
