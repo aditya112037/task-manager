@@ -2,6 +2,8 @@ const express = require("express");
 const { body, validationResult } = require("express-validator");
 const JournalEntry = require("../models/JournalEntry");
 const User = require("../models/user");
+const Notification = require("../models/Notification");
+const { emitNotificationsChanged } = require("../utils/notificationEvents");
 const { protect } = require("../middleware/auth");
 
 const router = express.Router();
@@ -121,6 +123,43 @@ router.put(
     }
   }
 );
+
+// @desc    Emit daily reminder into in-app notification center
+// @route   POST /api/journals/reminder-notify
+// @access  Private
+router.post("/reminder-notify", async (req, res) => {
+  try {
+    const now = new Date();
+    const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+
+    const alreadyExists = await Notification.exists({
+      user: req.user._id,
+      type: "insights_reminder",
+      createdAt: { $gte: startOfDay, $lt: endOfDay },
+    });
+
+    if (!alreadyExists) {
+      await Notification.create({
+        user: req.user._id,
+        type: "insights_reminder",
+        title: "Insights Reminder",
+        message: "Take 2 minutes to write today's reflection.",
+        metadata: {
+          source: "insights_daily_reminder",
+          date: now.toISOString().slice(0, 10),
+        },
+      });
+      emitNotificationsChanged([req.user._id]);
+      return res.status(201).json({ created: true });
+    }
+
+    return res.json({ created: false });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ message: "Server error" });
+  }
+});
 
 const buildUserJournalQuery = (query, userId) => {
   const filter = { user: userId };

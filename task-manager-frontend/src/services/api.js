@@ -160,6 +160,7 @@ export const journalsAPI = {
   getInsights: (days = 30) => api.get("/api/journals/insights/summary", { params: { days } }),
   getReminderSettings: () => api.get("/api/journals/reminder-settings"),
   updateReminderSettings: (data) => api.put("/api/journals/reminder-settings", data),
+  emitReminderNotification: () => api.post("/api/journals/reminder-notify"),
 };
 
 export default api;

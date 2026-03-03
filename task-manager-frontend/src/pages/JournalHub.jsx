@@ -488,7 +488,7 @@ const JournalHub = () => {
   }, [reminderEnabled]);
 
   useEffect(() => {
-    const maybeSendReminder = () => {
+    const maybeSendReminder = async () => {
       if (!reminderEnabled || notificationPermission !== "granted") return;
 
       const now = new Date();
@@ -503,6 +503,14 @@ const JournalHub = () => {
       if (nowMinutes < targetMinutes) return;
 
       localStorage.setItem(REMINDER_LAST_KEY, today);
+
+      // Persist a once-per-day in-app notification so reminder appears in Notification Center.
+      try {
+        await journalsAPI.emitReminderNotification();
+      } catch (err) {
+        console.error("Failed to emit reminder notification:", err);
+      }
+
       const reminder = new Notification("Insights Reminder", {
         body: "Take 2 minutes to write today's reflection.",
       });
@@ -999,9 +1007,7 @@ const JournalHub = () => {
               inputProps={{ step: 60 }}
               sx={{ minWidth: 145 }}
             />
-            <Typography variant="caption" color="text.secondary">
-              Notifications: {notificationPermission}
-            </Typography>
+            
           </Stack>
         </Stack>
       </Paper>
