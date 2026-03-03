@@ -7,7 +7,7 @@ import { useAuth } from "../../context/AuthContext";
 // 🔌 Socket helpers
 import { getSocket } from "../../services/socket";
 
-const Layout = ({ children, toggleDarkMode, darkMode }) => {
+const Layout = ({ children, themeMode, setThemeMode, themeOptions }) => {
   const { user } = useAuth();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
@@ -134,8 +134,9 @@ const Layout = ({ children, toggleDarkMode, darkMode }) => {
         }}
       >
         <Header
-          toggleDarkMode={toggleDarkMode}
-          darkMode={darkMode}
+          themeMode={themeMode}
+          setThemeMode={setThemeMode}
+          themeOptions={themeOptions}
           sidebarOpen={sidebarOpen}
           toggleSidebar={toggleSidebar}
           isMobile={isMobile}

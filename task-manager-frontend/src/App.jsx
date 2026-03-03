@@ -26,6 +26,177 @@ import {
   BlogPage,
 } from "./pages/public/MarketingPages";
 
+const THEME_PRESETS = {
+  light: {
+    label: "Light",
+    palette: {
+      mode: "light",
+      primary: { main: "#0f766e", light: "#39a99b", dark: "#0b4f4a", contrastText: "#f5f7f6" },
+      secondary: { main: "#b08968", light: "#d0a784", dark: "#7a5d45", contrastText: "#111827" },
+      background: { default: "#f5f3ee", paper: "rgba(255, 255, 255, 0.84)" },
+      text: { primary: "#172029", secondary: "#4c5965" },
+      divider: "rgba(12, 28, 38, 0.14)",
+      sidebar: {
+        background: "linear-gradient(195deg, #102234 0%, #08141f 100%)",
+        hover: "rgba(208, 167, 132, 0.18)",
+        active: "rgba(208, 167, 132, 0.24)",
+        text: "#f4eee6",
+      },
+      header: { background: "rgba(7, 20, 32, 0.88)" },
+      page: {
+        backgroundColor: "#f5f3ee",
+        backgroundImage:
+          "radial-gradient(circle at 8% 8%, rgba(15, 118, 110, 0.16), transparent 34%), radial-gradient(circle at 90% -6%, rgba(176, 137, 104, 0.16), transparent 28%), linear-gradient(180deg, #f8f5ef 0%, #f5f3ee 100%)",
+        selection: "rgba(15, 118, 110, 0.24)",
+      },
+    },
+  },
+  dark: {
+    label: "Dark",
+    palette: {
+      mode: "dark",
+      primary: { main: "#41b3a4", light: "#6dcfc3", dark: "#2f8379", contrastText: "#081b19" },
+      secondary: { main: "#c9a27f", light: "#e0c1a7", dark: "#8f6e52", contrastText: "#141210" },
+      background: { default: "#070d14", paper: "rgba(14, 24, 35, 0.82)" },
+      text: { primary: "#e9ecef", secondary: "#a8b4bf" },
+      divider: "rgba(210, 222, 233, 0.16)",
+      sidebar: {
+        background: "linear-gradient(200deg, #08131d 0%, #040a11 100%)",
+        hover: "rgba(201, 162, 127, 0.16)",
+        active: "rgba(201, 162, 127, 0.24)",
+        text: "#f4eadf",
+      },
+      header: { background: "rgba(4, 10, 16, 0.88)" },
+      page: {
+        backgroundColor: "#070d14",
+        backgroundImage:
+          "radial-gradient(circle at 12% 16%, rgba(65, 179, 164, 0.16), transparent 34%), radial-gradient(circle at 84% 0%, rgba(201, 162, 127, 0.14), transparent 30%), linear-gradient(180deg, #060b12 0%, #070d14 100%)",
+        selection: "rgba(65, 179, 164, 0.35)",
+      },
+    },
+  },
+  ocean: {
+    label: "Ocean",
+    palette: {
+      mode: "dark",
+      primary: { main: "#33b5e5", light: "#79d4f4", dark: "#0b78a5", contrastText: "#04131a" },
+      secondary: { main: "#90caf9", light: "#b8e2ff", dark: "#4f9bcb", contrastText: "#081219" },
+      background: { default: "#041522", paper: "rgba(10, 30, 45, 0.84)" },
+      text: { primary: "#e7f7ff", secondary: "#9ec2d6" },
+      divider: "rgba(130, 190, 220, 0.2)",
+      sidebar: {
+        background: "linear-gradient(195deg, #03111c 0%, #041928 100%)",
+        hover: "rgba(51, 181, 229, 0.22)",
+        active: "rgba(51, 181, 229, 0.34)",
+        text: "#dff4ff",
+      },
+      header: { background: "rgba(4, 24, 36, 0.9)" },
+      page: {
+        backgroundColor: "#041522",
+        backgroundImage:
+          "radial-gradient(circle at 12% 10%, rgba(59, 210, 255, 0.2), transparent 34%), radial-gradient(circle at 88% 0%, rgba(144, 202, 249, 0.16), transparent 32%), linear-gradient(180deg, #02111c 0%, #041522 100%)",
+        selection: "rgba(51, 181, 229, 0.38)",
+      },
+    },
+  },
+  forest: {
+    label: "Forest",
+    palette: {
+      mode: "light",
+      primary: { main: "#2f6b4f", light: "#5f8f73", dark: "#1e4d37", contrastText: "#f3fbf6" },
+      secondary: { main: "#b7894f", light: "#d5aa75", dark: "#8a6639", contrastText: "#1f160d" },
+      background: { default: "#eef4ec", paper: "rgba(255, 255, 255, 0.87)" },
+      text: { primary: "#1d2a21", secondary: "#536456" },
+      divider: "rgba(38, 67, 50, 0.16)",
+      sidebar: {
+        background: "linear-gradient(195deg, #1d3327 0%, #13251c 100%)",
+        hover: "rgba(183, 137, 79, 0.2)",
+        active: "rgba(183, 137, 79, 0.3)",
+        text: "#f0eadf",
+      },
+      header: { background: "rgba(20, 43, 31, 0.9)" },
+      page: {
+        backgroundColor: "#eef4ec",
+        backgroundImage:
+          "radial-gradient(circle at 10% 14%, rgba(47, 107, 79, 0.16), transparent 34%), radial-gradient(circle at 86% -8%, rgba(183, 137, 79, 0.16), transparent 28%), linear-gradient(180deg, #f4f8f1 0%, #eef4ec 100%)",
+        selection: "rgba(47, 107, 79, 0.24)",
+      },
+    },
+  },
+  sunset: {
+    label: "Sunset",
+    palette: {
+      mode: "light",
+      primary: { main: "#d65a36", light: "#ec8a68", dark: "#ab3c1f", contrastText: "#fff3ec" },
+      secondary: { main: "#7e57c2", light: "#a889de", dark: "#5b3899", contrastText: "#f8f2ff" },
+      background: { default: "#fff3eb", paper: "rgba(255, 255, 255, 0.86)" },
+      text: { primary: "#352019", secondary: "#6c4f43" },
+      divider: "rgba(126, 87, 194, 0.16)",
+      sidebar: {
+        background: "linear-gradient(198deg, #4a2546 0%, #2e1b38 55%, #21162d 100%)",
+        hover: "rgba(236, 138, 104, 0.22)",
+        active: "rgba(236, 138, 104, 0.34)",
+        text: "#fff1e9",
+      },
+      header: { background: "rgba(53, 27, 49, 0.9)" },
+      page: {
+        backgroundColor: "#fff3eb",
+        backgroundImage:
+          "radial-gradient(circle at 12% 14%, rgba(236, 138, 104, 0.22), transparent 34%), radial-gradient(circle at 88% -4%, rgba(126, 87, 194, 0.18), transparent 30%), linear-gradient(180deg, #fff7f2 0%, #fff1e8 100%)",
+        selection: "rgba(214, 90, 54, 0.24)",
+      },
+    },
+  },
+  "midnight-neon": {
+    label: "Midnight Neon",
+    palette: {
+      mode: "dark",
+      primary: { main: "#3de8ff", light: "#7cf0ff", dark: "#00a9c4", contrastText: "#031019" },
+      secondary: { main: "#ff4fd8", light: "#ff8ee7", dark: "#ba1da0", contrastText: "#1a0415" },
+      background: { default: "#070514", paper: "rgba(20, 15, 46, 0.84)" },
+      text: { primary: "#f4f1ff", secondary: "#b7b0d8" },
+      divider: "rgba(148, 141, 205, 0.25)",
+      sidebar: {
+        background: "linear-gradient(200deg, #07040f 0%, #0f0a26 60%, #130d33 100%)",
+        hover: "rgba(61, 232, 255, 0.22)",
+        active: "rgba(255, 79, 216, 0.3)",
+        text: "#f6f2ff",
+      },
+      header: { background: "rgba(13, 9, 32, 0.9)" },
+      page: {
+        backgroundColor: "#070514",
+        backgroundImage:
+          "radial-gradient(circle at 14% 16%, rgba(61, 232, 255, 0.22), transparent 34%), radial-gradient(circle at 85% 2%, rgba(255, 79, 216, 0.2), transparent 32%), linear-gradient(180deg, #060311 0%, #070514 100%)",
+        selection: "rgba(61, 232, 255, 0.4)",
+      },
+    },
+  },
+  "cherry-blossom": {
+    label: "Cherry Blossom",
+    palette: {
+      mode: "light",
+      primary: { main: "#c04d7a", light: "#df8bb0", dark: "#98345c", contrastText: "#fff2f8" },
+      secondary: { main: "#5f88b3", light: "#8eb0d2", dark: "#406488", contrastText: "#f3f8ff" },
+      background: { default: "#fff5f8", paper: "rgba(255, 255, 255, 0.88)" },
+      text: { primary: "#3b2230", secondary: "#6e5060" },
+      divider: "rgba(192, 77, 122, 0.18)",
+      sidebar: {
+        background: "linear-gradient(197deg, #4d2740 0%, #38263e 62%, #26243d 100%)",
+        hover: "rgba(223, 139, 176, 0.24)",
+        active: "rgba(223, 139, 176, 0.34)",
+        text: "#fff2f7",
+      },
+      header: { background: "rgba(69, 35, 59, 0.9)" },
+      page: {
+        backgroundColor: "#fff5f8",
+        backgroundImage:
+          "radial-gradient(circle at 10% 12%, rgba(223, 139, 176, 0.24), transparent 34%), radial-gradient(circle at 88% -4%, rgba(95, 136, 179, 0.18), transparent 28%), linear-gradient(180deg, #fff9fb 0%, #fff4f7 100%)",
+        selection: "rgba(192, 77, 122, 0.25)",
+      },
+    },
+  },
+};
+
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
   if (loading) return <div>Loading...</div>;
@@ -39,55 +210,38 @@ const PublicRoute = ({ children }) => {
 };
 
 function AppContent() {
-  const [darkMode, setDarkMode] = useState(false);
+  const [themeMode, setThemeMode] = useState("light");
 
   useEffect(() => {
-    const saved = localStorage.getItem("darkMode");
-    if (saved) setDarkMode(saved === "true");
+    const savedTheme = localStorage.getItem("appTheme");
+    if (savedTheme && THEME_PRESETS[savedTheme]) {
+      setThemeMode(savedTheme);
+      return;
+    }
+
+    const savedDarkMode = localStorage.getItem("darkMode");
+    if (savedDarkMode) {
+      setThemeMode(savedDarkMode === "true" ? "dark" : "light");
+    }
   }, []);
 
-  const toggleDarkMode = () => {
-    const next = !darkMode;
-    setDarkMode(next);
-    localStorage.setItem("darkMode", next);
+  const handleThemeChange = (nextTheme) => {
+    if (!THEME_PRESETS[nextTheme]) return;
+    setThemeMode(nextTheme);
+    localStorage.setItem("appTheme", nextTheme);
+    localStorage.setItem("darkMode", THEME_PRESETS[nextTheme].palette.mode === "dark");
   };
 
   const theme = useMemo(
     () => {
-      const lightPalette = {
-        mode: "light",
-        primary: { main: "#0f766e", light: "#39a99b", dark: "#0b4f4a", contrastText: "#f5f7f6" },
-        secondary: { main: "#b08968", light: "#d0a784", dark: "#7a5d45", contrastText: "#111827" },
-        background: { default: "#f5f3ee", paper: "rgba(255, 255, 255, 0.84)" },
-        text: { primary: "#172029", secondary: "#4c5965" },
-        divider: "rgba(12, 28, 38, 0.14)",
-        sidebar: {
-          background: "linear-gradient(195deg, #102234 0%, #08141f 100%)",
-          hover: "rgba(208, 167, 132, 0.18)",
-          active: "rgba(208, 167, 132, 0.24)",
-          text: "#f4eee6",
-        },
-        header: { background: "rgba(7, 20, 32, 0.88)" },
-      };
-
-      const darkPalette = {
-        mode: "dark",
-        primary: { main: "#41b3a4", light: "#6dcfc3", dark: "#2f8379", contrastText: "#081b19" },
-        secondary: { main: "#c9a27f", light: "#e0c1a7", dark: "#8f6e52", contrastText: "#141210" },
-        background: { default: "#070d14", paper: "rgba(14, 24, 35, 0.82)" },
-        text: { primary: "#e9ecef", secondary: "#a8b4bf" },
-        divider: "rgba(210, 222, 233, 0.16)",
-        sidebar: {
-          background: "linear-gradient(200deg, #08131d 0%, #040a11 100%)",
-          hover: "rgba(201, 162, 127, 0.16)",
-          active: "rgba(201, 162, 127, 0.24)",
-          text: "#f4eadf",
-        },
-        header: { background: "rgba(4, 10, 16, 0.88)" },
-      };
+      const activeTheme = THEME_PRESETS[themeMode] || THEME_PRESETS.light;
+      const activePalette = activeTheme.palette;
+      const containedPrimaryGradient = `linear-gradient(135deg, ${activePalette.primary.main} 0%, ${activePalette.primary.dark} 100%)`;
+      const containedSecondaryGradient = `linear-gradient(135deg, ${activePalette.secondary.main} 0%, ${activePalette.secondary.dark} 100%)`;
+      const tabsGradient = `linear-gradient(90deg, ${activePalette.primary.main} 0%, ${activePalette.secondary.main} 100%)`;
 
       return createTheme({
-        palette: darkMode ? darkPalette : lightPalette,
+        palette: activePalette,
         shape: { borderRadius: 14 },
         typography: {
           fontFamily: '"Manrope", "Avenir Next", "Segoe UI", sans-serif',
@@ -132,10 +286,8 @@ function AppContent() {
           MuiCssBaseline: {
             styleOverrides: {
               body: {
-                backgroundColor: darkMode ? "#070d14" : "#f5f3ee",
-                backgroundImage: darkMode
-                  ? "radial-gradient(circle at 12% 16%, rgba(65, 179, 164, 0.16), transparent 34%), radial-gradient(circle at 84% 0%, rgba(201, 162, 127, 0.14), transparent 30%), linear-gradient(180deg, #060b12 0%, #070d14 100%)"
-                  : "radial-gradient(circle at 8% 8%, rgba(15, 118, 110, 0.16), transparent 34%), radial-gradient(circle at 90% -6%, rgba(176, 137, 104, 0.16), transparent 28%), linear-gradient(180deg, #f8f5ef 0%, #f5f3ee 100%)",
+                backgroundColor: activePalette.page.backgroundColor,
+                backgroundImage: activePalette.page.backgroundImage,
                 backgroundAttachment: "scroll",
                 "@media (pointer: fine)": {
                   backgroundAttachment: "fixed",
@@ -143,7 +295,7 @@ function AppContent() {
                 transition: "background-color 0.35s ease, color 0.35s ease",
               },
               "::selection": {
-                backgroundColor: darkMode ? "rgba(65, 179, 164, 0.35)" : "rgba(15, 118, 110, 0.24)",
+                backgroundColor: activePalette.page.selection,
               },
             },
           },
@@ -186,12 +338,8 @@ function AppContent() {
                 "&:hover:not(:disabled)": { filter: "brightness(1.04)" },
                 "&.MuiButton-outlined": { borderColor: theme.palette.divider },
               }),
-              containedPrimary: {
-                background: "linear-gradient(135deg, #0f766e 0%, #145f58 100%)",
-              },
-              containedSecondary: {
-                background: "linear-gradient(135deg, #b08968 0%, #8b694d 100%)",
-              },
+              containedPrimary: { background: containedPrimaryGradient },
+              containedSecondary: { background: containedSecondaryGradient },
             },
           },
           MuiOutlinedInput: {
@@ -208,10 +356,7 @@ function AppContent() {
               indicator: ({ theme }) => ({
                 height: 3,
                 borderRadius: 3,
-                background:
-                  theme.palette.mode === "dark"
-                    ? "linear-gradient(90deg, #41b3a4 0%, #c9a27f 100%)"
-                    : "linear-gradient(90deg, #0f766e 0%, #b08968 100%)",
+                background: tabsGradient,
               }),
             },
           },
@@ -269,7 +414,16 @@ function AppContent() {
         },
       });
     },
-    [darkMode]
+    [themeMode]
+  );
+
+  const themeOptions = useMemo(
+    () =>
+      Object.entries(THEME_PRESETS).map(([value, config]) => ({
+        value,
+        label: config.label,
+      })),
+    []
   );
 
   return (
@@ -298,7 +452,7 @@ function AppContent() {
             path="/join-team"
             element={
               <ProtectedRoute>
-                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                <Layout themeMode={themeMode} setThemeMode={handleThemeChange} themeOptions={themeOptions}>
                   <JoinTeam />
                 </Layout>
               </ProtectedRoute>
@@ -313,7 +467,7 @@ function AppContent() {
             path="/features"
             element={
               <ProtectedRoute>
-                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                <Layout themeMode={themeMode} setThemeMode={handleThemeChange} themeOptions={themeOptions}>
                   <FeaturesPage embedded />
                 </Layout>
               </ProtectedRoute>
@@ -323,7 +477,7 @@ function AppContent() {
             path="/pricing"
             element={
               <ProtectedRoute>
-                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                <Layout themeMode={themeMode} setThemeMode={handleThemeChange} themeOptions={themeOptions}>
                   <PricingPage embedded />
                 </Layout>
               </ProtectedRoute>
@@ -333,7 +487,7 @@ function AppContent() {
             path="/about"
             element={
               <ProtectedRoute>
-                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                <Layout themeMode={themeMode} setThemeMode={handleThemeChange} themeOptions={themeOptions}>
                   <AboutPage embedded />
                 </Layout>
               </ProtectedRoute>
@@ -343,7 +497,7 @@ function AppContent() {
             path="/contact"
             element={
               <ProtectedRoute>
-                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                <Layout themeMode={themeMode} setThemeMode={handleThemeChange} themeOptions={themeOptions}>
                   <ContactPage embedded />
                 </Layout>
               </ProtectedRoute>
@@ -353,7 +507,7 @@ function AppContent() {
             path="/privacy"
             element={
               <ProtectedRoute>
-                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                <Layout themeMode={themeMode} setThemeMode={handleThemeChange} themeOptions={themeOptions}>
                   <PrivacyPage embedded />
                 </Layout>
               </ProtectedRoute>
@@ -363,7 +517,7 @@ function AppContent() {
             path="/terms"
             element={
               <ProtectedRoute>
-                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                <Layout themeMode={themeMode} setThemeMode={handleThemeChange} themeOptions={themeOptions}>
                   <TermsPage embedded />
                 </Layout>
               </ProtectedRoute>
@@ -373,7 +527,7 @@ function AppContent() {
             path="/security"
             element={
               <ProtectedRoute>
-                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                <Layout themeMode={themeMode} setThemeMode={handleThemeChange} themeOptions={themeOptions}>
                   <SecurityPage embedded />
                 </Layout>
               </ProtectedRoute>
@@ -383,7 +537,7 @@ function AppContent() {
             path="/blog"
             element={
               <ProtectedRoute>
-                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                <Layout themeMode={themeMode} setThemeMode={handleThemeChange} themeOptions={themeOptions}>
                   <BlogPage embedded />
                 </Layout>
               </ProtectedRoute>
@@ -393,7 +547,7 @@ function AppContent() {
             path="/app"
             element={
               <ProtectedRoute>
-                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                <Layout themeMode={themeMode} setThemeMode={handleThemeChange} themeOptions={themeOptions}>
                   <Dashboard />
                 </Layout>
               </ProtectedRoute>
@@ -403,7 +557,7 @@ function AppContent() {
             path="/teams"
             element={
               <ProtectedRoute>
-                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                <Layout themeMode={themeMode} setThemeMode={handleThemeChange} themeOptions={themeOptions}>
                   <TeamsHome />
                 </Layout>
               </ProtectedRoute>
@@ -413,7 +567,7 @@ function AppContent() {
             path="/teams/create"
             element={
               <ProtectedRoute>
-                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                <Layout themeMode={themeMode} setThemeMode={handleThemeChange} themeOptions={themeOptions}>
                   <CreateTeam />
                 </Layout>
               </ProtectedRoute>
@@ -423,7 +577,7 @@ function AppContent() {
             path="/teams/:teamId"
             element={
               <ProtectedRoute>
-                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                <Layout themeMode={themeMode} setThemeMode={handleThemeChange} themeOptions={themeOptions}>
                   <TeamDetails />
                 </Layout>
               </ProtectedRoute>
@@ -433,7 +587,7 @@ function AppContent() {
             path="/profile"
             element={
               <ProtectedRoute>
-                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                <Layout themeMode={themeMode} setThemeMode={handleThemeChange} themeOptions={themeOptions}>
                   <Profile />
                 </Layout>
               </ProtectedRoute>
@@ -443,7 +597,7 @@ function AppContent() {
             path="/insights"
             element={
               <ProtectedRoute>
-                <Layout toggleDarkMode={toggleDarkMode} darkMode={darkMode}>
+                <Layout themeMode={themeMode} setThemeMode={handleThemeChange} themeOptions={themeOptions}>
                   <JournalHub />
                 </Layout>
               </ProtectedRoute>

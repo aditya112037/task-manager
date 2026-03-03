@@ -9,10 +9,10 @@ import {
   Menu,
   MenuItem,
   Avatar,
+  FormControl,
+  Select,
 } from "@mui/material";
 
-import DarkModeIcon from "@mui/icons-material/DarkMode";
-import LightModeIcon from "@mui/icons-material/LightMode";
 import MenuIcon from "@mui/icons-material/Menu";
 
 import { useAuth } from "../../context/AuthContext";
@@ -20,7 +20,7 @@ import NotificationCenter from "../Notifications/NotificationCenter";
 import { Link, useLocation } from "react-router-dom";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 
-const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
+const Header = ({ themeMode, setThemeMode, themeOptions, sidebarOpen, toggleSidebar }) => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const [marketingAnchorEl, setMarketingAnchorEl] = React.useState(null);
@@ -149,18 +149,46 @@ const Header = ({ toggleDarkMode, darkMode, sidebarOpen, toggleSidebar }) => {
 
           <NotificationCenter />
 
-          <IconButton
+          <FormControl
+            size="small"
             sx={{
-              color: "sidebar.text",
-              border: "1px solid rgba(255,255,255,0.2)",
-              "&:hover": {
-                backgroundColor: "rgba(255,255,255,0.1)",
-              }
+              minWidth: { xs: 118, sm: 154 },
+              ".MuiOutlinedInput-root": {
+                color: "sidebar.text",
+                borderRadius: 2,
+                backgroundColor: "rgba(255,255,255,0.06)",
+                "& .MuiOutlinedInput-notchedOutline": {
+                  borderColor: "rgba(255,255,255,0.26)",
+                },
+                "&:hover .MuiOutlinedInput-notchedOutline": {
+                  borderColor: "rgba(255,255,255,0.42)",
+                },
+                "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+                  borderColor: "rgba(255,255,255,0.56)",
+                },
+              },
+              ".MuiSelect-icon": { color: "sidebar.text" },
+              ".MuiSelect-select": {
+                py: 0.7,
+                pr: 3.5,
+                fontSize: { xs: "0.76rem", sm: "0.84rem" },
+                fontWeight: 700,
+              },
             }}
-            onClick={toggleDarkMode}
           >
-            {darkMode ? <LightModeIcon /> : <DarkModeIcon />}
-          </IconButton>
+            <Select
+              value={themeMode}
+              onChange={(event) => setThemeMode(event.target.value)}
+              displayEmpty
+              MenuProps={{ disableScrollLock: true }}
+            >
+              {themeOptions.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
 
           <Typography sx={{
             color: "sidebar.text",
