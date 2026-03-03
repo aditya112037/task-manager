@@ -53,6 +53,16 @@ const userSchema = new mongoose.Schema(
         createdAt: { type: Date, default: Date.now },
       },
     ],
+
+    journalReminderSettings: {
+      enabled: { type: Boolean, default: false },
+      time: {
+        type: String,
+        default: "21:00",
+        match: /^([01]\d|2[0-3]):([0-5]\d)$/,
+      },
+      updatedAt: { type: Date, default: Date.now },
+    },
   },
   { timestamps: true }
 );

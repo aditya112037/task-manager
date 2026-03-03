@@ -158,6 +158,8 @@ export const journalsAPI = {
   toggleFavorite: (id) => api.patch(`/api/journals/${id}/favorite`),
   deleteEntry: (id) => api.delete(`/api/journals/${id}`),
   getInsights: (days = 30) => api.get("/api/journals/insights/summary", { params: { days } }),
+  getReminderSettings: () => api.get("/api/journals/reminder-settings"),
+  updateReminderSettings: (data) => api.put("/api/journals/reminder-settings", data),
 };
 
 export default api;

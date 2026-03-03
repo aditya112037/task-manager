@@ -1,6 +1,7 @@
 const express = require("express");
 const { body, validationResult } = require("express-validator");
 const JournalEntry = require("../models/JournalEntry");
+const User = require("../models/user");
 const { protect } = require("../middleware/auth");
 
 const router = express.Router();
@@ -41,6 +42,85 @@ const toArray = (value) => {
   }
   return [];
 };
+
+const normalizeReminderTime = (value) => {
+  const raw = String(value || "").trim();
+  const isoMatch = raw.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+  if (isoMatch) return raw;
+
+  const ampmMatch = raw.match(/^(\d{1,2}):([0-5]\d)\s*(am|pm)$/i);
+  if (ampmMatch) {
+    let hour = Number(ampmMatch[1]);
+    const minute = Number(ampmMatch[2]);
+    const period = ampmMatch[3].toLowerCase();
+    if (hour === 12) hour = period === "am" ? 0 : 12;
+    else if (period === "pm") hour += 12;
+    if (hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59) {
+      return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+    }
+  }
+
+  return "21:00";
+};
+
+// @desc    Get journal reminder settings
+// @route   GET /api/journals/reminder-settings
+// @access  Private
+router.get("/reminder-settings", async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select("journalReminderSettings");
+    const settings = user?.journalReminderSettings || {};
+    res.json({
+      enabled: Boolean(settings.enabled),
+      time: normalizeReminderTime(settings.time || "21:00"),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// @desc    Update journal reminder settings
+// @route   PUT /api/journals/reminder-settings
+// @access  Private
+router.put(
+  "/reminder-settings",
+  [
+    body("enabled").optional().isBoolean(),
+    body("time").optional().isString(),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    try {
+      const user = await User.findById(req.user._id);
+      if (!user) return res.status(404).json({ message: "User not found" });
+
+      const current = user.journalReminderSettings || {};
+      const enabled = Object.prototype.hasOwnProperty.call(req.body, "enabled")
+        ? Boolean(req.body.enabled)
+        : Boolean(current.enabled);
+      const time = Object.prototype.hasOwnProperty.call(req.body, "time")
+        ? normalizeReminderTime(req.body.time)
+        : normalizeReminderTime(current.time || "21:00");
+
+      user.journalReminderSettings = {
+        enabled,
+        time,
+        updatedAt: new Date(),
+      };
+      await user.save();
+
+      res.json({ enabled, time });
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ message: "Server error" });
+    }
+  }
+);
 
 const buildUserJournalQuery = (query, userId) => {
   const filter = { user: userId };

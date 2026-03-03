@@ -138,8 +138,6 @@ const createTemplateDraft = (template, mood, entryDate) => {
   };
 };
 
-const REMINDER_ENABLED_KEY = "journalReminderEnabled";
-const REMINDER_TIME_KEY = "journalReminderTime";
 const REMINDER_LAST_KEY = "journalReminderLastDate";
 const MAX_MEDIA_FILES = 8;
 const MAX_MEDIA_BYTES = 4 * 1024 * 1024;
@@ -196,6 +194,26 @@ const parseTimeToMinutes = (value) => {
     .map((part) => Number(part));
   if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
   return hh * 60 + mm;
+};
+
+const normalizeReminderTime = (value) => {
+  const raw = String(value || "").trim();
+  const isoMatch = raw.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+  if (isoMatch) return raw;
+
+  const ampmMatch = raw.match(/^(\d{1,2}):([0-5]\d)\s*(am|pm)$/i);
+  if (ampmMatch) {
+    let hour = Number(ampmMatch[1]);
+    const minute = Number(ampmMatch[2]);
+    const period = ampmMatch[3].toLowerCase();
+    if (hour === 12) hour = period === "am" ? 0 : 12;
+    else if (period === "pm") hour += 12;
+    return `${String(Math.max(0, Math.min(23, hour))).padStart(2, "0")}:${String(
+      Math.max(0, Math.min(59, minute))
+    ).padStart(2, "0")}`;
+  }
+
+  return "21:00";
 };
 
 const fileToDataUrl = (file) =>
@@ -361,12 +379,9 @@ const JournalHub = () => {
 
   const [form, setForm] = useState(emptyForm);
 
-  const [reminderEnabled, setReminderEnabled] = useState(
-    localStorage.getItem(REMINDER_ENABLED_KEY) === "true"
-  );
-  const [reminderTime, setReminderTime] = useState(
-    localStorage.getItem(REMINDER_TIME_KEY) || "21:00"
-  );
+  const [reminderEnabled, setReminderEnabled] = useState(false);
+  const [reminderTime, setReminderTime] = useState("21:00");
+  const [reminderSettingsLoaded, setReminderSettingsLoaded] = useState(false);
   const [notificationPermission, setNotificationPermission] = useState(
     typeof Notification !== "undefined" ? Notification.permission : "denied"
   );
@@ -403,12 +418,74 @@ const JournalHub = () => {
   }, [loadEntries]);
 
   useEffect(() => {
-    localStorage.setItem(REMINDER_ENABLED_KEY, String(reminderEnabled));
-  }, [reminderEnabled]);
+    const syncPermission = () => {
+      setNotificationPermission(typeof Notification !== "undefined" ? Notification.permission : "denied");
+    };
+
+    syncPermission();
+    document.addEventListener("visibilitychange", syncPermission);
+    window.addEventListener("focus", syncPermission);
+    return () => {
+      document.removeEventListener("visibilitychange", syncPermission);
+      window.removeEventListener("focus", syncPermission);
+    };
+  }, []);
 
   useEffect(() => {
-    localStorage.setItem(REMINDER_TIME_KEY, reminderTime);
-  }, [reminderTime]);
+    let active = true;
+    const loadReminderSettings = async () => {
+      try {
+        const res = await journalsAPI.getReminderSettings();
+        if (!active) return;
+        setReminderEnabled(Boolean(res?.data?.enabled));
+        setReminderTime(normalizeReminderTime(res?.data?.time || "21:00"));
+      } catch (err) {
+        console.error("Failed to load reminder settings:", err);
+      } finally {
+        if (active) setReminderSettingsLoaded(true);
+      }
+    };
+
+    loadReminderSettings();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!reminderSettingsLoaded) return;
+    const timeout = setTimeout(async () => {
+      try {
+        await journalsAPI.updateReminderSettings({
+          enabled: reminderEnabled,
+          time: normalizeReminderTime(reminderTime),
+        });
+      } catch (err) {
+        console.error("Failed to save reminder settings:", err);
+      }
+    }, 250);
+
+    return () => clearTimeout(timeout);
+  }, [reminderEnabled, reminderTime, reminderSettingsLoaded]);
+
+  useEffect(() => {
+    if (!reminderEnabled) return;
+    if (typeof Notification === "undefined") return;
+
+    if (Notification.permission === "default") {
+      Notification.requestPermission()
+        .then((permission) => {
+          setNotificationPermission(permission);
+          if (permission !== "granted") {
+            setError("Notification permission is required for reminders.");
+          }
+        })
+        .catch((err) => {
+          console.error(err);
+          setError("Could not request notification permission.");
+        });
+    }
+  }, [reminderEnabled]);
 
   useEffect(() => {
     const maybeSendReminder = () => {
@@ -439,35 +516,6 @@ const JournalHub = () => {
     const interval = setInterval(maybeSendReminder, 60000);
     return () => clearInterval(interval);
   }, [notificationPermission, reminderEnabled, reminderTime]);
-
-  const askNotificationPermission = async () => {
-    if (typeof Notification === "undefined") {
-      setError("Notifications are not supported in this browser.");
-      return;
-    }
-    try {
-      const permission = await Notification.requestPermission();
-      setNotificationPermission(permission);
-    } catch (err) {
-      console.error(err);
-      setError("Could not request notification permission.");
-    }
-  };
-
-  const sendTestNotification = () => {
-    if (typeof Notification === "undefined") {
-      setError("Notifications are not supported in this browser.");
-      return;
-    }
-    if (notificationPermission !== "granted") {
-      setError("Enable notifications first.");
-      return;
-    }
-    const test = new Notification("Insights Test Notification", {
-      body: "Notifications are working.",
-    });
-    test.onclick = () => window.focus();
-  };
 
   const openCreateDialog = () => {
     const now = new Date();
@@ -947,15 +995,13 @@ const JournalHub = () => {
               label="Reminder Time"
               InputLabelProps={{ shrink: true }}
               value={reminderTime}
-              onChange={(e) => setReminderTime(e.target.value)}
+              onChange={(e) => setReminderTime(normalizeReminderTime(e.target.value))}
+              inputProps={{ step: 60 }}
               sx={{ minWidth: 145 }}
             />
-            <Button size="small" variant="outlined" onClick={askNotificationPermission}>
-              {notificationPermission === "granted" ? "Notifications Enabled" : "Enable Notifications"}
-            </Button>
-            <Button size="small" variant="outlined" onClick={sendTestNotification}>
-              Test Notification
-            </Button>
+            <Typography variant="caption" color="text.secondary">
+              Notifications: {notificationPermission}
+            </Typography>
           </Stack>
         </Stack>
       </Paper>
