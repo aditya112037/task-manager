@@ -261,6 +261,7 @@ function AppContent() {
     () => {
       const activeTheme = THEME_PRESETS[themeMode] || THEME_PRESETS.light;
       const activePalette = activeTheme.palette;
+      const isAuroraTheme = themeMode === "aurora";
       const containedPrimaryGradient = `linear-gradient(135deg, ${activePalette.primary.main} 0%, ${activePalette.primary.dark} 100%)`;
       const containedSecondaryGradient = `linear-gradient(135deg, ${activePalette.secondary.main} 0%, ${activePalette.secondary.dark} 100%)`;
       const tabsGradient = `linear-gradient(90deg, ${activePalette.primary.main} 0%, ${activePalette.secondary.main} 100%)`;
@@ -312,7 +313,9 @@ function AppContent() {
             styleOverrides: {
               body: {
                 backgroundColor: activePalette.page.backgroundColor,
-                backgroundImage: activePalette.page.backgroundImage,
+                backgroundImage: isAuroraTheme
+                  ? "linear-gradient(180deg, #0d0b20 0%, #0f0d24 100%)"
+                  : activePalette.page.backgroundImage,
                 backgroundAttachment: "scroll",
                 "@media (pointer: fine)": {
                   backgroundAttachment: "fixed",
@@ -328,7 +331,7 @@ function AppContent() {
             styleOverrides: {
               root: ({ theme }) => ({
                 backgroundImage: "none",
-                backdropFilter: "blur(10px)",
+                backdropFilter: isAuroraTheme ? "blur(4px)" : "blur(10px)",
                 border: `1px solid ${theme.palette.divider}`,
               }),
             },
@@ -347,7 +350,7 @@ function AppContent() {
               root: ({ theme }) => ({
                 boxShadow: "none",
                 borderBottom: `1px solid ${theme.palette.divider}`,
-                backdropFilter: "blur(14px)",
+                backdropFilter: isAuroraTheme ? "blur(8px)" : "blur(14px)",
               }),
             },
           },
@@ -400,7 +403,7 @@ function AppContent() {
             styleOverrides: {
               root: ({ theme }) => ({
                 borderRadius: 10,
-                backdropFilter: "blur(8px)",
+                backdropFilter: isAuroraTheme ? "blur(3px)" : "blur(8px)",
                 borderColor: theme.palette.divider,
               }),
             },
@@ -457,9 +460,9 @@ function AppContent() {
       {themeMode === "aurora" && (
         <Aurora
           colorStops={["#7cff67", "#B19EEF", "#5227FF"]}
-          blend={0.5}
-          amplitude={1.0}
-          speed={1}
+          blend={0.72}
+          amplitude={1.12}
+          speed={0.9}
         />
       )}
       <Box sx={{ position: "relative", zIndex: 1 }}>

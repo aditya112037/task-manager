@@ -1,175 +1,246 @@
-import React, { useEffect, useMemo, useRef } from "react";
-import { Color, Mesh, Program, Renderer, Triangle } from "ogl";
+import { Renderer, Program, Mesh, Color, Triangle } from "ogl";
+import { useEffect, useRef } from "react";
 import gsap from "gsap";
 
 const hexToRgb = (hex) => {
-  const value = hex.replace("#", "");
-  const normalized = value.length === 3 ? value.split("").map((c) => c + c).join("") : value;
-  const parsed = Number.parseInt(normalized, 16);
-  return [(parsed >> 16) & 255, (parsed >> 8) & 255, parsed & 255];
+  hex = hex.replace(/^#/, "");
+  if (hex.length === 3) hex = hex.split("").map((x) => x + x).join("");
+  const intVal = parseInt(hex, 16);
+  return [((intVal >> 16) & 255) / 255, ((intVal >> 8) & 255) / 255, (intVal & 255) / 255];
 };
 
-const Aurora = ({
-  colorStops = ["#7cff67", "#B19EEF", "#5227FF"],
-  blend = 0.5,
-  amplitude = 1.0,
-  speed = 1,
-}) => {
-  const containerRef = useRef(null);
-  const uniformsRef = useRef(null);
+const vertex = `
+  attribute vec2 uv;
+  attribute vec2 position;
+  varying vec2 vUv;
+  void main() {
+    vUv = uv;
+    gl_Position = vec4(position, 0, 1);
+  }
+`;
 
-  const colors = useMemo(
-    () => colorStops.slice(0, 3).concat(["#ffffff", "#ffffff", "#ffffff"]).slice(0, 3),
-    [colorStops]
-  );
+const fragment = `
+  precision highp float;
+
+  uniform float uTime;
+  uniform vec3 uColorStops[3];
+  uniform vec2 uResolution;
+  uniform float uBlend;
+  uniform float uAmplitude;
+  uniform float uSpeed;
+
+  varying vec2 vUv;
+
+  vec3 permute(vec3 x) {
+    return mod(((x * 34.0) + 1.0) * x, 289.0);
+  }
+
+  float snoise(vec2 v){
+    const vec4 C = vec4(
+      0.211324865405187,
+      0.366025403784439,
+      -0.577350269189626,
+      0.024390243902439
+    );
+    vec2 i  = floor(v + dot(v, C.yy) );
+    vec2 x0 = v - i + dot(i, C.xx);
+    vec2 i1;
+    i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
+    vec4 x12 = x0.xyxy + C.xxzz;
+    x12.xy -= i1;
+    i = mod(i, 289.0);
+    vec3 p = permute(
+      permute(i.y + vec3(0.0, i1.y, 1.0))
+      + i.x + vec3(0.0, i1.x, 1.0)
+    );
+    vec3 m = max(
+      0.5 - vec3(
+        dot(x0,x0),
+        dot(x12.xy,x12.xy),
+        dot(x12.zw,x12.zw)
+      ),
+      0.0
+    );
+    m = m * m;
+    m = m * m;
+    vec3 x = 2.0 * fract(p * C.www) - 1.0;
+    vec3 h = abs(x) - 0.5;
+    vec3 ox = floor(x + 0.5);
+    vec3 a0 = x - ox;
+    m *= 1.79284291400159 - 0.85373472095314 * (a0*a0 + h*h);
+    vec3 g;
+    g.x  = a0.x  * x0.x  + h.x  * x0.y;
+    g.yz = a0.yz * x12.xz + h.yz * x12.yw;
+    return 130.0 * dot(m, g);
+  }
+
+  struct ColorStop {
+    vec3 color;
+    float position;
+  };
+
+  #define COLOR_RAMP(colors, factor, finalColor) {                 
+    int index = 0;                                                  
+    for (int i = 0; i < 2; i++) {                                  
+      ColorStop currentColor = colors[i];                           
+      bool isInBetween = currentColor.position <= factor;           
+      index = int(mix(float(index), float(i), float(isInBetween))); 
+    }                                                               
+    ColorStop currentColor = colors[index];                         
+    ColorStop nextColor = colors[index + 1];                        
+    float range = nextColor.position - currentColor.position;       
+    float lerpFactor = (factor - currentColor.position) / range;    
+    finalColor = mix(currentColor.color, nextColor.color, lerpFactor);
+  }
+
+  void main() {
+    vec2 uv = vUv;
+    ColorStop colors[3];
+    colors[0] = ColorStop(uColorStops[0], 0.0);
+    colors[1] = ColorStop(uColorStops[1], 0.5);
+    colors[2] = ColorStop(uColorStops[2], 1.0);
+
+    vec2 p = uv * vec2(uResolution.x / uResolution.y, 1.0);
+    float t = uTime * uSpeed;
+    float noise = snoise(vec2(p.x * 2.0 + t, p.y - t) * 1.1);
+    noise += snoise(vec2(p.x * 3.5 - t, p.y + t) * 0.6) * 0.5;
+    noise = (noise + 1.0) / 2.0;
+    noise = smoothstep(0.0, 1.0, noise);
+
+    float shape = smoothstep(0.2, 0.8, sin(uv.x * 3.14159 + t * 0.5) * 0.5 + 0.5);
+    float brightness = mix(0.4, 1.0, shape);
+    float finalNoise = noise * brightness * uAmplitude;
+    finalNoise = clamp(finalNoise, 0.0, 1.0);
+
+    vec3 auroraColor;
+    COLOR_RAMP(colors, finalNoise, auroraColor);
+
+    float glow = exp(-uv.y * 2.5) * uBlend;
+    vec3 finalColor = auroraColor * glow;
+
+    float midPoint = 0.2;
+    float contrast = 1.35;
+    finalColor = (finalColor - vec3(midPoint)) * contrast + vec3(midPoint);
+    finalColor = clamp(finalColor, 0.0, 1.0);
+
+    gl_FragColor = vec4(finalColor, smoothstep(0.0, 1.0, finalNoise) * 0.8);
+  }
+`;
+
+const Aurora = (props) => {
+  const {
+    colorStops = ["#00d8ff", "#7cff67", "#00d8ff"],
+    blend = 0.5,
+    amplitude = 1.0,
+    speed = 0.5,
+  } = props;
+  const propsRef = useRef(props);
+  propsRef.current = props;
+
+  const ctnDom = useRef(null);
 
   useEffect(() => {
-    if (!containerRef.current) return undefined;
+    if (!ctnDom.current) return undefined;
+    const container = ctnDom.current;
 
-    const renderer = new Renderer({ alpha: true, antialias: true, dpr: Math.min(window.devicePixelRatio || 1, 2) });
+    const renderer = new Renderer({
+      alpha: true,
+      antialias: true,
+      dpr: Math.min(Math.max(window.devicePixelRatio || 1, 1), 2.5),
+    });
     const gl = renderer.gl;
     gl.clearColor(0, 0, 0, 0);
 
-    const vertex = `
-      attribute vec2 uv;
-      attribute vec2 position;
-      varying vec2 vUv;
-      void main() {
-        vUv = uv;
-        gl_Position = vec4(position, 0.0, 1.0);
-      }
-    `;
-
-    const fragment = `
-      precision highp float;
-
-      uniform float uTime;
-      uniform vec2 uResolution;
-      uniform float uAmplitude;
-      uniform float uBlend;
-      uniform float uSpeed;
-      uniform vec3 uColor1;
-      uniform vec3 uColor2;
-      uniform vec3 uColor3;
-      varying vec2 vUv;
-
-      float hash(vec2 p) {
-        p = fract(p * vec2(123.34, 345.45));
-        p += dot(p, p + 34.345);
-        return fract(p.x * p.y);
-      }
-
-      float noise(vec2 p) {
-        vec2 i = floor(p);
-        vec2 f = fract(p);
-        float a = hash(i);
-        float b = hash(i + vec2(1.0, 0.0));
-        float c = hash(i + vec2(0.0, 1.0));
-        float d = hash(i + vec2(1.0, 1.0));
-        vec2 u = f * f * (3.0 - 2.0 * f);
-        return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
-      }
-
-      float fbm(vec2 p) {
-        float total = 0.0;
-        float amp = 0.5;
-        for (int i = 0; i < 5; i++) {
-          total += noise(p) * amp;
-          p *= 2.0;
-          amp *= 0.5;
-        }
-        return total;
-      }
-
-      void main() {
-        vec2 uv = vUv;
-        vec2 aspectUv = uv * vec2(uResolution.x / max(uResolution.y, 1.0), 1.0);
-        float t = uTime * (0.08 + 0.12 * uSpeed);
-
-        float ridge = sin((aspectUv.x * 3.2 + t) + fbm(aspectUv * 2.8 + vec2(0.0, t * 0.6)) * (2.2 * uAmplitude));
-        float wave = sin((aspectUv.x * 1.6 - t * 0.7) + fbm(aspectUv * 3.5 - vec2(0.0, t * 0.45)) * (1.6 * uAmplitude));
-        float band = smoothstep(-0.7, 0.95, ridge * 0.62 + wave * 0.5);
-
-        float nebula = fbm(aspectUv * 2.0 + vec2(t * 0.3, -t * 0.16));
-        float aurora = smoothstep(0.2, 1.0, band + nebula * 0.75);
-        float blendMix = clamp(0.2 + uBlend * 0.8, 0.0, 1.0);
-
-        vec3 paletteA = mix(uColor1, uColor2, clamp(uv.x + nebula * 0.25, 0.0, 1.0));
-        vec3 paletteB = mix(uColor2, uColor3, clamp(1.0 - uv.y + nebula * 0.15, 0.0, 1.0));
-        vec3 color = mix(paletteA, paletteB, blendMix);
-
-        float topFade = smoothstep(1.0, 0.18, uv.y);
-        float glow = pow(max(aurora, 0.0), 1.45) * topFade;
-        float alpha = clamp(glow * (0.5 + 0.45 * uBlend), 0.0, 0.92);
-
-        gl_FragColor = vec4(color * glow, alpha);
-      }
-    `;
-
-    const [c1, c2, c3] = colors.map((hex) => hexToRgb(hex));
-    const uniforms = {
-      uTime: { value: 0 },
-      uResolution: { value: [window.innerWidth, window.innerHeight] },
-      uAmplitude: { value: amplitude },
-      uBlend: { value: blend },
-      uSpeed: { value: speed },
-      uColor1: { value: new Color(c1[0] / 255, c1[1] / 255, c1[2] / 255) },
-      uColor2: { value: new Color(c2[0] / 255, c2[1] / 255, c2[2] / 255) },
-      uColor3: { value: new Color(c3[0] / 255, c3[1] / 255, c3[2] / 255) },
-    };
-    uniformsRef.current = uniforms;
-
-    const program = new Program(gl, { vertex, fragment, uniforms, transparent: true });
     const geometry = new Triangle(gl);
+    if (geometry.attributes.uv) delete geometry.attributes.uv;
+
+    const colorStopsUniform = colorStops.map((hex) => {
+      const rgb = hexToRgb(hex);
+      return new Color(...rgb);
+    });
+
+    const program = new Program(gl, {
+      vertex,
+      fragment,
+      uniforms: {
+        uTime: { value: 0 },
+        uColorStops: { value: colorStopsUniform },
+        uResolution: {
+          value: new Float32Array([
+            gl.canvas.width,
+            gl.canvas.height,
+          ]),
+        },
+        uBlend: { value: blend },
+        uAmplitude: { value: amplitude },
+        uSpeed: { value: speed },
+      },
+    });
+
     const mesh = new Mesh(gl, { geometry, program });
 
-    containerRef.current.appendChild(gl.canvas);
-
     const resize = () => {
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      uniforms.uResolution.value = [window.innerWidth, window.innerHeight];
+      const width = container.offsetWidth;
+      const height = container.offsetHeight;
+      renderer.dpr = Math.min(Math.max(window.devicePixelRatio || 1, 1), 2.5);
+      renderer.setSize(width, height);
+      const resolution = program.uniforms.uResolution.value;
+      resolution[0] = gl.canvas.width;
+      resolution[1] = gl.canvas.height;
     };
-    resize();
     window.addEventListener("resize", resize);
+    resize();
 
-    let rafId = 0;
-    const render = (time) => {
-      uniforms.uTime.value = time * 0.001;
+    let elapsed = 0;
+    const update = (dt) => {
+      elapsed += dt;
+      program.uniforms.uTime.value = elapsed * 0.001;
+
+      const current = propsRef.current;
+      const blendValue = current.blend ?? 0.5;
+      const amplitudeValue = current.amplitude ?? 1.0;
+      const speedValue = current.speed ?? 0.5;
+      const stopColors = current.colorStops ?? colorStops;
+
+      program.uniforms.uBlend.value = blendValue;
+      program.uniforms.uAmplitude.value = amplitudeValue;
+      program.uniforms.uSpeed.value = speedValue;
+      program.uniforms.uColorStops.value = stopColors.map((hex) => {
+        const rgb = hexToRgb(hex);
+        return new Color(...rgb);
+      });
+
       renderer.render({ scene: mesh });
-      rafId = requestAnimationFrame(render);
     };
-    rafId = requestAnimationFrame(render);
+
+    gsap.ticker.add(update);
+    gsap.ticker.fps(60);
+
+    container.appendChild(gl.canvas);
+    gl.canvas.style.width = "100%";
+    gl.canvas.style.height = "100%";
+    gl.canvas.style.display = "block";
+    gl.canvas.style.filter = "contrast(1.18) saturate(1.12)";
 
     return () => {
-      cancelAnimationFrame(rafId);
+      gsap.ticker.remove(update);
       window.removeEventListener("resize", resize);
-      if (gl.canvas?.parentNode) gl.canvas.parentNode.removeChild(gl.canvas);
-      try {
-        gl.getExtension("WEBGL_lose_context")?.loseContext();
-      } catch {
-        // no-op
+      if (gl.canvas.parentNode === container) {
+        container.removeChild(gl.canvas);
       }
+      gl.getExtension("WEBGL_lose_context")?.loseContext();
     };
-  }, [colors, amplitude, blend, speed]);
-
-  useEffect(() => {
-    if (!uniformsRef.current) return;
-    const uniforms = uniformsRef.current;
-    gsap.to(uniforms.uAmplitude, { value: amplitude, duration: 0.8, ease: "power2.out" });
-    gsap.to(uniforms.uBlend, { value: blend, duration: 0.8, ease: "power2.out" });
-    gsap.to(uniforms.uSpeed, { value: speed, duration: 0.8, ease: "power2.out" });
-  }, [amplitude, blend, speed]);
+  }, [amplitude, blend, colorStops, speed]);
 
   return (
     <div
-      ref={containerRef}
+      ref={ctnDom}
       aria-hidden
       style={{
         position: "fixed",
         inset: 0,
         pointerEvents: "none",
         zIndex: 0,
-        overflow: "hidden",
       }}
     />
   );
