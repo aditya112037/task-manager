@@ -195,86 +195,6 @@ const THEME_PRESETS = {
       },
     },
   },
-  "deep-cosmos": {
-    label: "Deep Cosmos",
-    palette: {
-      mode: "dark",
-      primary: { main: "#7a8fff", light: "#a8b5ff", dark: "#4a5bd4", contrastText: "#070b1a" },
-      secondary: { main: "#86d7ff", light: "#b7e8ff", dark: "#3b9bc7", contrastText: "#07121a" },
-      background: { default: "#060b1a", paper: "rgba(13, 20, 40, 0.8)" },
-      text: { primary: "#e7ebff", secondary: "#a7b3db" },
-      divider: "rgba(122, 143, 255, 0.2)",
-      sidebar: {
-        background: "linear-gradient(196deg, #040818 0%, #060d22 56%, #0a1433 100%)",
-        hover: "rgba(134, 215, 255, 0.16)",
-        active: "rgba(122, 143, 255, 0.22)",
-        text: "#edf2ff",
-      },
-      header: { background: "rgba(7, 13, 30, 0.9)" },
-      page: {
-        backgroundColor: "#060b1a",
-        backgroundImage:
-          "radial-gradient(circle at 30% 20%, rgba(90, 120, 255, 0.18), transparent 40%), radial-gradient(circle at 72% 14%, rgba(108, 207, 255, 0.14), transparent 36%), linear-gradient(180deg, #050915 0%, #060b1a 100%)",
-        selection: "rgba(122, 143, 255, 0.34)",
-      },
-    },
-    visual: {
-      glassIntensity: 2,
-      glassBlur: 16,
-      glowIntensity: 2,
-      surfaceNoise: 0.045,
-      accentGlow: true,
-      cardDepth: 4,
-      borderStyle: "soft",
-      animationProfile: "cosmic",
-      hoverLift: true,
-      backgroundLayers: [
-        "radial-gradient(circle at 10% 72%, rgba(74, 91, 212, 0.12), transparent 42%)",
-        "radial-gradient(circle at 84% 78%, rgba(134, 215, 255, 0.09), transparent 40%)",
-      ],
-      vignette: 0.34,
-    },
-  },
-  "aurora-executive": {
-    label: "Aurora Executive",
-    palette: {
-      mode: "dark",
-      primary: { main: "#67f0d0", light: "#9cf8e2", dark: "#2db79d", contrastText: "#06150f" },
-      secondary: { main: "#d08dff", light: "#e3b8ff", dark: "#9858c8", contrastText: "#16061f" },
-      background: { default: "#120d26", paper: "rgba(21, 20, 46, 0.78)" },
-      text: { primary: "#f0edff", secondary: "#b7b2d8" },
-      divider: "rgba(168, 140, 255, 0.2)",
-      sidebar: {
-        background: "linear-gradient(196deg, #0f0a22 0%, #141033 56%, #1c1744 100%)",
-        hover: "rgba(103, 240, 208, 0.18)",
-        active: "rgba(208, 141, 255, 0.24)",
-        text: "#f5f2ff",
-      },
-      header: { background: "rgba(17, 14, 37, 0.9)" },
-      page: {
-        backgroundColor: "#120d26",
-        backgroundImage:
-          "radial-gradient(circle at 22% 18%, rgba(103, 240, 208, 0.2), transparent 38%), radial-gradient(circle at 76% 16%, rgba(208, 141, 255, 0.2), transparent 40%), linear-gradient(180deg, #100a20 0%, #120d26 100%)",
-        selection: "rgba(208, 141, 255, 0.34)",
-      },
-    },
-    visual: {
-      glassIntensity: 3,
-      glassBlur: 20,
-      glowIntensity: 2,
-      surfaceNoise: 0.03,
-      accentGlow: true,
-      cardDepth: 5,
-      borderStyle: "glow",
-      animationProfile: "aurora",
-      hoverLift: true,
-      backgroundLayers: [
-        "linear-gradient(110deg, rgba(99, 255, 224, 0.12) 8%, transparent 36%, rgba(208, 141, 255, 0.16) 64%, transparent 84%)",
-        "radial-gradient(circle at 52% 78%, rgba(99, 255, 224, 0.08), transparent 42%)",
-      ],
-      vignette: 0.26,
-    },
-  },
 };
 
 const ProtectedRoute = ({ children }) => {
@@ -316,30 +236,12 @@ function AppContent() {
     () => {
       const activeTheme = THEME_PRESETS[themeMode] || THEME_PRESETS.light;
       const activePalette = activeTheme.palette;
-      const activeVisual = activeTheme.visual || {};
       const containedPrimaryGradient = `linear-gradient(135deg, ${activePalette.primary.main} 0%, ${activePalette.primary.dark} 100%)`;
       const containedSecondaryGradient = `linear-gradient(135deg, ${activePalette.secondary.main} 0%, ${activePalette.secondary.dark} 100%)`;
       const tabsGradient = `linear-gradient(90deg, ${activePalette.primary.main} 0%, ${activePalette.secondary.main} 100%)`;
-      const baseBackground = activePalette.page.backgroundImage;
-      const layeredBackground = [baseBackground, ...(activeVisual.backgroundLayers || [])].join(", ");
-      const glassBlur = activeVisual.glassBlur ?? 10;
-      const surfaceNoise = activeVisual.surfaceNoise ?? 0;
-      const glowIntensity = activeVisual.glowIntensity ?? 0;
-      const cardDepth = activeVisual.cardDepth ?? 3;
-      const liftEnabled = Boolean(activeVisual.hoverLift);
-      const accentGlow = Boolean(activeVisual.accentGlow);
-      const vignette = activeVisual.vignette ?? 0;
-      const motionProfile = activeVisual.animationProfile || "none";
-      const borderColor =
-        activeVisual.borderStyle === "glow"
-          ? `${activePalette.primary.main}66`
-          : activeVisual.borderStyle === "soft"
-            ? `${activePalette.primary.main}2e`
-            : activePalette.divider;
 
       return createTheme({
         palette: activePalette,
-        customTheme: activeVisual,
         shape: { borderRadius: 14 },
         typography: {
           fontFamily: '"Manrope", "Avenir Next", "Segoe UI", sans-serif',
@@ -385,59 +287,12 @@ function AppContent() {
             styleOverrides: {
               body: {
                 backgroundColor: activePalette.page.backgroundColor,
-                backgroundImage: layeredBackground,
+                backgroundImage: activePalette.page.backgroundImage,
                 backgroundAttachment: "scroll",
-                position: "relative",
-                overflowX: "hidden",
                 "@media (pointer: fine)": {
                   backgroundAttachment: "fixed",
                 },
                 transition: "background-color 0.35s ease, color 0.35s ease",
-              },
-              "#root": {
-                position: "relative",
-                zIndex: 1,
-              },
-              "body::before": {
-                content: '""',
-                position: "fixed",
-                inset: "-16%",
-                pointerEvents: "none",
-                zIndex: 0,
-                opacity: surfaceNoise,
-                backgroundImage:
-                  "repeating-linear-gradient(0deg, rgba(255,255,255,0.18) 0 1px, transparent 1px 3px), repeating-linear-gradient(90deg, rgba(255,255,255,0.12) 0 1px, transparent 1px 4px)",
-                mixBlendMode: "overlay",
-              },
-              "body::after": {
-                content: '""',
-                position: "fixed",
-                inset: 0,
-                pointerEvents: "none",
-                zIndex: 0,
-                opacity: Math.min(0.9, 0.2 + glowIntensity * 0.12),
-                background:
-                  `radial-gradient(circle at 14% 16%, ${activePalette.primary.main}28 0%, transparent 34%), radial-gradient(circle at 84% 8%, ${activePalette.secondary.main}24 0%, transparent 32%), radial-gradient(circle at 50% 60%, transparent 58%, rgba(0,0,0,${vignette}) 100%)`,
-                mixBlendMode: "screen",
-                animation:
-                  motionProfile === "aurora"
-                    ? "themeAuroraDrift 30s ease-in-out infinite alternate"
-                    : motionProfile === "cosmic"
-                      ? "themeCosmicShift 36s ease-in-out infinite"
-                      : "none",
-              },
-              "@keyframes themeAuroraDrift": {
-                "0%": { transform: "translate3d(-2%, 0, 0) scale(1)" },
-                "50%": { transform: "translate3d(2%, -2%, 0) scale(1.03)" },
-                "100%": { transform: "translate3d(-1%, 1%, 0) scale(1.01)" },
-              },
-              "@keyframes themeCosmicShift": {
-                "0%": { transform: "translate3d(0, 0, 0)" },
-                "50%": { transform: "translate3d(1.5%, -1.5%, 0)" },
-                "100%": { transform: "translate3d(0, 0, 0)" },
-              },
-              "@media (prefers-reduced-motion: reduce)": {
-                "body::after": { animation: "none" },
               },
               "::selection": {
                 backgroundColor: activePalette.page.selection,
@@ -448,8 +303,8 @@ function AppContent() {
             styleOverrides: {
               root: ({ theme }) => ({
                 backgroundImage: "none",
-                backdropFilter: `blur(${glassBlur}px)`,
-                border: `1px solid ${borderColor}`,
+                backdropFilter: "blur(10px)",
+                border: `1px solid ${theme.palette.divider}`,
               }),
             },
           },
@@ -457,23 +312,8 @@ function AppContent() {
             styleOverrides: {
               root: ({ theme }) => ({
                 backgroundColor: theme.palette.background.paper,
-                border: `1px solid ${borderColor}`,
-                boxShadow:
-                  cardDepth >= 5
-                    ? `inset 0 1px 0 rgba(255,255,255,0.14), 0 22px 44px rgba(0,0,0,0.32)`
-                    : cardDepth >= 4
-                      ? `inset 0 1px 0 rgba(255,255,255,0.1), 0 16px 36px rgba(0,0,0,0.28)`
-                      : theme.shadows[3],
-                transition: "transform 0.25s cubic-bezier(0.4,0,0.2,1), box-shadow 0.25s cubic-bezier(0.4,0,0.2,1)",
-                "&:hover": liftEnabled
-                  ? {
-                      transform: "translateY(-2px)",
-                      boxShadow:
-                        cardDepth >= 4
-                          ? `inset 0 1px 0 rgba(255,255,255,0.16), 0 24px 46px rgba(0,0,0,0.34)`
-                          : theme.shadows[6],
-                    }
-                  : undefined,
+                border: `1px solid ${theme.palette.divider}`,
+                boxShadow: theme.shadows[3],
               }),
             },
           },
@@ -493,19 +333,13 @@ function AppContent() {
                 paddingInline: 18,
                 boxShadow: "none",
                 "&:hover": { boxShadow: "none" },
-                transition: "all 0.25s cubic-bezier(0.4,0,0.2,1)",
+                transition: "transform 0.18s ease, filter 0.2s ease, background-color 0.2s ease",
                 "&:active": { transform: "translateY(1px)" },
                 "&:hover:not(:disabled)": { filter: "brightness(1.04)" },
                 "&.MuiButton-outlined": { borderColor: theme.palette.divider },
               }),
-              containedPrimary: {
-                background: containedPrimaryGradient,
-                boxShadow: accentGlow ? `0 0 ${8 + glowIntensity * 6}px ${activePalette.primary.main}52` : "none",
-              },
-              containedSecondary: {
-                background: containedSecondaryGradient,
-                boxShadow: accentGlow ? `0 0 ${7 + glowIntensity * 5}px ${activePalette.secondary.main}48` : "none",
-              },
+              containedPrimary: { background: containedPrimaryGradient },
+              containedSecondary: { background: containedSecondaryGradient },
             },
           },
           MuiOutlinedInput: {
@@ -533,11 +367,7 @@ function AppContent() {
                 minHeight: 50,
                 fontWeight: 700,
                 color: theme.palette.text.secondary,
-                "&.Mui-selected": {
-                  opacity: 1,
-                  color: theme.palette.text.primary,
-                  textShadow: accentGlow ? `0 0 ${3 + glowIntensity * 2}px ${activePalette.primary.main}80` : "none",
-                },
+                "&.Mui-selected": { opacity: 1, color: theme.palette.text.primary },
               }),
             },
           },
