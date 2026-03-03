@@ -168,21 +168,6 @@ const THEME_PRESETS = {
         backgroundImage:
           "radial-gradient(circle at 14% 16%, rgba(61, 232, 255, 0.22), transparent 34%), radial-gradient(circle at 85% 2%, rgba(255, 79, 216, 0.2), transparent 32%), linear-gradient(180deg, #060311 0%, #070514 100%)",
         selection: "rgba(61, 232, 255, 0.4)",
-        effects: {
-          layerOne:
-            "repeating-linear-gradient(90deg, rgba(64, 235, 255, 0.24) 0, rgba(64, 235, 255, 0.24) 2px, transparent 2px, transparent 42px), repeating-linear-gradient(0deg, rgba(64, 235, 255, 0.12) 0, rgba(64, 235, 255, 0.12) 2px, transparent 2px, transparent 32px), linear-gradient(115deg, rgba(255, 79, 216, 0.16) 0%, transparent 36%, rgba(61, 232, 255, 0.2) 62%, transparent 100%)",
-          layerOneAnimation: "themeCyberMatrix 14s linear infinite",
-          layerOneOpacity: 0.96,
-          layerOneBlend: "screen",
-          layerOneSize: "120% 120%",
-          layerTwo:
-            "repeating-linear-gradient(112deg, transparent 0 16px, rgba(255, 79, 216, 0.34) 16px 19px, transparent 19px 58px), repeating-linear-gradient(98deg, transparent 0 20px, rgba(61, 232, 255, 0.36) 20px 23px, transparent 23px 64px), radial-gradient(circle at 18% 34%, rgba(61, 232, 255, 0.38) 0%, transparent 42%), radial-gradient(circle at 82% 66%, rgba(255, 79, 216, 0.34) 0%, transparent 44%)",
-          layerTwoAnimation: "themeCircuitFlow 8s linear infinite, themeNeonFlicker 6.5s steps(18, end) infinite",
-          layerTwoOpacity: 0.98,
-          layerTwoBlend: "screen",
-          layerTwoFilter: "blur(0.4px)",
-          layerTwoSize: "118% 118%",
-        },
       },
     },
   },
@@ -207,126 +192,6 @@ const THEME_PRESETS = {
         backgroundImage:
           "radial-gradient(circle at 10% 12%, rgba(223, 139, 176, 0.24), transparent 34%), radial-gradient(circle at 88% -4%, rgba(95, 136, 179, 0.18), transparent 28%), linear-gradient(180deg, #fff9fb 0%, #fff4f7 100%)",
         selection: "rgba(192, 77, 122, 0.25)",
-      },
-    },
-  },
-  "aurora-premium": {
-    label: "Aurora Pulse",
-    premium: true,
-    palette: {
-      mode: "dark",
-      primary: { main: "#63f7d9", light: "#99ffe9", dark: "#28b89f", contrastText: "#04130f" },
-      secondary: { main: "#83a8ff", light: "#b0c6ff", dark: "#4e76d9", contrastText: "#0b1020" },
-      background: { default: "#08131f", paper: "rgba(15, 29, 45, 0.82)" },
-      text: { primary: "#e8f5ff", secondary: "#a5bfd1" },
-      divider: "rgba(123, 168, 204, 0.22)",
-      sidebar: {
-        background: "linear-gradient(200deg, #04101b 0%, #081826 58%, #10213a 100%)",
-        hover: "rgba(99, 247, 217, 0.2)",
-        active: "rgba(131, 168, 255, 0.28)",
-        text: "#e8f6ff",
-      },
-      header: { background: "rgba(8, 24, 38, 0.9)" },
-      page: {
-        backgroundColor: "#08131f",
-        backgroundImage:
-          "radial-gradient(circle at 10% 8%, rgba(99, 247, 217, 0.24), transparent 32%), radial-gradient(circle at 88% 0%, rgba(131, 168, 255, 0.2), transparent 34%), linear-gradient(180deg, #06101a 0%, #08131f 100%)",
-        selection: "rgba(99, 247, 217, 0.35)",
-        effects: {
-          layerOne:
-            "linear-gradient(180deg, rgba(170, 104, 255, 0.18) 0%, transparent 36%, rgba(96, 255, 225, 0.2) 68%, transparent 100%), repeating-linear-gradient(90deg, rgba(132, 255, 226, 0.2) 0 10px, rgba(132, 255, 226, 0.04) 10px 28px, transparent 28px 50px), radial-gradient(ellipse at 18% 18%, rgba(158, 243, 255, 0.3) 0%, transparent 48%), radial-gradient(ellipse at 78% 20%, rgba(178, 129, 255, 0.28) 0%, transparent 52%)",
-          layerOneAnimation: "themeAuroraCurtain 15s ease-in-out infinite alternate",
-          layerOneOpacity: 0.96,
-          layerOneBlend: "screen",
-          layerOneSize: "160% 130%",
-          layerTwo:
-            "radial-gradient(circle at 6% 16%, rgba(255, 255, 255, 0.46) 0 1px, transparent 1.5px), radial-gradient(circle at 20% 34%, rgba(255, 255, 255, 0.34) 0 1px, transparent 1.5px), radial-gradient(circle at 38% 20%, rgba(203, 247, 255, 0.36) 0 1px, transparent 1.6px), radial-gradient(circle at 64% 14%, rgba(255, 255, 255, 0.34) 0 1px, transparent 1.5px), radial-gradient(circle at 82% 28%, rgba(217, 178, 255, 0.32) 0 1px, transparent 1.5px), radial-gradient(circle at 72% 62%, rgba(135, 255, 226, 0.2) 0%, transparent 40%), radial-gradient(circle at 32% 70%, rgba(177, 155, 255, 0.18) 0%, transparent 42%)",
-          layerTwoAnimation: "themeAuroraTwinkle 9s ease-in-out infinite",
-          layerTwoOpacity: 0.92,
-          layerTwoBlend: "screen",
-          layerTwoFilter: "blur(0.8px)",
-          layerTwoSize: "130% 130%",
-        },
-      },
-    },
-  },
-  "inferno-premium": {
-    label: "Inferno Luxe",
-    premium: true,
-    palette: {
-      mode: "dark",
-      primary: { main: "#ff8a2b", light: "#ffb36e", dark: "#ca5f09", contrastText: "#1d0e03" },
-      secondary: { main: "#ffd166", light: "#ffe29d", dark: "#c99d2a", contrastText: "#241a03" },
-      background: { default: "#1b0e09", paper: "rgba(39, 22, 15, 0.84)" },
-      text: { primary: "#fff2e6", secondary: "#d6b8a1" },
-      divider: "rgba(255, 138, 43, 0.24)",
-      sidebar: {
-        background: "linear-gradient(198deg, #220f08 0%, #30160d 55%, #3b1f12 100%)",
-        hover: "rgba(255, 179, 110, 0.2)",
-        active: "rgba(255, 138, 43, 0.3)",
-        text: "#fff1e3",
-      },
-      header: { background: "rgba(45, 22, 13, 0.9)" },
-      page: {
-        backgroundColor: "#1b0e09",
-        backgroundImage:
-          "radial-gradient(circle at 12% 12%, rgba(255, 138, 43, 0.24), transparent 34%), radial-gradient(circle at 90% 0%, rgba(255, 209, 102, 0.16), transparent 32%), linear-gradient(180deg, #170b07 0%, #1b0e09 100%)",
-        selection: "rgba(255, 138, 43, 0.36)",
-        effects: {
-          layerOne:
-            "radial-gradient(circle at 50% 28%, transparent 0 52px, rgba(255, 120, 34, 0.98) 54px 60px, rgba(255, 214, 138, 0.86) 62px 70px, rgba(255, 96, 24, 0.48) 74px 95px, transparent 98px), radial-gradient(circle at 50% 28%, rgba(255, 138, 43, 0.24) 0 150px, transparent 170px), radial-gradient(circle at 34% 30%, rgba(255, 160, 90, 0.28) 0 16px, transparent 24px), radial-gradient(circle at 66% 32%, rgba(255, 96, 34, 0.24) 0 14px, transparent 24px)",
-          layerOneAnimation: "themeSmolderRing 5.2s ease-in-out infinite alternate",
-          layerOneOpacity: 0.98,
-          layerOneBlend: "screen",
-          layerOneSize: "110% 110%",
-          layerTwo:
-            "radial-gradient(ellipse at 20% 112%, rgba(255, 112, 24, 0.58) 0%, transparent 42%), radial-gradient(ellipse at 44% 110%, rgba(255, 156, 42, 0.52) 0%, transparent 40%), radial-gradient(ellipse at 66% 112%, rgba(255, 82, 20, 0.54) 0%, transparent 40%), radial-gradient(ellipse at 84% 110%, rgba(255, 180, 70, 0.42) 0%, transparent 38%), radial-gradient(circle at 52% 68%, rgba(255, 124, 31, 0.2) 0%, transparent 46%), linear-gradient(0deg, rgba(255, 82, 20, 0.24) 0%, rgba(255, 124, 31, 0.12) 28%, transparent 64%)",
-          layerTwoAnimation: "themeFlameLick 4.6s ease-in-out infinite, themeHeatHaze 7.5s ease-in-out infinite alternate",
-          layerTwoOpacity: 0.95,
-          layerTwoBlend: "screen",
-          layerTwoFilter: "blur(0.9px)",
-          layerTwoSize: "115% 115%",
-        },
-      },
-    },
-  },
-  "royal-onyx-premium": {
-    label: "Royal Onyx",
-    premium: true,
-    palette: {
-      mode: "dark",
-      primary: { main: "#c8a95f", light: "#dfc889", dark: "#8f7438", contrastText: "#1a1407" },
-      secondary: { main: "#4cd2ff", light: "#88e2ff", dark: "#1d8eb3", contrastText: "#07141b" },
-      background: { default: "#0d0f15", paper: "rgba(20, 24, 35, 0.84)" },
-      text: { primary: "#f3efe5", secondary: "#b7b2a7" },
-      divider: "rgba(200, 169, 95, 0.22)",
-      sidebar: {
-        background: "linear-gradient(200deg, #0a0c11 0%, #121620 56%, #181d2b 100%)",
-        hover: "rgba(200, 169, 95, 0.22)",
-        active: "rgba(76, 210, 255, 0.24)",
-        text: "#f5f1e8",
-      },
-      header: { background: "rgba(17, 21, 31, 0.9)" },
-      page: {
-        backgroundColor: "#0d0f15",
-        backgroundImage:
-          "radial-gradient(circle at 12% 14%, rgba(200, 169, 95, 0.2), transparent 34%), radial-gradient(circle at 88% 0%, rgba(76, 210, 255, 0.14), transparent 30%), linear-gradient(180deg, #0b0d12 0%, #0d0f15 100%)",
-        selection: "rgba(200, 169, 95, 0.34)",
-        effects: {
-          layerOne:
-            "linear-gradient(32deg, transparent 0 46%, rgba(202, 184, 255, 0.28) 48%, transparent 50%), linear-gradient(138deg, transparent 0 42%, rgba(105, 218, 255, 0.24) 45%, transparent 48%), radial-gradient(circle at 8% 16%, rgba(255, 255, 255, 0.4) 0 1px, transparent 1.6px), radial-gradient(circle at 24% 38%, rgba(255, 255, 255, 0.36) 0 1px, transparent 1.6px), radial-gradient(circle at 40% 20%, rgba(203, 188, 255, 0.38) 0 1px, transparent 1.7px), radial-gradient(circle at 66% 12%, rgba(255, 255, 255, 0.34) 0 1px, transparent 1.6px), radial-gradient(circle at 82% 26%, rgba(120, 220, 255, 0.34) 0 1px, transparent 1.7px), radial-gradient(circle at 72% 62%, rgba(255, 255, 255, 0.24) 0 1px, transparent 1.6px)",
-          layerOneAnimation: "themeShardField 18s linear infinite",
-          layerOneOpacity: 0.98,
-          layerOneBlend: "screen",
-          layerOneSize: "120% 120%",
-          layerTwo:
-            "radial-gradient(circle at 16% 46%, rgba(130, 143, 255, 0.28) 0%, transparent 44%), radial-gradient(circle at 74% 26%, rgba(200, 169, 95, 0.26) 0%, transparent 42%), radial-gradient(circle at 56% 70%, rgba(76, 210, 255, 0.24) 0%, transparent 44%), radial-gradient(circle at 88% 58%, rgba(172, 136, 255, 0.2) 0%, transparent 46%)",
-          layerTwoAnimation: "themeShardTwinkle 6.4s ease-in-out infinite alternate",
-          layerTwoOpacity: 0.92,
-          layerTwoBlend: "screen",
-          layerTwoFilter: "blur(0.9px)",
-          layerTwoSize: "125% 125%",
-        },
       },
     },
   },
@@ -374,7 +239,6 @@ function AppContent() {
       const containedPrimaryGradient = `linear-gradient(135deg, ${activePalette.primary.main} 0%, ${activePalette.primary.dark} 100%)`;
       const containedSecondaryGradient = `linear-gradient(135deg, ${activePalette.secondary.main} 0%, ${activePalette.secondary.dark} 100%)`;
       const tabsGradient = `linear-gradient(90deg, ${activePalette.primary.main} 0%, ${activePalette.secondary.main} 100%)`;
-      const pageEffects = activePalette.page.effects || {};
 
       return createTheme({
         palette: activePalette,
@@ -424,141 +288,11 @@ function AppContent() {
               body: {
                 backgroundColor: activePalette.page.backgroundColor,
                 backgroundImage: activePalette.page.backgroundImage,
-                position: "relative",
-                overflowX: "hidden",
                 backgroundAttachment: "scroll",
                 "@media (pointer: fine)": {
                   backgroundAttachment: "fixed",
                 },
                 transition: "background-color 0.35s ease, color 0.35s ease",
-              },
-              "#root": {
-                position: "relative",
-                zIndex: 1,
-              },
-              "body::before": {
-                content: '""',
-                position: "fixed",
-                inset: "-18%",
-                pointerEvents: "none",
-                zIndex: 0,
-                background: pageEffects.layerOne || "none",
-                backgroundSize: pageEffects.layerOneSize || "220% 220%",
-                mixBlendMode: pageEffects.layerOneBlend || "normal",
-                filter: pageEffects.layerOneFilter || "none",
-                opacity: pageEffects.layerOne ? pageEffects.layerOneOpacity ?? 1 : 0,
-                animation: pageEffects.layerOneAnimation || "none",
-                transition: "opacity 0.4s ease",
-              },
-              "body::after": {
-                content: '""',
-                position: "fixed",
-                inset: "-20%",
-                pointerEvents: "none",
-                zIndex: 0,
-                background: pageEffects.layerTwo || "none",
-                backgroundSize: pageEffects.layerTwoSize || "240% 240%",
-                mixBlendMode: pageEffects.layerTwoBlend || "screen",
-                opacity: pageEffects.layerTwo ? pageEffects.layerTwoOpacity ?? 0.78 : 0,
-                animation: pageEffects.layerTwoAnimation || "none",
-                filter: pageEffects.layerTwoFilter || "blur(2px)",
-                transition: "opacity 0.4s ease",
-              },
-              "@media (prefers-reduced-motion: reduce)": {
-                "body::before": { animation: "none" },
-                "body::after": { animation: "none" },
-              },
-              "@keyframes themeGridDrift": {
-                "0%": { transform: "translate3d(-2%, 0, 0)" },
-                "50%": { transform: "translate3d(2%, -2%, 0)" },
-                "100%": { transform: "translate3d(-2%, 0, 0)" },
-              },
-              "@keyframes themeGlowPulse": {
-                "0%": { opacity: 0.45, transform: "scale(1)" },
-                "100%": { opacity: 0.82, transform: "scale(1.04)" },
-              },
-              "@keyframes themeAuroraShift": {
-                "0%": { transform: "translate3d(-2%, 0, 0) rotate(0deg)" },
-                "50%": { transform: "translate3d(2%, -2%, 0) rotate(1deg)" },
-                "100%": { transform: "translate3d(-1%, 1%, 0) rotate(-1deg)" },
-              },
-              "@keyframes themeCyberGrid": {
-                "0%": { transform: "translate3d(0, 0, 0)" },
-                "100%": { transform: "translate3d(-6%, 3%, 0)" },
-              },
-              "@keyframes themeCyberMatrix": {
-                "0%": { transform: "translate3d(0, 0, 0)" },
-                "100%": { transform: "translate3d(-8%, 4%, 0)" },
-              },
-              "@keyframes themeCircuitFlow": {
-                "0%": { backgroundPosition: "0% 0%, 0% 0%, 0% 0%, 0% 0%" },
-                "100%": { backgroundPosition: "140% 0%, -120% 0%, 8% -4%, -8% 6%" },
-              },
-              "@keyframes themeNeonFlicker": {
-                "0%": { opacity: 0.54 },
-                "12%": { opacity: 0.84 },
-                "20%": { opacity: 0.52 },
-                "28%": { opacity: 0.88 },
-                "44%": { opacity: 0.62 },
-                "65%": { opacity: 0.9 },
-                "78%": { opacity: 0.56 },
-                "100%": { opacity: 0.82 },
-              },
-              "@keyframes themeAuroraRibbon": {
-                "0%": { transform: "translate3d(-3%, 0, 0) rotate(-1deg)", opacity: 0.58 },
-                "50%": { transform: "translate3d(2%, -2%, 0) rotate(1deg)", opacity: 0.84 },
-                "100%": { transform: "translate3d(-1%, 1%, 0) rotate(-0.8deg)", opacity: 0.66 },
-              },
-              "@keyframes themeAuroraCurtain": {
-                "0%": { transform: "translate3d(-2%, 0, 0) scale(1, 1)", opacity: 0.62 },
-                "50%": { transform: "translate3d(2%, -2%, 0) scale(1.04, 1.08)", opacity: 0.9 },
-                "100%": { transform: "translate3d(-1%, 1%, 0) scale(1.02, 1.04)", opacity: 0.74 },
-              },
-              "@keyframes themeAuroraTwinkle": {
-                "0%": { opacity: 0.44, transform: "scale(1)" },
-                "100%": { opacity: 0.92, transform: "scale(1.08)" },
-              },
-              "@keyframes themeAuroraShimmer": {
-                "0%": { opacity: 0.34, transform: "scale(1)" },
-                "100%": { opacity: 0.76, transform: "scale(1.06)" },
-              },
-              "@keyframes themeSmolderRing": {
-                "0%": { transform: "translate3d(0, 0, 0) scale(1)", opacity: 0.72 },
-                "100%": { transform: "translate3d(0, -1%, 0) scale(1.04)", opacity: 1 },
-              },
-              "@keyframes themeFlameRise": {
-                "0%": { transform: "translate3d(0, 2%, 0) scale(1, 1)", opacity: 0.56 },
-                "50%": { transform: "translate3d(0, -2%, 0) scale(1.02, 1.06)", opacity: 0.82 },
-                "100%": { transform: "translate3d(0, 1%, 0) scale(1, 1)", opacity: 0.62 },
-              },
-              "@keyframes themeFlameLick": {
-                "0%": { transform: "translate3d(0, 2%, 0) scale(1, 1)", opacity: 0.68 },
-                "50%": { transform: "translate3d(1%, -2.5%, 0) scale(1.04, 1.12)", opacity: 0.98 },
-                "100%": { transform: "translate3d(-1%, 1%, 0) scale(1.02, 1.04)", opacity: 0.74 },
-              },
-              "@keyframes themeHeatHaze": {
-                "0%": { transform: "translate3d(-1%, 0, 0)", filter: "blur(2px)" },
-                "100%": { transform: "translate3d(1%, -1%, 0)", filter: "blur(3.2px)" },
-              },
-              "@keyframes themeShardField": {
-                "0%": { transform: "translate3d(0, 0, 0) scale(1)" },
-                "100%": { transform: "translate3d(-2%, 2%, 0) scale(1.03)" },
-              },
-              "@keyframes themeShardTwinkle": {
-                "0%": { opacity: 0.42, transform: "scale(1)" },
-                "100%": { opacity: 0.94, transform: "scale(1.1)" },
-              },
-              "@keyframes themeGalaxyDrift": {
-                "0%": { transform: "translate3d(0, 0, 0) scale(1)" },
-                "100%": { transform: "translate3d(-2%, 2%, 0) scale(1.04)" },
-              },
-              "@keyframes themeGalaxyTwinkle": {
-                "0%": { opacity: 0.32, transform: "scale(1)" },
-                "100%": { opacity: 0.68, transform: "scale(1.08)" },
-              },
-              "@keyframes themeSheenSweep": {
-                "0%": { transform: "translateX(-28%)" },
-                "100%": { transform: "translateX(28%)" },
               },
               "::selection": {
                 backgroundColor: activePalette.page.selection,
@@ -725,10 +459,7 @@ function AppContent() {
             }
           />
           <Route path="/join/:inviteCode" element={<JoinTeam />} />
-          <Route
-            path="/"
-            element={<LandingPage />}
-          />
+          <Route path="/" element={<LandingPage />} />
           <Route
             path="/features"
             element={
