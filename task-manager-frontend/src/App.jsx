@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from "react";
-import { ThemeProvider, createTheme, CssBaseline } from "@mui/material";
+import { ThemeProvider, createTheme, CssBaseline, Box } from "@mui/material";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Layout from "./components/Layout/Layout";
@@ -25,6 +25,7 @@ import {
   SecurityPage,
   BlogPage,
 } from "./pages/public/MarketingPages";
+import Aurora from "./components/effects/Aurora";
 
 const THEME_PRESETS = {
   light: {
@@ -192,6 +193,30 @@ const THEME_PRESETS = {
         backgroundImage:
           "radial-gradient(circle at 10% 12%, rgba(223, 139, 176, 0.24), transparent 34%), radial-gradient(circle at 88% -4%, rgba(95, 136, 179, 0.18), transparent 28%), linear-gradient(180deg, #fff9fb 0%, #fff4f7 100%)",
         selection: "rgba(192, 77, 122, 0.25)",
+      },
+    },
+  },
+  aurora: {
+    label: "Aurora",
+    palette: {
+      mode: "dark",
+      primary: { main: "#7cff67", light: "#a3ff98", dark: "#43c43a", contrastText: "#071406" },
+      secondary: { main: "#b19eef", light: "#cdbdf7", dark: "#7f67c9", contrastText: "#110a1f" },
+      background: { default: "#0f0d24", paper: "rgba(19, 16, 45, 0.82)" },
+      text: { primary: "#efeaff", secondary: "#b8b1d4" },
+      divider: "rgba(177, 158, 239, 0.2)",
+      sidebar: {
+        background: "linear-gradient(198deg, #0a091d 0%, #121032 58%, #1b1650 100%)",
+        hover: "rgba(124, 255, 103, 0.18)",
+        active: "rgba(177, 158, 239, 0.26)",
+        text: "#f1ecff",
+      },
+      header: { background: "rgba(14, 12, 34, 0.9)" },
+      page: {
+        backgroundColor: "#0f0d24",
+        backgroundImage:
+          "radial-gradient(circle at 14% 10%, rgba(124, 255, 103, 0.16), transparent 30%), radial-gradient(circle at 86% 8%, rgba(177, 158, 239, 0.16), transparent 34%), linear-gradient(180deg, #0d0b20 0%, #0f0d24 100%)",
+        selection: "rgba(177, 158, 239, 0.32)",
       },
     },
   },
@@ -429,8 +454,17 @@ function AppContent() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Router>
-        <Routes>
+      {themeMode === "aurora" && (
+        <Aurora
+          colorStops={["#7cff67", "#B19EEF", "#5227FF"]}
+          blend={0.5}
+          amplitude={1.0}
+          speed={1}
+        />
+      )}
+      <Box sx={{ position: "relative", zIndex: 1 }}>
+        <Router>
+          <Routes>
           <Route
             path="/login"
             element={
@@ -610,8 +644,9 @@ function AppContent() {
             }
           />
           <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </Router>
+          </Routes>
+        </Router>
+      </Box>
     </ThemeProvider>
   );
 }
