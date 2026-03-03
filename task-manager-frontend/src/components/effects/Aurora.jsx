@@ -144,92 +144,97 @@ const Aurora = (props) => {
     if (!window.WebGLRenderingContext) return undefined;
     const container = ctnDom.current;
 
-    const renderer = new Renderer({
-      alpha: true,
-      antialias: true,
-      dpr: Math.min(Math.max(window.devicePixelRatio || 1, 1), 2.5),
-    });
-    const gl = renderer.gl;
-    gl.clearColor(0, 0, 0, 0);
+    let renderer;
+    let gl;
+    let mesh;
+    let program;
+    let resize;
+    let update;
 
-    const geometry = new Triangle(gl);
-    if (geometry.attributes.uv) delete geometry.attributes.uv;
+    try {
+      renderer = new Renderer({
+        alpha: true,
+        antialias: true,
+        dpr: Math.min(Math.max(window.devicePixelRatio || 1, 1), 2.5),
+      });
+      gl = renderer.gl;
+      gl.clearColor(0, 0, 0, 0);
 
-    const colorStopsUniform = colorStops.map((hex) => {
-      const rgb = hexToRgb(hex);
-      return new Color(...rgb);
-    });
-
-    const program = new Program(gl, {
-      vertex,
-      fragment,
-      uniforms: {
-        uTime: { value: 0 },
-        uColorStops: { value: colorStopsUniform },
-        uResolution: {
-          value: new Float32Array([
-            gl.canvas.width,
-            gl.canvas.height,
-          ]),
-        },
-        uBlend: { value: blend },
-        uAmplitude: { value: amplitude },
-        uSpeed: { value: speed },
-      },
-    });
-
-    const mesh = new Mesh(gl, { geometry, program });
-
-    const resize = () => {
-      const width = container.offsetWidth;
-      const height = container.offsetHeight;
-      renderer.dpr = Math.min(Math.max(window.devicePixelRatio || 1, 1), 2.5);
-      renderer.setSize(width, height);
-      const resolution = program.uniforms.uResolution.value;
-      resolution[0] = gl.canvas.width;
-      resolution[1] = gl.canvas.height;
-    };
-    window.addEventListener("resize", resize);
-    resize();
-
-    let elapsed = 0;
-    const update = (dt) => {
-      elapsed += dt;
-      program.uniforms.uTime.value = elapsed * 0.001;
-
-      const current = propsRef.current;
-      const blendValue = current.blend ?? 0.5;
-      const amplitudeValue = current.amplitude ?? 1.0;
-      const speedValue = current.speed ?? 0.5;
-      const stopColors = current.colorStops ?? colorStops;
-
-      program.uniforms.uBlend.value = blendValue;
-      program.uniforms.uAmplitude.value = amplitudeValue;
-      program.uniforms.uSpeed.value = speedValue;
-      program.uniforms.uColorStops.value = stopColors.map((hex) => {
+      const geometry = new Triangle(gl);
+      const colorStopsUniform = colorStops.map((hex) => {
         const rgb = hexToRgb(hex);
         return new Color(...rgb);
       });
 
-      renderer.render({ scene: mesh });
-    };
+      program = new Program(gl, {
+        vertex,
+        fragment,
+        uniforms: {
+          uTime: { value: 0 },
+          uColorStops: { value: colorStopsUniform },
+          uResolution: {
+            value: new Float32Array([gl.canvas.width, gl.canvas.height]),
+          },
+          uBlend: { value: blend },
+          uAmplitude: { value: amplitude },
+          uSpeed: { value: speed },
+        },
+      });
 
-    gsap.ticker.add(update);
-    gsap.ticker.fps(60);
+      mesh = new Mesh(gl, { geometry, program });
 
-    container.appendChild(gl.canvas);
-    gl.canvas.style.width = "100%";
-    gl.canvas.style.height = "100%";
-    gl.canvas.style.display = "block";
-    gl.canvas.style.filter = "contrast(1.18) saturate(1.12)";
+      resize = () => {
+        const width = container.offsetWidth;
+        const height = container.offsetHeight;
+        renderer.dpr = Math.min(Math.max(window.devicePixelRatio || 1, 1), 2.5);
+        renderer.setSize(width, height);
+        const resolution = program.uniforms.uResolution.value;
+        resolution[0] = gl.canvas.width;
+        resolution[1] = gl.canvas.height;
+      };
+      window.addEventListener("resize", resize);
+      resize();
+
+      update = () => {
+        program.uniforms.uTime.value = gsap.ticker.time;
+
+        const current = propsRef.current;
+        const blendValue = current.blend ?? 0.5;
+        const amplitudeValue = current.amplitude ?? 1.0;
+        const speedValue = current.speed ?? 0.5;
+        const stopColors = current.colorStops ?? colorStops;
+
+        program.uniforms.uBlend.value = blendValue;
+        program.uniforms.uAmplitude.value = amplitudeValue;
+        program.uniforms.uSpeed.value = speedValue;
+        program.uniforms.uColorStops.value = stopColors.map((hex) => {
+          const rgb = hexToRgb(hex);
+          return new Color(...rgb);
+        });
+
+        renderer.render({ scene: mesh });
+      };
+
+      gsap.ticker.add(update);
+      gsap.ticker.fps(60);
+
+      container.appendChild(gl.canvas);
+      gl.canvas.style.width = "100%";
+      gl.canvas.style.height = "100%";
+      gl.canvas.style.display = "block";
+      gl.canvas.style.filter = "contrast(1.18) saturate(1.12)";
+    } catch (error) {
+      console.error("Aurora init failed:", error);
+      return undefined;
+    }
 
     return () => {
-      gsap.ticker.remove(update);
-      window.removeEventListener("resize", resize);
-      if (gl.canvas.parentNode === container) {
+      if (update) gsap.ticker.remove(update);
+      if (resize) window.removeEventListener("resize", resize);
+      if (gl?.canvas && gl.canvas.parentNode === container) {
         container.removeChild(gl.canvas);
       }
-      gl.getExtension("WEBGL_lose_context")?.loseContext();
+      gl?.getExtension("WEBGL_lose_context")?.loseContext();
     };
   }, [amplitude, blend, colorStops, speed]);
 
